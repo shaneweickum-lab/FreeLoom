@@ -11,9 +11,9 @@ export default function StudentSwitcher() {
   if (students.length === 0) {
     return (
       <div className="rounded-lg border border-gold/50 bg-surface p-4 flex items-center justify-between gap-4">
-        <p className="text-sm text-muted">No student profile yet.</p>
+        <p className="text-sm text-muted">No children added to your account yet.</p>
         <Link href="/dashboard" className="btn-primary text-sm">
-          Create a student profile
+          Add your first child
         </Link>
       </div>
     );
@@ -21,7 +21,7 @@ export default function StudentSwitcher() {
 
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className="text-muted">Student:</span>
+      <span className="text-muted">Viewing:</span>
       <select
         className="input w-auto"
         value={currentStudent?.id ?? ""}
@@ -34,7 +34,7 @@ export default function StudentSwitcher() {
         ))}
       </select>
       <Link href="/dashboard" className="text-muted hover:text-foreground">
-        Manage students
+        Manage children
       </Link>
     </div>
   );

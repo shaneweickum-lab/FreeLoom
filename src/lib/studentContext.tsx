@@ -13,6 +13,8 @@ type StudentContextValue = {
   selectStudent: (id: string) => void;
   refresh: () => Promise<void>;
   createStudent: (input: Partial<Student> & { name: string }) => Promise<Student | null>;
+  updateStudent: (id: string, patch: Partial<Student>) => Promise<Student | null>;
+  deleteStudent: (id: string) => Promise<boolean>;
 };
 
 const StudentContext = createContext<StudentContextValue | null>(null);
@@ -67,10 +69,32 @@ export function StudentProvider({ children }: { children: ReactNode }) {
     return data;
   }, []);
 
+  const updateStudent = useCallback(async (id: string, patch: Partial<Student>) => {
+    const supabase = createClient();
+    const { data, error } = await supabase.from("students").update(patch).eq("id", id).select().single();
+    if (error || !data) return null;
+    setStudents((prev) => prev.map((s) => (s.id === id ? data : s)));
+    return data;
+  }, []);
+
+  const deleteStudent = useCallback(async (id: string) => {
+    const supabase = createClient();
+    const { error } = await supabase.from("students").delete().eq("id", id);
+    if (error) return false;
+    setStudents((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      setCurrentId((prevId) => (prevId === id ? next[0]?.id ?? null : prevId));
+      return next;
+    });
+    return true;
+  }, []);
+
   const currentStudent = students.find((s) => s.id === currentId) ?? null;
 
   return (
-    <StudentContext.Provider value={{ students, currentStudent, loading, selectStudent, refresh, createStudent }}>
+    <StudentContext.Provider
+      value={{ students, currentStudent, loading, selectStudent, refresh, createStudent, updateStudent, deleteStudent }}
+    >
       {children}
     </StudentContext.Provider>
   );

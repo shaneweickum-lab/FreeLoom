@@ -31,8 +31,9 @@ export default function Home() {
         <p className="max-w-2xl text-muted text-base leading-relaxed">
           We turn real-world and play-based learning into credible, structured transcripts and
           portfolios &mdash; using an engine that actually understands games, curricula, and
-          unconventional teaching methods. No more translating what your kid actually learned
-          into academic language by hand.
+          unconventional teaching methods. No more translating what your kids actually learned
+          into academic language by hand. One parent account, a separate profile and transcript
+          for every child.
         </p>
         <div className="flex gap-4 mt-2">
           <Link

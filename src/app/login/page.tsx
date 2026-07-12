@@ -56,7 +56,12 @@ function LoginForm() {
         <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-background text-xl font-bold mb-4">
           F
         </span>
-        <h1 className="text-2xl font-bold">{mode === "signin" ? "Sign in" : "Create your account"}</h1>
+        <h1 className="text-2xl font-bold">{mode === "signin" ? "Sign in" : "Create your parent account"}</h1>
+        <p className="text-muted text-sm mt-2">
+          {mode === "signin"
+            ? "One account for your whole family."
+            : "Add a profile for each of your children once you're in."}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-6">

@@ -1,113 +1,206 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
+import type { Student } from "@/lib/types";
 
-const US_STATES_HINT = "e.g. CA, TX, NY";
+const EMPTY_FORM = { name: "", gradeLevel: "", state: "", birthDate: "", gradYear: "" };
+
+type StudentStats = { courseCount: number; creditHours: number };
 
 export default function DashboardPage() {
-  const { students, currentStudent, selectStudent, createStudent } = useStudents();
+  const { students, currentStudent, selectStudent, createStudent, updateStudent, deleteStudent } = useStudents();
   const [showForm, setShowForm] = useState(students.length === 0);
-  const [name, setName] = useState("");
-  const [gradeLevel, setGradeLevel] = useState("");
-  const [state, setState] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [gradYear, setGradYear] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [stats, setStats] = useState<Record<string, StudentStats>>({});
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setSubmitting(true);
-    await createStudent({
-      name,
-      grade_level: gradeLevel || null,
-      state: state || null,
-      birth_date: birthDate || null,
-      expected_graduation_year: gradYear ? Number(gradYear) : null,
+  useEffect(() => {
+    if (students.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStats({});
+      return;
+    }
+    const supabase = createClient();
+    const studentIds = students.map((s) => s.id);
+    (async () => {
+      const { data: logs } = await supabase.from("learning_logs").select("id, student_id").in("student_id", studentIds);
+      const logIdToStudent = new Map((logs || []).map((l) => [l.id, l.student_id]));
+      const logIds = (logs || []).map((l) => l.id);
+      if (logIds.length === 0) {
+        setStats({});
+        return;
+      }
+      const { data: courses } = await supabase
+        .from("translated_courses")
+        .select("learning_log_id, credit_hours")
+        .in("learning_log_id", logIds)
+        .in("status", ["approved", "edited"]);
+      const next: Record<string, StudentStats> = {};
+      for (const course of courses || []) {
+        const studentId = logIdToStudent.get(course.learning_log_id);
+        if (!studentId) continue;
+        const entry = next[studentId] || { courseCount: 0, creditHours: 0 };
+        entry.courseCount += 1;
+        entry.creditHours += course.credit_hours;
+        next[studentId] = entry;
+      }
+      setStats(next);
+    })();
+  }, [students]);
+
+  function startCreate() {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setShowForm(true);
+  }
+
+  function startEdit(s: Student) {
+    setEditingId(s.id);
+    setForm({
+      name: s.name,
+      gradeLevel: s.grade_level || "",
+      state: s.state || "",
+      birthDate: s.birth_date || "",
+      gradYear: s.expected_graduation_year ? String(s.expected_graduation_year) : "",
     });
-    setName("");
-    setGradeLevel("");
-    setState("");
-    setBirthDate("");
-    setGradYear("");
+    setShowForm(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSubmitting(true);
+    const patch = {
+      name: form.name,
+      grade_level: form.gradeLevel || null,
+      state: form.state || null,
+      birth_date: form.birthDate || null,
+      expected_graduation_year: form.gradYear ? Number(form.gradYear) : null,
+    };
+    if (editingId) {
+      await updateStudent(editingId, patch);
+    } else {
+      await createStudent(patch);
+    }
+    setForm(EMPTY_FORM);
+    setEditingId(null);
     setSubmitting(false);
     setShowForm(false);
+  }
+
+  async function handleDelete(s: Student) {
+    const confirmed = window.confirm(
+      `Remove ${s.name}'s profile? This permanently deletes their learning log, transcripts, and portfolio.`
+    );
+    if (!confirmed) return;
+    await deleteStudent(s.id);
   }
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold mb-1">Students</h1>
-        <p className="text-muted text-sm">Manage the student profiles on your account.</p>
+        <h1 className="text-2xl font-bold mb-1">Your children</h1>
+        <p className="text-muted text-sm">
+          One FreeLoom account for your whole family — add a profile for each child and switch between them
+          any time from the nav bar. Every child gets their own discovery notes, learning log, transcript, and
+          portfolio.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {students.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => selectStudent(s.id)}
-            className={`text-left rounded-lg border p-4 transition-colors ${
-              currentStudent?.id === s.id ? "border-gold bg-surface" : "border-border bg-surface hover:bg-surface-hover"
-            }`}
-          >
-            <div className="font-medium">{s.name}</div>
-            <div className="text-sm text-muted">{s.grade_level || "Grade level not set"}</div>
-            {s.state && <div className="text-xs text-muted mt-1">{s.state}</div>}
-            {currentStudent?.id === s.id && <div className="text-xs text-gold mt-2">Active</div>}
-          </button>
-        ))}
+        {students.map((s) => {
+          const stat = stats[s.id];
+          return (
+            <div
+              key={s.id}
+              className={`rounded-lg border p-4 transition-colors ${
+                currentStudent?.id === s.id ? "border-gold bg-surface" : "border-border bg-surface"
+              }`}
+            >
+              <button onClick={() => selectStudent(s.id)} className="text-left w-full">
+                <div className="font-medium">{s.name}</div>
+                <div className="text-sm text-muted">{s.grade_level || "Grade level not set"}</div>
+                {s.state && <div className="text-xs text-muted mt-1">{s.state}</div>}
+                {stat && (
+                  <div className="text-xs text-muted mt-2">
+                    {stat.courseCount} course{stat.courseCount === 1 ? "" : "s"} &middot; {stat.creditHours.toFixed(2)}{" "}
+                    credit hours
+                  </div>
+                )}
+                {currentStudent?.id === s.id && <div className="text-xs text-gold mt-2">Active</div>}
+              </button>
+              <div className="flex gap-3 mt-3 pt-3 border-t border-border/60">
+                <button onClick={() => startEdit(s)} className="text-xs text-muted hover:text-foreground">
+                  Edit
+                </button>
+                <button onClick={() => handleDelete(s)} className="text-xs text-muted hover:text-red-400">
+                  Remove
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {!showForm ? (
-        <button onClick={() => setShowForm(true)} className="btn-secondary w-fit">
-          + Add another student
+        <button onClick={startCreate} className="btn-secondary w-fit">
+          + Add another child
         </button>
       ) : (
-        <form onSubmit={handleCreate} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 max-w-lg">
-          <h2 className="font-semibold">New student profile</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 max-w-lg">
+          <h2 className="font-semibold">{editingId ? "Edit child profile" : "New child profile"}</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               className="input"
-              placeholder="Student name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              placeholder="Child's name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
             />
             <input
               className="input"
               placeholder="Grade level (e.g. 9th grade)"
-              value={gradeLevel}
-              onChange={(e) => setGradeLevel(e.target.value)}
+              value={form.gradeLevel}
+              onChange={(e) => setForm({ ...form, gradeLevel: e.target.value })}
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <input
               className="input"
-              placeholder={`State (${US_STATES_HINT})`}
-              value={state}
-              onChange={(e) => setState(e.target.value)}
+              placeholder="State (e.g. CA, TX, NY)"
+              value={form.state}
+              onChange={(e) => setForm({ ...form, state: e.target.value })}
             />
             <input
               type="date"
               className="input"
-              value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
+              value={form.birthDate}
+              onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
             />
             <input
               type="number"
               className="input"
               placeholder="Expected grad year"
-              value={gradYear}
-              onChange={(e) => setGradYear(e.target.value)}
+              value={form.gradYear}
+              onChange={(e) => setForm({ ...form, gradYear: e.target.value })}
             />
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn-primary" disabled={submitting || !name.trim()}>
-              Create student
+            <button type="submit" className="btn-primary" disabled={submitting || !form.name.trim()}>
+              {editingId ? "Save changes" : "Create profile"}
             </button>
-            {students.length > 0 && (
-              <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">
+            {(students.length > 0 || editingId) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                }}
+                className="btn-secondary"
+              >
                 Cancel
               </button>
             )}

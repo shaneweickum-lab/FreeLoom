@@ -74,7 +74,7 @@ export default function TranscriptPage() {
   }
 
   if (!currentStudent) {
-    return <p className="text-muted text-sm">Create a student profile from the dashboard first.</p>;
+    return <p className="text-muted text-sm">Add a child from the dashboard first.</p>;
   }
   if (loading) return null;
 
