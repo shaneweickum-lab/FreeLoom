@@ -130,8 +130,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
         {loading && <p className="text-muted text-sm">Loading…</p>}
         {!loading && messages.length === 0 && (
           <p className="text-muted text-sm">
-            Say something like &ldquo;{currentStudent.name} spent an hour building redstone circuits in
-            Minecraft&rdquo; to get started.
+            {`Say something like “${currentStudent.name} spent an hour building redstone circuits in Minecraft” to get started.`}
           </p>
         )}
         {messages
