@@ -11,10 +11,11 @@ const HISTORY_LIMIT = 60;
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const studentId = typeof body?.student_id === "string" ? body.student_id : "";
+  const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : "";
   const userMessage = typeof body?.message === "string" ? body.message.trim() : "";
 
-  if (!studentId || !userMessage) {
-    return NextResponse.json({ error: "student_id and message are required" }, { status: 400 });
+  if (!studentId || !conversationId || !userMessage) {
+    return NextResponse.json({ error: "student_id, conversation_id, and message are required" }, { status: 400 });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -52,10 +53,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
   }
 
+  const { data: conversation } = await supabase
+    .from("chat_conversations")
+    .select("id, title")
+    .eq("id", conversationId)
+    .eq("student_id", studentId)
+    .maybeSingle();
+  if (!conversation) {
+    return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+  }
+
   const { data: historyRows } = await supabase
     .from("chat_messages")
     .select("*")
-    .eq("student_id", studentId)
+    .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
     .limit(HISTORY_LIMIT);
 
@@ -66,7 +77,13 @@ export async function POST(req: NextRequest) {
 
   const userBlocks: Anthropic.MessageParam["content"] = [{ type: "text", text: userMessage }];
   messages.push({ role: "user", content: userBlocks });
-  await supabase.from("chat_messages").insert({ student_id: studentId, role: "user", kind: "user", content: userBlocks });
+  await supabase
+    .from("chat_messages")
+    .insert({ student_id: studentId, conversation_id: conversationId, role: "user", kind: "user", content: userBlocks });
+
+  const conversationUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (!conversation.title) conversationUpdate.title = userMessage.slice(0, 60);
+  await supabase.from("chat_conversations").update(conversationUpdate).eq("id", conversationId);
 
   const context = await buildAssistantContext(supabase, studentId);
   const systemPrompt = buildAssistantSystemPrompt(context);
@@ -90,9 +107,13 @@ export async function POST(req: NextRequest) {
       totalOutputTokens += response.usage.output_tokens;
 
       messages.push({ role: "assistant", content: response.content });
-      await supabase
-        .from("chat_messages")
-        .insert({ student_id: studentId, role: "assistant", kind: "assistant", content: response.content });
+      await supabase.from("chat_messages").insert({
+        student_id: studentId,
+        conversation_id: conversationId,
+        role: "assistant",
+        kind: "assistant",
+        content: response.content,
+      });
 
       const textBlocks = response.content.filter(
         (b): b is Anthropic.TextBlock => b.type === "text"
@@ -124,9 +145,13 @@ export async function POST(req: NextRequest) {
       }
 
       messages.push({ role: "user", content: toolResultBlocks });
-      await supabase
-        .from("chat_messages")
-        .insert({ student_id: studentId, role: "user", kind: "tool_bridge", content: toolResultBlocks });
+      await supabase.from("chat_messages").insert({
+        student_id: studentId,
+        conversation_id: conversationId,
+        role: "user",
+        kind: "tool_bridge",
+        content: toolResultBlocks,
+      });
     }
   } catch (err) {
     console.error("Assistant chat failed", err);

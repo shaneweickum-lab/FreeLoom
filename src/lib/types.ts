@@ -91,10 +91,19 @@ export type ChatMessageKind = "user" | "assistant" | "tool_bridge";
 export type ChatMessage = {
   id: string;
   student_id: string;
+  conversation_id: string;
   role: ChatMessageRole;
   kind: ChatMessageKind;
   content: unknown[];
   created_at: string;
+};
+
+export type ChatConversation = {
+  id: string;
+  student_id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type PlanId = "free" | "plus" | "pro";

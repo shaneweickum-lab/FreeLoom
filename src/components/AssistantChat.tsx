@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import type { ChatMessage } from "@/lib/types";
+import type { ChatConversation, ChatMessage } from "@/lib/types";
+
+function formatConversationLabel(c: ChatConversation) {
+  if (c.title) return c.title;
+  return new Date(c.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 type ToolUseBlock = { type: "tool_use"; name: string; input: Record<string, unknown> };
 type TextBlock = { type: "text"; text: string };
@@ -46,6 +51,9 @@ function describeToolUse(name: string, input: Record<string, unknown>): string {
 
 export default function AssistantChat({ compact = false }: { compact?: boolean }) {
   const { currentStudent } = useStudents();
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
@@ -54,36 +62,99 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  async function loadHistory() {
+  const loadConversations = useCallback(async () => {
     if (!currentStudent) {
-      setMessages([]);
+      setConversations([]);
+      setConversationId(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     const supabase = createClient();
     const { data } = await supabase
-      .from("chat_messages")
+      .from("chat_conversations")
       .select("*")
       .eq("student_id", currentStudent.id)
-      .order("created_at", { ascending: true });
-    setMessages((data as ChatMessage[]) || []);
-    setLoading(false);
-  }
+      .order("updated_at", { ascending: false });
+    let list = (data as ChatConversation[]) || [];
+    if (list.length === 0) {
+      const { data: created } = await supabase
+        .from("chat_conversations")
+        .insert({ student_id: currentStudent.id })
+        .select()
+        .single();
+      if (created) list = [created as ChatConversation];
+    }
+    setConversations(list);
+    setConversationId(list[0]?.id ?? null);
+  }, [currentStudent]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadHistory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStudent]);
+    loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    if (!conversationId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const supabase = createClient();
+    supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        setMessages((data as ChatMessage[]) || []);
+        setLoading(false);
+      });
+  }, [conversationId]);
+
+  async function loadHistory() {
+    if (!conversationId) return;
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true });
+    setMessages((data as ChatMessage[]) || []);
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  async function startNewChat() {
+    if (!currentStudent) return;
+    setHistoryOpen(false);
+    const supabase = createClient();
+    const { data: created } = await supabase
+      .from("chat_conversations")
+      .insert({ student_id: currentStudent.id })
+      .select()
+      .single();
+    if (!created) return;
+    setConversations((prev) => [created as ChatConversation, ...prev]);
+    setConversationId(created.id);
+    setError(null);
+    setQuotaExceeded(false);
+  }
+
+  function switchConversation(id: string) {
+    setHistoryOpen(false);
+    setError(null);
+    setQuotaExceeded(false);
+    setConversationId(id);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!currentStudent || !input.trim() || sending) return;
+    if (!currentStudent || !conversationId || !input.trim() || sending) return;
     setSending(true);
     setError(null);
     setQuotaExceeded(false);
@@ -94,7 +165,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ student_id: currentStudent.id, message }),
+        body: JSON.stringify({ student_id: currentStudent.id, conversation_id: conversationId, message }),
       });
       const body = await res.json();
       if (!res.ok) {
@@ -106,6 +177,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
         }
       }
       await loadHistory();
+      await loadConversations();
     } catch {
       setError("Couldn't reach the assistant — try again.");
     } finally {
@@ -129,6 +201,35 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
           </p>
         </div>
       )}
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="relative">
+          <button
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="text-xs text-muted hover:text-foreground px-2 py-1 rounded-md hover:bg-surface-hover"
+          >
+            🕐 {conversations.length > 1 ? `${conversations.length} chats` : "History"} ▾
+          </button>
+          {historyOpen && (
+            <div className="absolute left-0 top-full mt-1 z-20 w-64 max-h-72 overflow-y-auto rounded-lg border border-border bg-surface shadow-lg py-1">
+              {conversations.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => switchConversation(c.id)}
+                  className={`w-full text-left px-3 py-2 text-xs truncate hover:bg-surface-hover ${
+                    c.id === conversationId ? "text-gold" : "text-foreground"
+                  }`}
+                >
+                  {formatConversationLabel(c)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button onClick={startNewChat} className="text-xs text-muted hover:text-foreground px-2 py-1 rounded-md hover:bg-surface-hover">
+          + New chat
+        </button>
+      </div>
 
       <div
         className={`flex-1 overflow-y-auto rounded-lg border border-border bg-surface flex flex-col gap-4 ${

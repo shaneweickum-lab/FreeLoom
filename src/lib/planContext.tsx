@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getUsageSummary, type UsageSummary } from "@/lib/usage";
+import { ACTION_PACKS } from "@/lib/plans";
 import type { PlanId } from "@/lib/types";
 
 export type UsageMetric = "actions" | "tokens";
@@ -16,6 +17,7 @@ type PlanContextValue = {
   setMetric: (m: UsageMetric) => void;
   refresh: () => Promise<void>;
   switchPlan: (plan: PlanId) => Promise<boolean>;
+  purchaseActionPack: (packId: string) => Promise<boolean>;
 };
 
 const PlanContext = createContext<PlanContextValue | null>(null);
@@ -72,8 +74,28 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     [refresh]
   );
 
+  const purchaseActionPack = useCallback(
+    async (packId: string) => {
+      if (!summary || summary.plan !== "plus") return false;
+      const pack = ACTION_PACKS.find((p) => p.id === packId);
+      if (!pack) return false;
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return false;
+      const { error } = await supabase
+        .from("usage_topups")
+        .insert({ user_id: user.id, actions_granted: pack.actions, price_paid: pack.price });
+      if (error) return false;
+      await refresh();
+      return true;
+    },
+    [summary, refresh]
+  );
+
   return (
-    <PlanContext.Provider value={{ loading, summary, metric, setMetric, refresh, switchPlan }}>
+    <PlanContext.Provider value={{ loading, summary, metric, setMetric, refresh, switchPlan, purchaseActionPack }}>
       {children}
     </PlanContext.Provider>
   );
