@@ -35,7 +35,8 @@ export default async function SharePage({ params }: { params: Promise<{ transcri
   const { transcriptId } = await params;
   const supabase = await createClient();
 
-  const { data } = await supabase.rpc("get_shared_transcript", { p_transcript_id: transcriptId });
+  const { data, error } = await supabase.rpc("get_shared_transcript", { p_transcript_id: transcriptId });
+  if (error) console.error("get_shared_transcript RPC failed", error);
   const shared = data as SharedTranscript | null;
 
   if (!shared) {

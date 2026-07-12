@@ -14,7 +14,11 @@ export async function GET(
     p_transcript_id: transcriptId,
   });
 
-  if (error || !data) {
+  if (error) {
+    console.error("get_shared_transcript RPC failed", error);
+    return NextResponse.json({ error: "Transcript not found" }, { status: 404 });
+  }
+  if (!data) {
     return NextResponse.json({ error: "Transcript not found" }, { status: 404 });
   }
 
