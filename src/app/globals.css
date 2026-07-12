@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b1026;
+  --surface: #141b3c;
+  --surface-hover: #1b2350;
+  --foreground: #f5f1e6;
+  --muted: #a8adc9;
+  --gold: #d1a054;
+  --gold-hover: #e0b370;
+  --violet: #7c5cff;
+  --border: #262d55;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-gold: var(--gold);
+  --color-gold-hover: var(--gold-hover);
+  --color-violet: var(--violet);
+  --color-border: var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--background);
+}
+
+.input {
+  @apply w-full rounded-md border border-border bg-black/20 px-3 py-2 text-sm outline-none transition-colors;
+}
+.input:focus {
+  @apply border-gold;
+}
+
+.btn-primary {
+  @apply rounded-md bg-gold px-4 py-2 text-sm font-medium text-background transition-colors;
+}
+.btn-primary:hover:not(:disabled) {
+  @apply bg-gold-hover;
+}
+.btn-primary:disabled {
+  @apply opacity-40 cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface-hover;
+}
+
+@media print {
+  nav,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+}
