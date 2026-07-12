@@ -15,7 +15,7 @@ const STEPS = [
   },
   {
     title: "Export",
-    body: "Generate a clean, evaluator-ready transcript with credits and GPA, attach portfolio work samples, and export as a PDF or shareable link.",
+    body: "Generate a clean, evaluator-ready transcript with credit hours, attach portfolio work samples, and export as a PDF or shareable link.",
   },
 ];
 
@@ -36,16 +36,10 @@ export default function Home() {
         </p>
         <div className="flex gap-4 mt-2">
           <Link
-            href="/profile"
+            href="/login"
             className="rounded-md bg-gold px-5 py-2.5 font-medium text-background hover:bg-gold-hover transition-colors"
           >
-            Start Building
-          </Link>
-          <Link
-            href="/transcript"
-            className="rounded-md border border-border px-5 py-2.5 font-medium hover:bg-surface-hover transition-colors"
-          >
-            View Transcript
+            Get Started
           </Link>
         </div>
       </section>

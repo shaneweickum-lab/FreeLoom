@@ -1,5 +1,5 @@
 import { findKnowledgeBaseMatch } from "./knowledgeBase";
-import type { CourseTranslation } from "./types";
+import type { TranslateLogResponse } from "./types";
 
 type HeuristicCluster = {
   keywords: string[];
@@ -12,7 +12,7 @@ type HeuristicCluster = {
  * Fallback clusters for activities that aren't in the curated knowledge
  * base. Keeps unstructured, unlisted activities from falling through to a
  * meaningless "General Studies" label whenever a reasonable keyword match
- * exists.
+ * exists. Also used as a grounding hint fed into the AI translation prompt.
  */
 const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
   {
@@ -125,40 +125,47 @@ function findHeuristicCluster(description: string): HeuristicCluster {
 }
 
 /**
- * Homeschool documentation commonly treats ~120 hours of engaged activity
- * as one Carnegie credit hour. Falls back to the knowledge base's baseline
- * estimate when the parent hasn't logged specific hours.
+ * Homeschool documentation commonly treats ~120-150 hours of engaged
+ * activity as one Carnegie credit hour. Falls back to a small single-session
+ * estimate when the parent hasn't logged specific time.
  */
-export function estimateCreditHours(hoursSpent: number | undefined, base: number): number {
-  if (!hoursSpent || hoursSpent <= 0) return base;
-  const raw = hoursSpent / 120;
+export function estimateCreditHours(timeSpentMinutes: number | null | undefined, base: number): number {
+  if (!timeSpentMinutes || timeSpentMinutes <= 0) return base;
+  const hours = timeSpentMinutes / 60;
+  const raw = hours / 130;
   const rounded = Math.round(raw * 4) / 4;
-  return Math.max(0.25, rounded);
+  return Math.max(0.1, rounded);
 }
 
-export function heuristicTranslate(description: string, hoursSpent?: number): CourseTranslation {
+/**
+ * Local knowledge-base + keyword heuristic translation. Used as the sole
+ * translation path when no ANTHROPIC_API_KEY is configured, and otherwise
+ * passed into the AI prompt as a grounding hint to reduce hallucination.
+ */
+export function heuristicTranslate(
+  description: string,
+  timeSpentMinutes?: number | null
+): TranslateLogResponse {
   const kbMatch = findKnowledgeBaseMatch(description);
   if (kbMatch) {
     return {
-      courseTitle: kbMatch.courseTitle,
-      subjectArea: kbMatch.subjectArea,
-      skills: kbMatch.skills,
-      creditHours: estimateCreditHours(hoursSpent, kbMatch.baseCreditHours),
+      course_title: kbMatch.courseTitle,
+      subject_area: kbMatch.subjectArea,
+      credit_hours: estimateCreditHours(timeSpentMinutes, kbMatch.baseCreditHours),
       rationale: kbMatch.rationale,
-      source: "knowledge-base",
+      source: "heuristic",
     };
   }
 
   const cluster = findHeuristicCluster(description);
   return {
-    courseTitle: cluster.courseTitle,
-    subjectArea: cluster.subjectArea,
-    skills: cluster.skills,
-    creditHours: estimateCreditHours(hoursSpent, 0.25),
+    course_title: cluster.courseTitle,
+    subject_area: cluster.subjectArea,
+    credit_hours: estimateCreditHours(timeSpentMinutes, 0.1),
     rationale:
       cluster === DEFAULT_CLUSTER
         ? "No specific subject keywords were recognized, so this was logged as self-directed independent study. Edit the course title and subject area to better match what was learned."
-        : `Matched to ${cluster.subjectArea.toLowerCase()} based on the activity description.`,
+        : `Matched to ${cluster.subjectArea.toLowerCase()} based on keywords in the activity description.`,
     source: "heuristic",
   };
 }

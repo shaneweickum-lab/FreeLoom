@@ -1,89 +1,86 @@
-export type SuggestedTrack = {
+export type ActivityType = "game" | "book" | "project" | "platform" | "other";
+
+export const ACTIVITY_TYPES: ActivityType[] = ["game", "book", "project", "platform", "other"];
+
+export type CourseStatus = "suggested" | "approved" | "edited" | "rejected";
+
+export type Student = {
   id: string;
-  subjectArea: string;
-  description: string;
+  user_id: string;
+  name: string;
+  birth_date: string | null;
+  grade_level: string | null;
+  state: string | null;
+  expected_graduation_year: number | null;
+  created_at: string;
+};
+
+export type SuggestedTrack = {
+  subject: string;
+  rationale: string;
   status: "suggested" | "accepted" | "dismissed";
 };
 
-export type StudentProfile = {
-  name: string;
-  gradeLevel: string;
-  hobbies: string;
-  personality: string;
-  learningStyle: string;
-  suggestedTracks: SuggestedTrack[];
-};
-
-export type CourseTranslation = {
-  courseTitle: string;
-  subjectArea: string;
-  skills: string[];
-  creditHours: number;
-  rationale: string;
-  source: "knowledge-base" | "ai-refined" | "heuristic";
-};
-
-export type LearningLogEntry = {
+export type ProfileNote = {
   id: string;
-  date: string;
-  description: string;
-  hoursSpent?: number;
-  translation: CourseTranslation | null;
-  acceptedIntoTranscript: boolean;
-  courseId: string | null;
+  student_id: string;
+  content: string;
+  ai_suggested_tracks: SuggestedTrack[];
+  created_at: string;
+  updated_at: string;
 };
 
-export const LETTER_GRADES = ["A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F"] as const;
-export type LetterGrade = (typeof LETTER_GRADES)[number];
-
-export const GRADE_POINTS: Record<LetterGrade, number> = {
-  A: 4.0,
-  "A-": 3.7,
-  "B+": 3.3,
-  B: 3.0,
-  "B-": 2.7,
-  "C+": 2.3,
-  C: 2.0,
-  "C-": 1.7,
-  D: 1.0,
-  F: 0.0,
-};
-
-export type Course = {
+export type LearningLog = {
   id: string;
-  title: string;
-  subjectArea: string;
-  creditHours: number;
-  grade: LetterGrade;
-  logEntryIds: string[];
+  student_id: string;
+  raw_description: string;
+  activity_type: ActivityType;
+  source_platform: string | null;
+  time_spent_minutes: number | null;
+  date_logged: string;
+  created_at: string;
+};
+
+export type TranslatedCourse = {
+  id: string;
+  learning_log_id: string;
+  course_title: string;
+  subject_area: string;
+  credit_hours: number;
+  ai_rationale: string;
+  status: CourseStatus;
+  created_at: string;
 };
 
 export type PortfolioItem = {
   id: string;
-  courseId: string | null;
-  title: string;
-  note: string;
-  imageDataUrl: string | null;
-  date: string;
+  student_id: string;
+  learning_log_id: string | null;
+  file_url: string;
+  caption: string | null;
+  created_at: string;
 };
 
-export type FreeloomData = {
-  student: StudentProfile;
-  logEntries: LearningLogEntry[];
-  courses: Course[];
-  portfolioItems: PortfolioItem[];
+export type Transcript = {
+  id: string;
+  student_id: string;
+  generated_at: string;
+  pdf_url: string | null;
+  included_course_ids: string[];
 };
 
-export const EMPTY_DATA: FreeloomData = {
-  student: {
-    name: "",
-    gradeLevel: "",
-    hobbies: "",
-    personality: "",
-    learningStyle: "",
-    suggestedTracks: [],
-  },
-  logEntries: [],
-  courses: [],
-  portfolioItems: [],
+export type TranslateLogRequest = {
+  raw_description: string;
+  activity_type: ActivityType;
+  source_platform?: string | null;
+  time_spent_minutes?: number | null;
+  grade_level?: string | null;
+};
+
+export type TranslateLogResponse = {
+  course_title: string;
+  subject_area: string;
+  credit_hours: number;
+  rationale: string;
+  source: "ai" | "heuristic";
 };
