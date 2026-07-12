@@ -129,6 +129,35 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Lazily replace placeholder/untitled conversation names with a Claude-generated
+  // summary. Cheap no-op on the server if a real title already exists.
+  useEffect(() => {
+    const stale = conversations.filter((c) => !c.title || c.title === "Earlier conversation");
+    if (stale.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const c of stale) {
+        try {
+          const res = await fetch("/api/assistant/retitle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ conversation_id: c.id }),
+          });
+          const body = await res.json();
+          if (!cancelled && body.title) {
+            setConversations((prev) => prev.map((x) => (x.id === c.id ? { ...x, title: body.title } : x)));
+          }
+        } catch {
+          // Best-effort — leave the placeholder title if this fails.
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations.map((c) => c.id).join(",")]);
+
   async function startNewChat() {
     if (!currentStudent) return;
     setHistoryOpen(false);

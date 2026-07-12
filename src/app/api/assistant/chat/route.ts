@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildAssistantContext, buildAssistantSystemPrompt } from "@/lib/assistantContext";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistantTools";
 import { getUsageSummary, recordUsage } from "@/lib/usage";
+import { generateConversationTitle } from "@/lib/conversationTitle";
 
 const MAX_TOOL_ITERATIONS = 6;
 const HISTORY_LIMIT = 60;
@@ -81,10 +82,6 @@ export async function POST(req: NextRequest) {
     .from("chat_messages")
     .insert({ student_id: studentId, conversation_id: conversationId, role: "user", kind: "user", content: userBlocks });
 
-  const conversationUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (!conversation.title) conversationUpdate.title = userMessage.slice(0, 60);
-  await supabase.from("chat_conversations").update(conversationUpdate).eq("id", conversationId);
-
   const context = await buildAssistantContext(supabase, studentId);
   const systemPrompt = buildAssistantSystemPrompt(context);
   const client = new Anthropic({ apiKey });
@@ -159,6 +156,15 @@ export async function POST(req: NextRequest) {
   }
 
   await recordUsage(supabase, user.id, "assistant_chat", totalInputTokens, totalOutputTokens);
+
+  // Only (re)title on the first exchange, or if this conversation still carries the
+  // pre-threading backfill placeholder — title generation itself doesn't count as a
+  // billed action, it's app overhead, not something the user asked for.
+  const conversationUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (!conversation.title || conversation.title === "Earlier conversation") {
+    conversationUpdate.title = await generateConversationTitle(`Parent: ${userMessage}\nAssistant: ${finalText}`);
+  }
+  await supabase.from("chat_conversations").update(conversationUpdate).eq("id", conversationId);
 
   return NextResponse.json({ reply: finalText, actions: actionSummaries });
 }
