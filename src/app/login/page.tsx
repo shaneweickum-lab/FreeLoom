@@ -61,7 +61,7 @@ function LoginForm() {
   return (
     <div className="mx-auto max-w-sm flex flex-col gap-8 py-16">
       <div className="text-center">
-        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-background text-xl font-bold mb-4">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-white text-xl font-bold mb-4">
           F
         </span>
         <h1 className="text-2xl font-bold">{mode === "signin" ? "Sign in" : "Create your parent account"}</h1>
@@ -72,7 +72,7 @@ function LoginForm() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-6">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-border bg-surface shadow-sm p-6">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-muted">Email</span>
           <input
@@ -94,7 +94,7 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
         {notice && <p className="text-sm text-gold">{notice}</p>}
         <button type="submit" className="btn-primary" disabled={submitting}>
           {submitting ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}

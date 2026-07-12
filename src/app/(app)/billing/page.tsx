@@ -39,14 +39,14 @@ export default function BillingPage() {
         </p>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface p-4 max-w-lg flex flex-col gap-3">
+      <div className="rounded-lg border border-border bg-surface shadow-sm p-4 max-w-lg flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">This month&apos;s usage</h2>
           <div className="flex text-xs rounded-md border border-border overflow-hidden">
             <button
               onClick={() => setMetric("actions")}
               className={`px-2.5 py-1 ${
-                metric === "actions" ? "bg-gold text-background" : "text-muted hover:text-foreground"
+                metric === "actions" ? "bg-gold text-white" : "text-muted hover:text-foreground"
               }`}
             >
               Actions
@@ -54,7 +54,7 @@ export default function BillingPage() {
             <button
               onClick={() => setMetric("tokens")}
               className={`px-2.5 py-1 ${
-                metric === "tokens" ? "bg-gold text-background" : "text-muted hover:text-foreground"
+                metric === "tokens" ? "bg-gold text-white" : "text-muted hover:text-foreground"
               }`}
             >
               Tokens
@@ -70,9 +70,9 @@ export default function BillingPage() {
                 <span className="text-xs"> ({summary.baseMonthlyActions} plan + {summary.topupActions} bonus)</span>
               )}
             </div>
-            <div className="h-2 rounded-full bg-black/20 overflow-hidden">
+            <div className="h-2 rounded-full bg-border overflow-hidden">
               <div
-                className={`h-full ${pct >= 100 ? "bg-red-400" : "bg-gold"}`}
+                className={`h-full ${pct >= 100 ? "bg-red-500" : "bg-gold"}`}
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -93,7 +93,7 @@ export default function BillingPage() {
           return (
             <div
               key={planId}
-              className={`rounded-lg border p-4 flex flex-col gap-3 ${
+              className={`rounded-lg border p-4 flex flex-col gap-3 shadow-sm ${
                 isCurrent ? "border-gold bg-surface" : "border-border bg-surface"
               }`}
             >
@@ -126,7 +126,7 @@ export default function BillingPage() {
       </div>
 
       {summary.plan === "plus" && (
-        <div className="rounded-lg border border-border bg-surface p-4 max-w-lg flex flex-col gap-3">
+        <div className="rounded-lg border border-border bg-surface shadow-sm p-4 max-w-lg flex flex-col gap-3">
           <div>
             <h2 className="font-semibold">Need more actions this month?</h2>
             <p className="text-xs text-muted mt-1">

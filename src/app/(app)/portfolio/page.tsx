@@ -90,7 +90,7 @@ export default function PortfolioPage() {
         <p className="text-muted text-sm">Attach work samples, photos, or writing to back up the transcript.</p>
       </div>
 
-      <form onSubmit={addItem} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+      <form onSubmit={addItem} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <input
             className="input"
@@ -123,7 +123,7 @@ export default function PortfolioPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         {items.length === 0 && <p className="text-muted text-sm sm:col-span-2">No portfolio items yet.</p>}
         {items.map((item) => (
-          <div key={item.id} className="rounded-lg border border-border bg-surface p-4 flex flex-col gap-2">
+          <div key={item.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-col gap-2">
             {item.signedUrl && /\.(png|jpe?g|gif|webp)$/i.test(item.file_url) && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={item.signedUrl} alt={item.caption || "portfolio item"} className="rounded-md max-h-48 object-cover w-full" />
@@ -133,7 +133,7 @@ export default function PortfolioPage() {
                 <div className="font-medium">{item.caption || "Untitled"}</div>
                 <div className="text-xs text-muted">{new Date(item.created_at).toLocaleDateString()}</div>
               </div>
-              <button onClick={() => deleteItem(item)} className="text-xs text-muted hover:text-red-400 shrink-0">
+              <button onClick={() => deleteItem(item)} className="text-xs text-muted hover:text-red-600 shrink-0">
                 Delete
               </button>
             </div>

@@ -90,7 +90,7 @@ export default function TranscriptPage() {
         </button>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface p-6">
+      <div className="rounded-lg border border-border bg-surface shadow-sm p-6">
         <div className="text-xl font-semibold mb-1">{currentStudent.name}</div>
         <div className="text-muted text-sm mb-6">{currentStudent.grade_level || "Grade level not set"}</div>
 
@@ -133,7 +133,7 @@ export default function TranscriptPage() {
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold">Generated transcripts</h2>
           {transcripts.map((t) => (
-            <div key={t.id} className="rounded-lg border border-border bg-surface p-4 flex items-center justify-between gap-4">
+            <div key={t.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex items-center justify-between gap-4">
               <div className="text-sm">
                 <div>{new Date(t.generated_at).toLocaleString()}</div>
                 <div className="text-muted text-xs">{t.included_course_ids.length} course(s)</div>

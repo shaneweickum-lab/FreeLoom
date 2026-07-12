@@ -17,7 +17,7 @@ export default function AssistantDrawer() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open assistant"
-          className="hidden md:flex fixed bottom-6 right-6 z-40 h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-background shadow-lg hover:scale-105 transition-transform"
+          className="hidden md:flex fixed bottom-6 right-6 z-40 h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-white shadow-lg hover:scale-105 transition-transform"
         >
           <span className="text-xl font-bold">F</span>
         </button>

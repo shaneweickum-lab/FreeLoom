@@ -130,7 +130,7 @@ export default function ProfilePage() {
           {note.ai_suggested_tracks.map((track, i) => (
             <div
               key={i}
-              className={`rounded-lg border p-4 flex items-start justify-between gap-4 ${
+              className={`rounded-lg border p-4 shadow-sm flex items-start justify-between gap-4 ${
                 track.status === "accepted"
                   ? "border-gold bg-surface"
                   : track.status === "dismissed"
@@ -146,7 +146,7 @@ export default function ProfilePage() {
                 <button
                   onClick={() => setTrackStatus(i, "accepted")}
                   className={`text-xs px-2 py-1 rounded ${
-                    track.status === "accepted" ? "bg-gold text-background" : "hover:bg-surface-hover"
+                    track.status === "accepted" ? "bg-gold text-white" : "hover:bg-surface-hover"
                   }`}
                 >
                   Accept

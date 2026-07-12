@@ -121,7 +121,7 @@ export default function DashboardPage() {
           return (
             <div
               key={s.id}
-              className={`rounded-lg border p-4 transition-colors ${
+              className={`rounded-lg border p-4 shadow-sm transition-colors ${
                 currentStudent?.id === s.id ? "border-gold bg-surface" : "border-border bg-surface"
               }`}
             >
@@ -141,7 +141,7 @@ export default function DashboardPage() {
                 <button onClick={() => startEdit(s)} className="text-xs text-muted hover:text-foreground">
                   Edit
                 </button>
-                <button onClick={() => handleDelete(s)} className="text-xs text-muted hover:text-red-400">
+                <button onClick={() => handleDelete(s)} className="text-xs text-muted hover:text-red-600">
                   Remove
                 </button>
               </div>
@@ -150,11 +150,11 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {createError && <p className="text-sm text-red-400">{createError}</p>}
+      {createError && <p className="text-sm text-red-600">{createError}</p>}
 
       {!showForm ? (
         atChildLimit ? (
-          <div className="rounded-lg border border-gold/40 bg-surface p-4 max-w-lg flex flex-col gap-2">
+          <div className="rounded-lg border border-gold/40 bg-surface shadow-sm p-4 max-w-lg flex flex-col gap-2">
             <p className="text-sm font-medium">You&apos;ve reached your plan&apos;s child limit</p>
             <p className="text-sm text-muted">
               Your {summary?.plan} plan allows {summary?.maxChildren} child
@@ -170,7 +170,7 @@ export default function DashboardPage() {
           </button>
         )
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 max-w-lg">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4 max-w-lg">
           <h2 className="font-semibold">{editingId ? "Edit child profile" : "New child profile"}</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <input

@@ -38,10 +38,10 @@ export default function NavBar() {
   }
 
   return (
-    <nav className="border-b border-border bg-surface/60 backdrop-blur sticky top-0 z-10">
+    <nav className="border-b border-border bg-surface/85 backdrop-blur sticky top-0 z-10 shadow-sm">
       <div className="mx-auto max-w-5xl flex items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-wide">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-background font-bold">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-white font-bold">
             F
           </span>
           <span>FREELOOM</span>

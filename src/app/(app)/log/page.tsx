@@ -134,7 +134,7 @@ export default function LogPage() {
         </p>
       </div>
 
-      <form onSubmit={addEntry} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+      <form onSubmit={addEntry} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4">
         <textarea
           className="input min-h-24"
           placeholder="e.g. Spent the afternoon building automated factories in Factorio, wiring up circuit logic for the first time"
@@ -164,7 +164,7 @@ export default function LogPage() {
         <button type="submit" className="btn-primary w-fit" disabled={submitting || !description.trim()}>
           {submitting ? "Translating…" : "Translate activity"}
         </button>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
       </form>
 
       <div className="flex flex-col gap-4">
@@ -174,12 +174,12 @@ export default function LogPage() {
           const course = log.translated_courses?.[0];
           const pending = course ? edits[course.id] : undefined;
           return (
-            <div key={log.id} className="rounded-lg border border-border bg-surface p-4">
+            <div key={log.id} className="rounded-lg border border-border bg-surface shadow-sm p-4">
               <div className="text-xs text-muted mb-1">{log.date_logged}</div>
               <p className="text-sm">{log.raw_description}</p>
 
               {course && (
-                <div className="mt-3 rounded-md bg-black/20 border border-border p-3 flex flex-col gap-2">
+                <div className="mt-3 rounded-md bg-background border border-border p-3 flex flex-col gap-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <input
                       className="input font-medium text-gold bg-transparent border-none px-0"

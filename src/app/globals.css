@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b1026;
-  --surface: #141b3c;
-  --surface-hover: #1b2350;
-  --foreground: #f5f1e6;
-  --muted: #a8adc9;
-  --gold: #d1a054;
-  --gold-hover: #e0b370;
-  --violet: #7c5cff;
-  --border: #262d55;
+  --background: #f7f5f0;
+  --surface: #ffffff;
+  --surface-hover: #efeade;
+  --foreground: #211d17;
+  --muted: #6b6459;
+  --gold: #b45309;
+  --gold-hover: #92400e;
+  --violet: #6d28d9;
+  --border: #e6e1d5;
 }
 
 @theme inline {
@@ -33,18 +33,18 @@ body {
 
 ::selection {
   background: var(--gold);
-  color: var(--background);
+  color: #fff;
 }
 
 .input {
-  @apply w-full rounded-md border border-border bg-black/20 px-3 py-2 text-sm outline-none transition-colors;
+  @apply w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors;
 }
 .input:focus {
-  @apply border-gold;
+  @apply border-gold ring-2 ring-gold/15;
 }
 
 .btn-primary {
-  @apply rounded-md bg-gold px-4 py-2 text-sm font-medium text-background transition-colors;
+  @apply rounded-md bg-gold px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors;
 }
 .btn-primary:hover:not(:disabled) {
   @apply bg-gold-hover;
@@ -54,7 +54,7 @@ body {
 }
 
 .btn-secondary {
-  @apply rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-surface-hover;
+  @apply rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover;
 }
 
 @media print {

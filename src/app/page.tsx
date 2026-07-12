@@ -23,7 +23,7 @@ export default function Home() {
   return (
     <div className="flex flex-col gap-16">
       <section className="text-center flex flex-col items-center gap-6 py-12">
-        <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-background text-2xl font-bold">
+        <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-white text-2xl font-bold shadow-sm">
           F
         </span>
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">FREELOOM</h1>
@@ -38,7 +38,7 @@ export default function Home() {
         <div className="flex gap-4 mt-2">
           <Link
             href="/login"
-            className="rounded-md bg-gold px-5 py-2.5 font-medium text-background hover:bg-gold-hover transition-colors"
+            className="rounded-md bg-gold px-5 py-2.5 font-medium text-white shadow-sm hover:bg-gold-hover transition-colors"
           >
             Get Started
           </Link>
@@ -47,7 +47,7 @@ export default function Home() {
 
       <section className="grid gap-6 sm:grid-cols-2">
         {STEPS.map((step, i) => (
-          <div key={step.title} className="rounded-lg border border-border bg-surface p-6">
+          <div key={step.title} className="rounded-lg border border-border bg-surface shadow-sm p-6">
             <div className="text-sm text-gold font-mono mb-2">Step {i + 1}</div>
             <h3 className="font-semibold text-lg mb-1">{step.title}</h3>
             <p className="text-muted text-sm leading-relaxed">{step.body}</p>

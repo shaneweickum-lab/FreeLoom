@@ -261,7 +261,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
       </div>
 
       <div
-        className={`flex-1 overflow-y-auto rounded-lg border border-border bg-surface flex flex-col gap-4 ${
+        className={`flex-1 overflow-y-auto rounded-lg border border-border bg-surface shadow-sm flex flex-col gap-4 ${
           compact ? "p-3" : "p-4"
         }`}
       >
@@ -282,7 +282,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
               <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                 <div
                   className={`max-w-[85%] rounded-lg px-3.5 py-2 text-sm flex flex-col gap-2 ${
-                    isUser ? "bg-gold text-background" : "bg-black/20 border border-border"
+                    isUser ? "bg-gold text-white" : "bg-background border border-border"
                   }`}
                 >
                   {text && <p className="whitespace-pre-wrap">{text}</p>}
@@ -299,14 +299,14 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
       </div>
 
       {quotaExceeded && (
-        <div className="rounded-md border border-gold/40 bg-surface px-3 py-2 text-sm flex items-center justify-between gap-3">
+        <div className="rounded-md border border-gold/40 bg-surface shadow-sm px-3 py-2 text-sm flex items-center justify-between gap-3">
           <span>You&apos;ve used all of this month&apos;s assistant actions for your plan.</span>
           <Link href="/billing" className="text-gold shrink-0 hover:underline">
             View plans
           </Link>
         </div>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input

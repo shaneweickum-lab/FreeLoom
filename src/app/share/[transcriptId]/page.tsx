@@ -32,7 +32,7 @@ export default async function SharePage({ params }: { params: Promise<{ transcri
         </a>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface p-6">
+      <div className="rounded-lg border border-border bg-surface shadow-sm p-6">
         <div className="text-xl font-semibold mb-1">{shared.student.name || "Unnamed Student"}</div>
         <div className="text-muted text-sm mb-6">{shared.student.grade_level || "Grade level not set"}</div>
 

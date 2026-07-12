@@ -10,7 +10,7 @@ export default function StudentSwitcher() {
 
   if (students.length === 0) {
     return (
-      <div className="rounded-lg border border-gold/50 bg-surface p-4 flex items-center justify-between gap-4">
+      <div className="rounded-lg border border-gold/50 bg-surface shadow-sm p-4 flex items-center justify-between gap-4">
         <p className="text-sm text-muted">No children added to your account yet.</p>
         <Link href="/dashboard" className="btn-primary text-sm">
           Add your first child
