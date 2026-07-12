@@ -31,6 +31,12 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <NavBar />
         <main className="flex-1 mx-auto w-full max-w-5xl px-6 py-10">{children}</main>
+        <footer className="border-t border-border">
+          <div className="mx-auto max-w-5xl px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
+            <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
+            <span>An agentic AI platform for homeschool records.</span>
+          </div>
+        </footer>
       </body>
     </html>
   );

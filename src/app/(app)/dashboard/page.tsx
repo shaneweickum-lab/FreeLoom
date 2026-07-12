@@ -12,15 +12,33 @@ const EMPTY_FORM = { name: "", gradeLevel: "", state: "", birthDate: "", gradYea
 type StudentStats = { courseCount: number; creditHours: number };
 
 export default function DashboardPage() {
-  const { students, currentStudent, selectStudent, createStudent, updateStudent, deleteStudent, createError } =
-    useStudents();
+  const {
+    students,
+    currentStudent,
+    selectStudent,
+    createStudent,
+    updateStudent,
+    deleteStudent,
+    createError,
+    loading: studentsLoading,
+  } = useStudents();
   const { summary } = usePlan();
   const atChildLimit = summary?.maxChildren != null && students.length >= summary.maxChildren;
-  const [showForm, setShowForm] = useState(students.length === 0);
+  const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [stats, setStats] = useState<Record<string, StudentStats>>({});
+
+  useEffect(() => {
+    // Only after the real student list has loaded — students.length is 0 on
+    // every mount until the async fetch resolves, so gating on it directly
+    // was forcing this form open on every reload, even for existing families.
+    if (!studentsLoading && students.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowForm(true);
+    }
+  }, [studentsLoading, students.length]);
 
   useEffect(() => {
     if (students.length === 0) {
