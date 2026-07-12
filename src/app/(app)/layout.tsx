@@ -2,6 +2,7 @@
 
 import { StudentProvider } from "@/lib/studentContext";
 import StudentSwitcher from "@/components/StudentSwitcher";
+import AssistantDrawer from "@/components/AssistantDrawer";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <StudentSwitcher />
         {children}
       </div>
+      <AssistantDrawer />
     </StudentProvider>
   );
 }
