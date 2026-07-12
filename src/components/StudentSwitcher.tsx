@@ -10,7 +10,7 @@ export default function StudentSwitcher() {
 
   if (students.length === 0) {
     return (
-      <div className="rounded-lg border border-gold/50 bg-surface shadow-sm p-4 flex items-center justify-between gap-4">
+      <div className="rounded-lg border border-gold/50 bg-surface shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
         <p className="text-sm text-muted">No children added to your account yet.</p>
         <Link href="/dashboard" className="btn-primary text-sm">
           Add your first child
@@ -20,10 +20,10 @@ export default function StudentSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-3 text-sm">
+    <div className="flex flex-wrap items-center gap-3 text-sm">
       <span className="text-muted">Viewing:</span>
       <select
-        className="input w-auto"
+        className="input w-auto min-w-0"
         value={currentStudent?.id ?? ""}
         onChange={(e) => selectStudent(e.target.value)}
       >

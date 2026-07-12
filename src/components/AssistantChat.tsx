@@ -310,7 +310,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
 
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
-          className="input"
+          className="input min-w-0"
           placeholder={compact ? "Ask the assistant…" : `Tell the assistant about ${currentStudent.name}'s day…`}
           value={input}
           onChange={(e) => setInput(e.target.value)}

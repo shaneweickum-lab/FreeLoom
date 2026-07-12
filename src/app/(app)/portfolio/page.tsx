@@ -107,12 +107,12 @@ export default function PortfolioPage() {
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             type="file"
             accept="image/*,.pdf"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-muted"
+            className="text-sm text-muted min-w-0"
           />
           <button type="submit" className="btn-primary ml-auto" disabled={!file || uploading}>
             {uploading ? "Uploading…" : "Add to portfolio"}

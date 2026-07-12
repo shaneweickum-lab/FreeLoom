@@ -196,7 +196,7 @@ export default function LogPage() {
                     onChange={(e) => editField(course.id, { subject_area: e.target.value })}
                   />
                   <p className="text-xs text-muted italic">{course.ai_rationale}</p>
-                  <div className="flex items-center justify-between mt-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2 mt-1">
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="number"
