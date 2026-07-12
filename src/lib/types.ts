@@ -84,3 +84,15 @@ export type TranslateLogResponse = {
   rationale: string;
   source: "ai" | "heuristic";
 };
+
+export type ChatMessageRole = "user" | "assistant";
+export type ChatMessageKind = "user" | "assistant" | "tool_bridge";
+
+export type ChatMessage = {
+  id: string;
+  student_id: string;
+  role: ChatMessageRole;
+  kind: ChatMessageKind;
+  content: unknown[];
+  created_at: string;
+};

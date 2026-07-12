@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/log", label: "Learning Log" },
   { href: "/transcript", label: "Transcript" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/assistant", label: "Assistant" },
 ];
 
 export default function NavBar() {
