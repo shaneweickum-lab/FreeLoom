@@ -19,9 +19,23 @@ export async function GET(
   }
 
   const shared = data as {
-    student: { name: string; grade_level: string | null };
+    student: {
+      name: string;
+      grade_level: string | null;
+      gender: string | null;
+      birth_date: string | null;
+      graduation_date: string | null;
+      expected_graduation_year: number | null;
+    };
+    school: {
+      school_name: string | null;
+      parent_name: string | null;
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+    };
     generated_at: string;
-    courses: { course_title: string; subject_area: string; credit_hours: number }[];
+    courses: { course_title: string; subject_area: string; credit_hours: number; letter_grade: string | null; grade_level: string | null }[];
     total_credit_hours: number;
   };
 
@@ -29,9 +43,20 @@ export async function GET(
     <TranscriptDocument
       studentName={shared.student.name}
       gradeLevel={shared.student.grade_level}
+      gender={shared.student.gender}
+      birthDate={shared.student.birth_date}
+      graduationDate={shared.student.graduation_date}
+      expectedGraduationYear={shared.student.expected_graduation_year}
       generatedAt={shared.generated_at}
       courses={shared.courses}
       totalCreditHours={shared.total_credit_hours}
+      school={{
+        schoolName: shared.school?.school_name ?? null,
+        parentName: shared.school?.parent_name ?? null,
+        address: shared.school?.address ?? null,
+        phone: shared.school?.phone ?? null,
+        email: shared.school?.email ?? null,
+      }}
     />
   );
 

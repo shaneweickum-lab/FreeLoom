@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     .from("chat_messages")
     .insert({ student_id: studentId, conversation_id: conversationId, role: "user", kind: "user", content: userBlocks });
 
-  const context = await buildAssistantContext(supabase, studentId);
+  const context = await buildAssistantContext(supabase, studentId, user.id);
   const systemPrompt = buildAssistantSystemPrompt(context);
   const client = new Anthropic({ apiKey });
 

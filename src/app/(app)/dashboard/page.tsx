@@ -7,7 +7,15 @@ import { useStudents } from "@/lib/studentContext";
 import { usePlan } from "@/lib/planContext";
 import type { Student } from "@/lib/types";
 
-const EMPTY_FORM = { name: "", gradeLevel: "", state: "", birthDate: "", gradYear: "" };
+const EMPTY_FORM = {
+  name: "",
+  gradeLevel: "",
+  state: "",
+  birthDate: "",
+  gradYear: "",
+  gender: "",
+  graduationDate: "",
+};
 
 type StudentStats = { courseCount: number; creditHours: number };
 
@@ -88,6 +96,8 @@ export default function DashboardPage() {
       state: s.state || "",
       birthDate: s.birth_date || "",
       gradYear: s.expected_graduation_year ? String(s.expected_graduation_year) : "",
+      gender: s.gender || "",
+      graduationDate: s.graduation_date || "",
     });
     setShowForm(true);
   }
@@ -102,6 +112,8 @@ export default function DashboardPage() {
       state: form.state || null,
       birth_date: form.birthDate || null,
       expected_graduation_year: form.gradYear ? Number(form.gradYear) : null,
+      gender: form.gender || null,
+      graduation_date: form.graduationDate || null,
     };
     if (editingId) {
       await updateStudent(editingId, patch);
@@ -225,6 +237,22 @@ export default function DashboardPage() {
               value={form.gradYear}
               onChange={(e) => setForm({ ...form, gradYear: e.target.value })}
             />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <select className="input" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+              <option value="">Gender (optional)</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+            <label className="flex flex-col gap-1.5 text-xs text-muted">
+              Graduation date (once known — for the official transcript)
+              <input
+                type="date"
+                className="input"
+                value={form.graduationDate}
+                onChange={(e) => setForm({ ...form, graduationDate: e.target.value })}
+              />
+            </label>
           </div>
           <div className="flex gap-2">
             <button type="submit" className="btn-primary" disabled={submitting || !form.name.trim()}>

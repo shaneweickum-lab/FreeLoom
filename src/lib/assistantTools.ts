@@ -25,7 +25,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
   {
     name: "approve_course",
     description:
-      "Approve a suggested course so it counts toward the transcript. Optionally correct the title, subject area, or credit hours at the same time.",
+      "Approve a suggested course so it counts toward the transcript. Optionally correct the title, subject area, or credit hours, and set the letter grade and which high-school grade level (9-12) the course belongs to for an official transcript.",
     input_schema: {
       type: "object",
       properties: {
@@ -33,6 +33,8 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         course_title: { type: "string" },
         subject_area: { type: "string" },
         credit_hours: { type: "number" },
+        letter_grade: { type: "string", description: "e.g. A, A-, B+, B, C, PASS" },
+        grade_level: { type: "string", enum: ["9", "10", "11", "12"], description: "Which high-school year this course counts toward" },
       },
       required: ["course_id"],
     },
@@ -57,6 +59,23 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         state: { type: "string" },
         birth_date: { type: "string", description: "YYYY-MM-DD" },
         expected_graduation_year: { type: "number" },
+        gender: { type: "string" },
+        graduation_date: { type: "string", description: "YYYY-MM-DD, once the exact date is known" },
+      },
+    },
+  },
+  {
+    name: "update_school_profile",
+    description:
+      "Update the family's 'school of record' info (school name, parent/guardian name, address, phone, email) that appears on every child's official transcript. This is shared across all children on the account, not per-student.",
+    input_schema: {
+      type: "object",
+      properties: {
+        school_name: { type: "string" },
+        parent_name: { type: "string" },
+        address: { type: "string" },
+        phone: { type: "string" },
+        email: { type: "string" },
       },
     },
   },
@@ -183,13 +202,18 @@ async function toolApproveCourse(
   if (typeof input.course_title === "string") patch.course_title = input.course_title;
   if (typeof input.subject_area === "string") patch.subject_area = input.subject_area;
   if (typeof input.credit_hours === "number") patch.credit_hours = input.credit_hours;
-  patch.status = Object.keys(patch).length > 0 ? "edited" : "approved";
+  if (typeof input.letter_grade === "string") patch.letter_grade = input.letter_grade;
+  if (typeof input.grade_level === "string") patch.grade_level = input.grade_level;
+  const isEdit = typeof input.course_title === "string" || typeof input.subject_area === "string" || typeof input.credit_hours === "number";
+  patch.status = isEdit ? "edited" : "approved";
 
   const { data } = await supabase.from("translated_courses").update(patch).eq("id", courseId).select().single();
   if (!data) return { data: { error: "Update failed" }, summary: "Couldn't approve that course." };
+  const gradeNote = data.letter_grade ? `, grade ${data.letter_grade}` : "";
+  const levelNote = data.grade_level ? `, grade ${data.grade_level}` : "";
   return {
     data,
-    summary: `Approved: ${data.course_title} (${Number(data.credit_hours).toFixed(2)} credits)`,
+    summary: `Approved: ${data.course_title} (${Number(data.credit_hours).toFixed(2)} credits${gradeNote}${levelNote})`,
   };
 }
 
@@ -218,7 +242,15 @@ async function toolUpdateStudentProfile(
   input: Record<string, unknown>
 ): Promise<ToolExecutionResult> {
   const patch: Record<string, unknown> = {};
-  for (const key of ["name", "grade_level", "state", "birth_date", "expected_graduation_year"]) {
+  for (const key of [
+    "name",
+    "grade_level",
+    "state",
+    "birth_date",
+    "expected_graduation_year",
+    "gender",
+    "graduation_date",
+  ]) {
     if (input[key] !== undefined) patch[key] = input[key];
   }
   if (Object.keys(patch).length === 0) {
@@ -227,6 +259,27 @@ async function toolUpdateStudentProfile(
   const { data } = await supabase.from("students").update(patch).eq("id", studentId).select().single();
   if (!data) return { data: { error: "Update failed" }, summary: "Couldn't update the profile." };
   return { data, summary: `Updated ${data.name}'s profile.` };
+}
+
+async function toolUpdateSchoolProfile(
+  supabase: Supa,
+  userId: string,
+  input: Record<string, unknown>
+): Promise<ToolExecutionResult> {
+  const patch: Record<string, unknown> = {};
+  for (const key of ["school_name", "parent_name", "address", "phone", "email"]) {
+    if (typeof input[key] === "string") patch[key] = input[key];
+  }
+  if (Object.keys(patch).length === 0) {
+    return { data: { error: "No fields provided" }, summary: "No school profile fields to update." };
+  }
+  const { data } = await supabase
+    .from("school_profiles")
+    .upsert({ user_id: userId, ...patch, updated_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (!data) return { data: { error: "Update failed" }, summary: "Couldn't update the school profile." };
+  return { data, summary: "Updated the school of record info on your transcripts." };
 }
 
 async function toolSaveDiscoveryNotes(
@@ -347,6 +400,8 @@ export async function executeAssistantTool(
       return toolRejectCourse(supabase, studentId, input);
     case "update_student_profile":
       return toolUpdateStudentProfile(supabase, studentId, input);
+    case "update_school_profile":
+      return toolUpdateSchoolProfile(supabase, userId, input);
     case "save_discovery_notes":
       return toolSaveDiscoveryNotes(supabase, studentId, input);
     case "suggest_tracks_from_notes":

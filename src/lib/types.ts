@@ -12,7 +12,19 @@ export type Student = {
   grade_level: string | null;
   state: string | null;
   expected_graduation_year: number | null;
+  gender: string | null;
+  graduation_date: string | null;
   created_at: string;
+};
+
+export type SchoolProfile = {
+  user_id: string;
+  school_name: string | null;
+  parent_name: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  updated_at: string;
 };
 
 export type SuggestedTrack = {
@@ -49,6 +61,8 @@ export type TranslatedCourse = {
   credit_hours: number;
   ai_rationale: string;
   status: CourseStatus;
+  letter_grade: string | null;
+  grade_level: string | null;
   created_at: string;
 };
 

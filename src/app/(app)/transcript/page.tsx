@@ -1,19 +1,50 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import type { TranslatedCourse, Transcript } from "@/lib/types";
+import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
+import type { SchoolProfile, TranslatedCourse, Transcript } from "@/lib/types";
+
+const EMPTY_SCHOOL_FORM = { schoolName: "", parentName: "", address: "", phone: "", email: "" };
 
 export default function TranscriptPage() {
   const { currentStudent } = useStudents();
   const [courses, setCourses] = useState<TranslatedCourse[]>([]);
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
+  const [schoolProfile, setSchoolProfile] = useState<SchoolProfile | null>(null);
+  const [schoolForm, setSchoolForm] = useState(EMPTY_SCHOOL_FORM);
+  const [savingSchool, setSavingSchool] = useState(false);
+  const [schoolOpen, setSchoolOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const schoolOpenInitialized = useRef(false);
 
   async function load() {
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: school } = await supabase.from("school_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      setSchoolProfile(school);
+      setSchoolForm({
+        schoolName: school?.school_name || "",
+        parentName: school?.parent_name || "",
+        address: school?.address || "",
+        phone: school?.phone || "",
+        email: school?.email || "",
+      });
+      // Default collapsed once a school profile already exists, but only on first
+      // load — don't fight the user's own toggle on later re-renders/saves.
+      if (!schoolOpenInitialized.current) {
+        setSchoolOpen(!school);
+        schoolOpenInitialized.current = true;
+      }
+    }
+
     if (!currentStudent) {
       setCourses([]);
       setTranscripts([]);
@@ -21,7 +52,6 @@ export default function TranscriptPage() {
       return;
     }
     setLoading(true);
-    const supabase = createClient();
 
     const { data: logs } = await supabase.from("learning_logs").select("id").eq("student_id", currentStudent.id);
     const logIds = (logs || []).map((l) => l.id);
@@ -53,6 +83,39 @@ export default function TranscriptPage() {
   }, [currentStudent]);
 
   const totalCreditHours = Math.round(courses.reduce((sum, c) => sum + c.credit_hours, 0) * 100) / 100;
+  const cumulative = computeGpa(courses);
+  const grouped = groupByGradeLevel(courses);
+
+  async function updateCourseField(courseId: string, patch: Partial<TranslatedCourse>) {
+    const supabase = createClient();
+    setCourses((prev) => prev.map((c) => (c.id === courseId ? { ...c, ...patch } : c)));
+    await supabase.from("translated_courses").update(patch).eq("id", courseId);
+  }
+
+  async function saveSchoolProfile(e: React.FormEvent) {
+    e.preventDefault();
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingSchool(true);
+    const { data } = await supabase
+      .from("school_profiles")
+      .upsert({
+        user_id: user.id,
+        school_name: schoolForm.schoolName || null,
+        parent_name: schoolForm.parentName || null,
+        address: schoolForm.address || null,
+        phone: schoolForm.phone || null,
+        email: schoolForm.email || null,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    if (data) setSchoolProfile(data);
+    setSavingSchool(false);
+  }
 
   async function generateTranscript() {
     if (!currentStudent || courses.length === 0) return;
@@ -83,48 +146,159 @@ export default function TranscriptPage() {
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold mb-1">Transcript</h1>
-          <p className="text-muted text-sm">Approved courses for {currentStudent.name}, with cumulative credit hours.</p>
+          <p className="text-muted text-sm">Approved courses for {currentStudent.name}, with cumulative GPA and credit hours.</p>
         </div>
         <button onClick={generateTranscript} className="btn-primary" disabled={generating || courses.length === 0}>
           {generating ? "Generating…" : "Generate transcript"}
         </button>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface shadow-sm p-6">
-        <div className="text-xl font-semibold mb-1">{currentStudent.name}</div>
-        <div className="text-muted text-sm mb-6">{currentStudent.grade_level || "Grade level not set"}</div>
+      <div className="rounded-lg border border-border bg-surface shadow-sm p-4">
+        <button
+          type="button"
+          onClick={() => setSchoolOpen((v) => !v)}
+          className="w-full text-left font-semibold text-sm flex items-center justify-between"
+        >
+          <span>School of Record {!schoolProfile && "— add this before generating an official transcript"}</span>
+          <span className="text-muted text-xs">{schoolOpen ? "Hide" : "Edit"}</span>
+        </button>
+        {schoolOpen && (
+        <form onSubmit={saveSchoolProfile} className="flex flex-col gap-3 mt-4">
+          <p className="text-xs text-muted">
+            Shared across every child on this account — appears on every transcript.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              className="input"
+              placeholder="School name"
+              value={schoolForm.schoolName}
+              onChange={(e) => setSchoolForm({ ...schoolForm, schoolName: e.target.value })}
+            />
+            <input
+              className="input"
+              placeholder="Parent / guardian name"
+              value={schoolForm.parentName}
+              onChange={(e) => setSchoolForm({ ...schoolForm, parentName: e.target.value })}
+            />
+          </div>
+          <input
+            className="input"
+            placeholder="Address"
+            value={schoolForm.address}
+            onChange={(e) => setSchoolForm({ ...schoolForm, address: e.target.value })}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              className="input"
+              placeholder="Phone"
+              value={schoolForm.phone}
+              onChange={(e) => setSchoolForm({ ...schoolForm, phone: e.target.value })}
+            />
+            <input
+              className="input"
+              placeholder="Email"
+              value={schoolForm.email}
+              onChange={(e) => setSchoolForm({ ...schoolForm, email: e.target.value })}
+            />
+          </div>
+          <button type="submit" className="btn-primary w-fit text-sm" disabled={savingSchool}>
+            {savingSchool ? "Saving…" : "Save school info"}
+          </button>
+        </form>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-border bg-surface shadow-sm p-6 flex flex-col gap-8">
+        <div>
+          <div className="text-xl font-semibold mb-1">{currentStudent.name}</div>
+          <div className="text-muted text-sm">{currentStudent.grade_level || "Grade level not set"}</div>
+        </div>
 
         {courses.length === 0 ? (
           <p className="text-muted text-sm">
             No approved courses yet. Approve translated activities from the Learning Log to build your transcript.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted border-b border-border">
-                  <th className="py-2 pr-4 font-medium">Course Title</th>
-                  <th className="py-2 pr-4 font-medium">Subject Area</th>
-                  <th className="py-2 font-medium">Credits</th>
-                </tr>
-              </thead>
-              <tbody>
-                {courses.map((course) => (
-                  <tr key={course.id} className="border-b border-border/60">
-                    <td className="py-2.5 pr-4">{course.course_title}</td>
-                    <td className="py-2.5 pr-4 text-muted">{course.subject_area}</td>
-                    <td className="py-2.5">{course.credit_hours.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          grouped.map((bucket) => {
+            const blockGpa = computeGpa(bucket.courses);
+            return (
+              <div key={bucket.level}>
+                <h2 className="font-semibold mb-2">
+                  Course Study {bucket.level === "Other" ? "(no grade level set)" : `— Grade ${bucket.level}`}
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-muted border-b border-border">
+                        <th className="py-2 pr-4 font-medium">Course Title</th>
+                        <th className="py-2 pr-4 font-medium">Subject Area</th>
+                        <th className="py-2 pr-4 font-medium">Grade</th>
+                        <th className="py-2 pr-4 font-medium">HS Grade Level</th>
+                        <th className="py-2 font-medium">Credits</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bucket.courses.map((course) => (
+                        <tr key={course.id} className="border-b border-border/60">
+                          <td className="py-2.5 pr-4">{course.course_title}</td>
+                          <td className="py-2.5 pr-4 text-muted">{course.subject_area}</td>
+                          <td className="py-2.5 pr-4">
+                            <input
+                              className="input w-20"
+                              placeholder="A, B+…"
+                              defaultValue={course.letter_grade ?? ""}
+                              onBlur={(e) => {
+                                const value = e.target.value.trim() || null;
+                                if (value !== course.letter_grade) updateCourseField(course.id, { letter_grade: value });
+                              }}
+                            />
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <select
+                              className="input w-24"
+                              value={course.grade_level ?? ""}
+                              onChange={(e) => updateCourseField(course.id, { grade_level: e.target.value || null })}
+                            >
+                              <option value="">—</option>
+                              {GRADE_LEVELS.map((lvl) => (
+                                <option key={lvl} value={lvl}>
+                                  {lvl}th
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-2.5">{course.credit_hours.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {blockGpa.gpa !== null && (
+                  <div className="text-right text-sm font-semibold mt-2">GPA: {blockGpa.gpa.toFixed(2)}</div>
+                )}
+              </div>
+            );
+          })
         )}
 
         {courses.length > 0 && (
-          <div className="mt-6 pt-4 border-t border-border text-sm">
-            <span className="text-muted">Cumulative Credit Hours: </span>
-            <span className="font-semibold text-gold">{totalCreditHours.toFixed(2)}</span>
+          <div className="grid gap-4 sm:grid-cols-4 pt-4 border-t border-border text-sm">
+            <div>
+              <div className="text-muted text-xs">Total Credits</div>
+              <div className="font-semibold text-gold">{totalCreditHours.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="text-muted text-xs">GPA Credits</div>
+              <div className="font-semibold text-gold">{cumulative.gpaCredits.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="text-muted text-xs">GPA Points</div>
+              <div className="font-semibold text-gold">{cumulative.gpaPoints.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="text-muted text-xs">Cumulative GPA</div>
+              <div className="font-semibold text-gold">{cumulative.gpa !== null ? cumulative.gpa.toFixed(2) : "—"}</div>
+            </div>
           </div>
         )}
       </div>
