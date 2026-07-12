@@ -15,6 +15,7 @@ export default function PortfolioPage() {
   const [learningLogId, setLearningLogId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     if (!currentStudent) {
@@ -53,28 +54,47 @@ export default function PortfolioPage() {
     e.preventDefault();
     if (!currentStudent || !file) return;
     setUploading(true);
+    setError(null);
     const supabase = createClient();
     const path = `${currentStudent.id}/${crypto.randomUUID()}-${file.name}`;
     const { error: uploadError } = await supabase.storage.from("portfolio").upload(path, file);
-    if (!uploadError) {
-      await supabase.from("portfolio_items").insert({
-        student_id: currentStudent.id,
-        learning_log_id: learningLogId || null,
-        file_url: path,
-        caption: caption || null,
-      });
-      setCaption("");
-      setLearningLogId("");
-      setFile(null);
-      await load();
+    if (uploadError) {
+      console.error("Portfolio upload failed", uploadError);
+      setError(`Upload failed: ${uploadError.message}`);
+      setUploading(false);
+      return;
     }
+    const { error: insertError } = await supabase.from("portfolio_items").insert({
+      student_id: currentStudent.id,
+      learning_log_id: learningLogId || null,
+      file_url: path,
+      caption: caption || null,
+    });
+    if (insertError) {
+      console.error("Portfolio item insert failed", insertError);
+      setError(`Couldn't save that item: ${insertError.message}`);
+      // Best-effort: don't leave an orphaned file in storage with no matching row.
+      await supabase.storage.from("portfolio").remove([path]);
+      setUploading(false);
+      return;
+    }
+    setCaption("");
+    setLearningLogId("");
+    setFile(null);
+    await load();
     setUploading(false);
   }
 
   async function deleteItem(item: PortfolioItem) {
     const supabase = createClient();
-    await supabase.storage.from("portfolio").remove([item.file_url]);
-    await supabase.from("portfolio_items").delete().eq("id", item.id);
+    setError(null);
+    const { error: removeError } = await supabase.storage.from("portfolio").remove([item.file_url]);
+    if (removeError) console.error("Portfolio file removal failed", removeError);
+    const { error: deleteError } = await supabase.from("portfolio_items").delete().eq("id", item.id);
+    if (deleteError) {
+      console.error("Portfolio item delete failed", deleteError);
+      setError(`Couldn't delete that item: ${deleteError.message}`);
+    }
     await load();
   }
 
@@ -118,6 +138,7 @@ export default function PortfolioPage() {
             {uploading ? "Uploading…" : "Add to portfolio"}
           </button>
         </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
       </form>
 
       <div className="grid gap-4 sm:grid-cols-2">
