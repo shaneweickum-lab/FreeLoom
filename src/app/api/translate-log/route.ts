@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { translateLearningLog } from "@/lib/translate";
 import type { TranslateLogRequest } from "@/lib/types";
 
@@ -10,6 +11,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "raw_description is required" }, { status: 400 });
   }
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
   const input: TranslateLogRequest = {
     raw_description,
     activity_type: body?.activity_type || "other",
@@ -18,6 +27,6 @@ export async function POST(req: NextRequest) {
     grade_level: body?.grade_level || null,
   };
 
-  const result = await translateLearningLog(input);
+  const result = await translateLearningLog(input, { supabase, userId: user.id });
   return NextResponse.json(result);
 }

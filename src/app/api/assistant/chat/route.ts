@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildAssistantContext, buildAssistantSystemPrompt } from "@/lib/assistantContext";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistantTools";
+import { getUsageSummary, recordUsage } from "@/lib/usage";
 
 const MAX_TOOL_ITERATIONS = 6;
 const HISTORY_LIMIT = 60;
@@ -25,6 +26,24 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  const usageSummary = await getUsageSummary(supabase, user.id);
+  if (usageSummary.actionsUsed >= usageSummary.monthlyActions) {
+    return NextResponse.json(
+      {
+        quota_exceeded: true,
+        error: `You've used all ${usageSummary.monthlyActions} assistant actions included in your ${usageSummary.plan} plan this month.`,
+      },
+      { status: 403 }
+    );
+  }
 
   // RLS scopes this to the authenticated user's own students; an unowned or
   // missing id resolves to no row, which we treat as not found.
@@ -55,6 +74,8 @@ export async function POST(req: NextRequest) {
 
   const actionSummaries: string[] = [];
   let finalText = "";
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   try {
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
@@ -65,6 +86,8 @@ export async function POST(req: NextRequest) {
         tools: ASSISTANT_TOOLS,
         messages,
       });
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
 
       messages.push({ role: "assistant", content: response.content });
       await supabase
@@ -88,6 +111,7 @@ export async function POST(req: NextRequest) {
           supabase,
           studentId,
           student.grade_level,
+          user.id,
           toolUse.name,
           (toolUse.input as Record<string, unknown>) ?? {}
         );
@@ -108,6 +132,8 @@ export async function POST(req: NextRequest) {
     console.error("Assistant chat failed", err);
     return NextResponse.json({ error: "The assistant hit an error. Try again." }, { status: 500 });
   }
+
+  await recordUsage(supabase, user.id, "assistant_chat", totalInputTokens, totalOutputTokens);
 
   return NextResponse.json({ reply: finalText, actions: actionSummaries });
 }

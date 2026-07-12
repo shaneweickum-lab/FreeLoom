@@ -96,3 +96,11 @@ export type ChatMessage = {
   content: unknown[];
   created_at: string;
 };
+
+export type PlanId = "free" | "plus" | "pro";
+
+export type AccountPlan = {
+  user_id: string;
+  plan: PlanId;
+  updated_at: string;
+};

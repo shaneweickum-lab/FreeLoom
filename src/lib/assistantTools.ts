@@ -112,6 +112,7 @@ async function toolCreateLearningLog(
   supabase: Supa,
   studentId: string,
   gradeLevel: string | null,
+  userId: string,
   input: Record<string, unknown>
 ): Promise<ToolExecutionResult> {
   const raw_description = String(input.raw_description ?? "").trim();
@@ -123,13 +124,16 @@ async function toolCreateLearningLog(
   const time_spent_minutes = typeof input.time_spent_minutes === "number" ? input.time_spent_minutes : null;
   const source_platform = typeof input.source_platform === "string" ? input.source_platform : null;
 
-  const translation = await translateLearningLog({
-    raw_description,
-    activity_type,
-    source_platform,
-    time_spent_minutes,
-    grade_level: gradeLevel,
-  });
+  const translation = await translateLearningLog(
+    {
+      raw_description,
+      activity_type,
+      source_platform,
+      time_spent_minutes,
+      grade_level: gradeLevel,
+    },
+    { supabase, userId }
+  );
 
   const { data: log, error: logError } = await supabase
     .from("learning_logs")
@@ -247,14 +251,15 @@ async function toolSaveDiscoveryNotes(
 async function toolSuggestTracksFromNotes(
   supabase: Supa,
   studentId: string,
-  gradeLevel: string | null
+  gradeLevel: string | null,
+  userId: string
 ): Promise<ToolExecutionResult> {
   const { data: note } = await supabase.from("profile_notes").select("*").eq("student_id", studentId).maybeSingle();
   const content = note?.content ?? "";
   if (!content.trim()) {
     return { data: { tracks: [] }, summary: "No discovery notes yet to suggest tracks from." };
   }
-  const tracks = await suggestTracks(content, gradeLevel);
+  const tracks = await suggestTracks(content, gradeLevel, { supabase, userId });
   const merged = [...(note?.ai_suggested_tracks ?? []), ...tracks];
   if (note) {
     await supabase.from("profile_notes").update({ ai_suggested_tracks: merged }).eq("id", note.id);
@@ -329,12 +334,13 @@ export async function executeAssistantTool(
   supabase: Supa,
   studentId: string,
   gradeLevel: string | null,
+  userId: string,
   name: string,
   input: Record<string, unknown>
 ): Promise<ToolExecutionResult> {
   switch (name) {
     case "create_learning_log":
-      return toolCreateLearningLog(supabase, studentId, gradeLevel, input);
+      return toolCreateLearningLog(supabase, studentId, gradeLevel, userId, input);
     case "approve_course":
       return toolApproveCourse(supabase, studentId, input);
     case "reject_course":
@@ -344,7 +350,7 @@ export async function executeAssistantTool(
     case "save_discovery_notes":
       return toolSaveDiscoveryNotes(supabase, studentId, input);
     case "suggest_tracks_from_notes":
-      return toolSuggestTracksFromNotes(supabase, studentId, gradeLevel);
+      return toolSuggestTracksFromNotes(supabase, studentId, gradeLevel, userId);
     case "update_track_status":
       return toolUpdateTrackStatus(supabase, studentId, input);
     case "generate_transcript":

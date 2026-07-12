@@ -15,6 +15,7 @@ type StudentContextValue = {
   createStudent: (input: Partial<Student> & { name: string }) => Promise<Student | null>;
   updateStudent: (id: string, patch: Partial<Student>) => Promise<Student | null>;
   deleteStudent: (id: string) => Promise<boolean>;
+  createError: string | null;
 };
 
 const StudentContext = createContext<StudentContextValue | null>(null);
@@ -23,6 +24,7 @@ export function StudentProvider({ children }: { children: ReactNode }) {
   const [students, setStudents] = useState<Student[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -58,12 +60,20 @@ export function StudentProvider({ children }: { children: ReactNode }) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return null;
+    setCreateError(null);
     const { data, error } = await supabase
       .from("students")
       .insert({ ...input, user_id: user.id })
       .select()
       .single();
-    if (error || !data) return null;
+    if (error || !data) {
+      setCreateError(
+        error?.message?.includes("child_limit_reached")
+          ? "You've reached your plan's child limit. Upgrade to add more."
+          : "Couldn't create that profile."
+      );
+      return null;
+    }
     setStudents((prev) => [...prev, data]);
     setCurrentId(data.id);
     return data;
@@ -93,7 +103,17 @@ export function StudentProvider({ children }: { children: ReactNode }) {
 
   return (
     <StudentContext.Provider
-      value={{ students, currentStudent, loading, selectStudent, refresh, createStudent, updateStudent, deleteStudent }}
+      value={{
+        students,
+        currentStudent,
+        loading,
+        selectStudent,
+        refresh,
+        createStudent,
+        updateStudent,
+        deleteStudent,
+        createError,
+      }}
     >
       {children}
     </StudentContext.Provider>

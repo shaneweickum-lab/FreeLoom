@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import type { ChatMessage } from "@/lib/types";
@@ -50,6 +51,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   async function loadHistory() {
@@ -84,6 +86,7 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
     if (!currentStudent || !input.trim() || sending) return;
     setSending(true);
     setError(null);
+    setQuotaExceeded(false);
     const message = input.trim();
     setInput("");
 
@@ -95,7 +98,12 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.error || "The assistant hit an error.");
+        if (body.quota_exceeded) {
+          setQuotaExceeded(true);
+          setInput(message);
+        } else {
+          setError(body.error || "The assistant hit an error.");
+        }
       }
       await loadHistory();
     } catch {
@@ -160,6 +168,14 @@ export default function AssistantChat({ compact = false }: { compact?: boolean }
         <div ref={bottomRef} />
       </div>
 
+      {quotaExceeded && (
+        <div className="rounded-md border border-gold/40 bg-surface px-3 py-2 text-sm flex items-center justify-between gap-3">
+          <span>You&apos;ve used all of this month&apos;s assistant actions for your plan.</span>
+          <Link href="/billing" className="text-gold shrink-0 hover:underline">
+            View plans
+          </Link>
+        </div>
+      )}
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <form onSubmit={handleSubmit} className="flex gap-2">
