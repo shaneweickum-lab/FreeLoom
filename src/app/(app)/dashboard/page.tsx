@@ -53,26 +53,17 @@ export default function DashboardPage() {
     const supabase = createClient();
     const studentIds = students.map((s) => s.id);
     (async () => {
-      const { data: logs } = await supabase.from("learning_logs").select("id, student_id").in("student_id", studentIds);
-      const logIdToStudent = new Map((logs || []).map((l) => [l.id, l.student_id]));
-      const logIds = (logs || []).map((l) => l.id);
-      if (logIds.length === 0) {
-        setStats({});
-        return;
-      }
-      const { data: courses } = await supabase
-        .from("translated_courses")
-        .select("learning_log_id, credit_hours")
-        .in("learning_log_id", logIds)
-        .in("status", ["approved", "edited"]);
+      const { data: entries } = await supabase
+        .from("entries")
+        .select("student_id, credit_value")
+        .in("student_id", studentIds)
+        .eq("status", "accepted");
       const next: Record<string, StudentStats> = {};
-      for (const course of courses || []) {
-        const studentId = logIdToStudent.get(course.learning_log_id);
-        if (!studentId) continue;
-        const entry = next[studentId] || { courseCount: 0, creditHours: 0 };
-        entry.courseCount += 1;
-        entry.creditHours += course.credit_hours;
-        next[studentId] = entry;
+      for (const entry of entries || []) {
+        const stat = next[entry.student_id] || { courseCount: 0, creditHours: 0 };
+        stat.courseCount += 1;
+        stat.creditHours += entry.credit_value;
+        next[entry.student_id] = stat;
       }
       setStats(next);
     })();

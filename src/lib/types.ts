@@ -2,8 +2,6 @@ export type ActivityType = "game" | "book" | "project" | "platform" | "other";
 
 export const ACTIVITY_TYPES: ActivityType[] = ["game", "book", "project", "platform", "other"];
 
-export type CourseStatus = "suggested" | "approved" | "edited" | "rejected";
-
 export type Student = {
   id: string;
   user_id: string;
@@ -47,30 +45,6 @@ export type ProfileNote = {
   updated_at: string;
 };
 
-export type LearningLog = {
-  id: string;
-  student_id: string;
-  raw_description: string;
-  activity_type: ActivityType;
-  source_platform: string | null;
-  time_spent_minutes: number | null;
-  date_logged: string;
-  created_at: string;
-};
-
-export type TranslatedCourse = {
-  id: string;
-  learning_log_id: string;
-  course_title: string;
-  subject_area: string;
-  credit_hours: number;
-  ai_rationale: string;
-  status: CourseStatus;
-  letter_grade: string | null;
-  grade_level: string | null;
-  created_at: string;
-};
-
 export type Transcript = {
   id: string;
   student_id: string;
@@ -106,6 +80,8 @@ export type PipelineEntry = {
   generated_reasoning: string | null;
   final_description: string | null;
   final_reasoning: string | null;
+  letter_grade: string | null;
+  grade_level: string | null;
   status: EntryStatus;
   source_stage: SourceStage;
   created_at: string;
