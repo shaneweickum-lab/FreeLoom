@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import { resolveStateName } from "@/lib/usStates";
-import type { ProfileNote, StateRegulation, SuggestedTrack } from "@/lib/types";
+import type { ProfileNote, SuggestedTrack } from "@/lib/types";
 
 export default function ProfilePage() {
   const { currentStudent } = useStudents();
@@ -13,8 +12,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-  const [stateRegulation, setStateRegulation] = useState<StateRegulation | null>(null);
-  const [stateRegulationChecked, setStateRegulationChecked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentStudent) {
@@ -34,44 +32,30 @@ export default function ProfilePage() {
         setContent(data?.content ?? "");
         setLoading(false);
       });
-
-    const stateName = resolveStateName(currentStudent.state);
-    setStateRegulation(null);
-    setStateRegulationChecked(false);
-    if (stateName) {
-      supabase
-        .from("state_regulations")
-        .select("*")
-        .eq("state", stateName)
-        .maybeSingle()
-        .then(({ data }) => {
-          setStateRegulation(data);
-          setStateRegulationChecked(true);
-        });
-    } else {
-      setStateRegulationChecked(true);
-    }
   }, [currentStudent]);
 
   async function saveContent() {
     if (!currentStudent) return;
     setSaving(true);
+    setError(null);
     const supabase = createClient();
     if (note) {
-      const { data } = await supabase
+      const { data, error: updateError } = await supabase
         .from("profile_notes")
         .update({ content, updated_at: new Date().toISOString() })
         .eq("id", note.id)
         .select()
         .single();
-      if (data) setNote(data);
+      if (updateError) setError(`Couldn't save notes: ${updateError.message}`);
+      else if (data) setNote(data);
     } else {
-      const { data } = await supabase
+      const { data, error: insertError } = await supabase
         .from("profile_notes")
-        .insert({ student_id: currentStudent.id, content })
+        .insert({ student_id: currentStudent.id, content, ai_suggested_tracks: [] })
         .select()
         .single();
-      if (data) setNote(data);
+      if (insertError) setError(`Couldn't save notes: ${insertError.message}`);
+      else if (data) setNote(data);
     }
     setSaving(false);
   }
@@ -79,36 +63,45 @@ export default function ProfilePage() {
   async function suggestTracks() {
     if (!currentStudent || !content.trim()) return;
     setSuggesting(true);
+    setError(null);
     await saveContent();
-    const res = await fetch("/api/suggest-tracks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, grade_level: currentStudent.grade_level }),
-    });
-    const { tracks } = (await res.json()) as { tracks: SuggestedTrack[] };
-    const supabase = createClient();
-    const merged = [...(note?.ai_suggested_tracks ?? []), ...tracks];
-    const { data } = await supabase
-      .from("profile_notes")
-      .update({ ai_suggested_tracks: merged })
-      .eq("student_id", currentStudent.id)
-      .select()
-      .single();
-    if (data) setNote(data);
-    setSuggesting(false);
+    try {
+      const res = await fetch("/api/suggest-tracks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, grade_level: currentStudent.grade_level }),
+      });
+      if (!res.ok) throw new Error("suggest-tracks failed");
+      const { tracks } = (await res.json()) as { tracks: SuggestedTrack[] };
+      const supabase = createClient();
+      const merged = [...(note?.ai_suggested_tracks ?? []), ...tracks];
+      const { data, error: updateError } = await supabase
+        .from("profile_notes")
+        .update({ ai_suggested_tracks: merged })
+        .eq("student_id", currentStudent.id)
+        .select()
+        .single();
+      if (updateError) throw updateError;
+      if (data) setNote(data);
+    } catch {
+      setError("Couldn't suggest tracks — try again.");
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   async function setTrackStatus(index: number, status: SuggestedTrack["status"]) {
     if (!note) return;
     const updated = note.ai_suggested_tracks.map((t, i) => (i === index ? { ...t, status } : t));
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error: updateError } = await supabase
       .from("profile_notes")
       .update({ ai_suggested_tracks: updated })
       .eq("id", note.id)
       .select()
       .single();
-    if (data) setNote(data);
+    if (updateError) setError(`Couldn't update that track: ${updateError.message}`);
+    else if (data) setNote(data);
   }
 
   if (!currentStudent) {
@@ -126,68 +119,6 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      {stateRegulationChecked && (
-        <div className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-col gap-3">
-          <h2 className="font-semibold text-sm">State requirements</h2>
-          {!resolveStateName(currentStudent.state) ? (
-            <p className="text-sm text-muted">
-              Set {currentStudent.name}&apos;s state on the Dashboard to see homeschool requirements for it here.
-            </p>
-          ) : !stateRegulation ? (
-            <p className="text-sm text-muted">
-              We don&apos;t have {resolveStateName(currentStudent.state)}&apos;s requirements loaded yet.
-            </p>
-          ) : (
-            <>
-              <ul className="flex flex-col gap-2 text-sm">
-                <li>
-                  <span className="font-medium">Compulsory attendance: </span>
-                  <span className="text-muted">{stateRegulation.compulsory_attendance ?? "Not specified"}</span>
-                </li>
-                <li>
-                  <span className="font-medium">Required subjects: </span>
-                  <span className="text-muted">
-                    {stateRegulation.required_subjects?.length ? stateRegulation.required_subjects.join(", ") : "None mandated"}
-                  </span>
-                </li>
-                <li>
-                  <span className="font-medium">Instructional time: </span>
-                  <span className="text-muted">
-                    {stateRegulation.instructional_hours?.days || stateRegulation.instructional_hours?.hours
-                      ? [
-                          stateRegulation.instructional_hours.days ? `${stateRegulation.instructional_hours.days} days` : null,
-                          stateRegulation.instructional_hours.hours ? `${stateRegulation.instructional_hours.hours} hours` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" / ")
-                      : "Not specified"}
-                  </span>
-                </li>
-                <li>
-                  <span className="font-medium">Reporting: </span>
-                  <span className="text-muted">{stateRegulation.reporting_requirements ?? "Not specified"}</span>
-                </li>
-                <li>
-                  <span className="font-medium">Testing/evaluation: </span>
-                  <span className="text-muted">{stateRegulation.testing_requirements ?? "Not specified"}</span>
-                </li>
-              </ul>
-              <p className="text-xs text-muted border-t border-border pt-2">
-                Last verified {stateRegulation.last_verified_date ?? "unknown"} —{" "}
-                {stateRegulation.source_url ? (
-                  <a href={stateRegulation.source_url} target="_blank" rel="noreferrer" className="text-gold hover:underline">
-                    verify against the source
-                  </a>
-                ) : (
-                  "source not recorded"
-                )}
-                . Homeschool law changes — always confirm anything time-sensitive yourself before relying on it.
-              </p>
-            </>
-          )}
-        </div>
-      )}
-
       <div className="flex flex-col gap-3">
         <textarea
           className="input min-h-32"
@@ -204,9 +135,10 @@ export default function ProfilePage() {
             {suggesting ? "Thinking…" : "Suggest tracks from interests"}
           </button>
         </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
 
-      {!!note?.ai_suggested_tracks.length && (
+      {!!note?.ai_suggested_tracks?.length && (
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold">Suggested tracks</h2>
           {note.ai_suggested_tracks.map((track, i) => (
