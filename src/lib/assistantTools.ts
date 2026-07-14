@@ -67,7 +67,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
   {
     name: "update_school_profile",
     description:
-      "Update the family's 'school of record' info (school name, parent/guardian name, address, phone, email) that appears on every child's official transcript. This is shared across all children on the account, not per-student.",
+      "Update the family's 'school of record' info (school name, parent/guardian name, address, phone, email) and transcript branding (accent color, formal vs. casual layout) that appears on every child's transcript. This is shared across all children on the account, not per-student. Logo images can't be set here — tell the parent to upload one from the Transcript page.",
     input_schema: {
       type: "object",
       properties: {
@@ -76,6 +76,8 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         address: { type: "string" },
         phone: { type: "string" },
         email: { type: "string" },
+        accent_color: { type: "string", description: "Hex color, e.g. #2563eb" },
+        layout_style: { type: "string", enum: ["formal", "casual"] },
       },
     },
   },
@@ -109,6 +111,19 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     name: "generate_transcript",
     description: "Snapshot all currently approved courses into a new transcript and get a shareable link.",
     input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "link_portfolio_item",
+    description:
+      "File an already-uploaded portfolio item (photo/work sample) under a class by linking it to one of the student's learning log entries. Use this when a parent describes or asks about an uncategorized portfolio item — pair it with create_learning_log first if the item doesn't match any existing logged activity yet.",
+    input_schema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", description: "The portfolio item's id" },
+        learning_log_id: { type: "string", description: "The learning log entry (and its class) to file it under" },
+      },
+      required: ["item_id", "learning_log_id"],
+    },
   },
 ];
 
@@ -267,9 +282,10 @@ async function toolUpdateSchoolProfile(
   input: Record<string, unknown>
 ): Promise<ToolExecutionResult> {
   const patch: Record<string, unknown> = {};
-  for (const key of ["school_name", "parent_name", "address", "phone", "email"]) {
+  for (const key of ["school_name", "parent_name", "address", "phone", "email", "accent_color"]) {
     if (typeof input[key] === "string") patch[key] = input[key];
   }
+  if (input.layout_style === "formal" || input.layout_style === "casual") patch.layout_style = input.layout_style;
   if (Object.keys(patch).length === 0) {
     return { data: { error: "No fields provided" }, summary: "No school profile fields to update." };
   }
@@ -383,6 +399,52 @@ async function toolGenerateTranscript(supabase: Supa, studentId: string): Promis
   };
 }
 
+async function toolLinkPortfolioItem(
+  supabase: Supa,
+  studentId: string,
+  input: Record<string, unknown>
+): Promise<ToolExecutionResult> {
+  const itemId = String(input.item_id ?? "");
+  const learningLogId = String(input.learning_log_id ?? "");
+  if (!itemId || !learningLogId) {
+    return { data: { error: "item_id and learning_log_id are required" }, summary: "Missing item or class to link." };
+  }
+
+  const { data: item } = await supabase
+    .from("portfolio_items")
+    .select("id, student_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item || item.student_id !== studentId) {
+    return { data: { error: "Portfolio item not found for this student" }, summary: "Couldn't find that portfolio item." };
+  }
+
+  const { data: log } = await supabase
+    .from("learning_logs")
+    .select("id, student_id, translated_courses(course_title, subject_area)")
+    .eq("id", learningLogId)
+    .maybeSingle();
+  if (!log || log.student_id !== studentId) {
+    return { data: { error: "Learning log not found for this student" }, summary: "Couldn't find that class." };
+  }
+
+  const { data, error } = await supabase
+    .from("portfolio_items")
+    .update({ learning_log_id: learningLogId })
+    .eq("id", itemId)
+    .select()
+    .single();
+  if (error || !data) return { data: { error: "Update failed" }, summary: "Couldn't file that item." };
+
+  const course = (log.translated_courses as { course_title: string; subject_area: string }[] | null)?.[0];
+  return {
+    data,
+    summary: course
+      ? `Filed the portfolio item under ${course.course_title} (${course.subject_area}).`
+      : "Filed the portfolio item under that class.",
+  };
+}
+
 export async function executeAssistantTool(
   supabase: Supa,
   studentId: string,
@@ -410,6 +472,8 @@ export async function executeAssistantTool(
       return toolUpdateTrackStatus(supabase, studentId, input);
     case "generate_transcript":
       return toolGenerateTranscript(supabase, studentId);
+    case "link_portfolio_item":
+      return toolLinkPortfolioItem(supabase, studentId, input);
     default:
       return { data: { error: `Unknown tool: ${name}` }, summary: `Unknown action: ${name}` };
   }
