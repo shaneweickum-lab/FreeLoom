@@ -34,7 +34,7 @@ export default function RootLayout({
         <footer className="border-t border-border">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
             <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
-            <span>An agentic AI platform for homeschool records.</span>
+            <span>A record-keeping platform for unschooling and wildschooling families.</span>
           </div>
         </footer>
       </body>
