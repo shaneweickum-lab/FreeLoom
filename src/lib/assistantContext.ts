@@ -18,6 +18,8 @@ export type AssistantContextSnapshot = {
     address: string | null;
     phone: string | null;
     email: string | null;
+    accent_color: string | null;
+    layout_style: string;
   } | null;
   discoveryNotes: string;
   suggestedTracks: SuggestedTrack[];
@@ -28,6 +30,7 @@ export type AssistantContextSnapshot = {
     course: Pick<TranslatedCourse, "id" | "course_title" | "subject_area" | "credit_hours" | "status" | "letter_grade" | "grade_level"> | null;
   }[];
   approvedCreditHours: number;
+  uncategorizedPortfolioItems: { id: string; caption: string | null; created_at: string }[];
 };
 
 export async function buildAssistantContext(
@@ -36,7 +39,7 @@ export async function buildAssistantContext(
   studentId: string,
   userId: string
 ): Promise<AssistantContextSnapshot> {
-  const [{ data: student }, { data: note }, { data: logs }, { data: school }] = await Promise.all([
+  const [{ data: student }, { data: note }, { data: logs }, { data: school }, { data: uncategorizedItems }] = await Promise.all([
     supabase.from("students").select("*").eq("id", studentId).single(),
     supabase.from("profile_notes").select("*").eq("student_id", studentId).maybeSingle(),
     supabase
@@ -46,6 +49,13 @@ export async function buildAssistantContext(
       .order("created_at", { ascending: false })
       .limit(30),
     supabase.from("school_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    supabase
+      .from("portfolio_items")
+      .select("id, caption, created_at")
+      .eq("student_id", studentId)
+      .is("learning_log_id", null)
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
 
   const typedLogs = (logs || []) as (LearningLog & { translated_courses: TranslatedCourse[] })[];
@@ -73,6 +83,8 @@ export async function buildAssistantContext(
           address: school.address,
           phone: school.phone,
           email: school.email,
+          accent_color: school.accent_color,
+          layout_style: school.layout_style,
         }
       : null,
     discoveryNotes: note?.content ?? "",
@@ -94,11 +106,16 @@ export async function buildAssistantContext(
         : null,
     })),
     approvedCreditHours: Math.round(approvedCreditHours * 100) / 100,
+    uncategorizedPortfolioItems: (uncategorizedItems || []).map((i) => ({
+      id: i.id,
+      caption: i.caption,
+      created_at: i.created_at,
+    })),
   };
 }
 
 export function buildAssistantSystemPrompt(snapshot: AssistantContextSnapshot): string {
-  const { student, school, discoveryNotes, suggestedTracks, logs, approvedCreditHours } = snapshot;
+  const { student, school, discoveryNotes, suggestedTracks, logs, approvedCreditHours, uncategorizedPortfolioItems } = snapshot;
 
   const logLines = logs.length
     ? logs
@@ -121,11 +138,19 @@ export function buildAssistantSystemPrompt(snapshot: AssistantContextSnapshot): 
         .join("\n")
     : "(no suggested tracks yet)";
 
+  const portfolioLines = uncategorizedPortfolioItems.length
+    ? uncategorizedPortfolioItems
+        .map((i) => `- [${i.created_at}] "${i.caption || "Untitled"}" (item_id: ${i.id}, not yet filed under a class)`)
+        .join("\n")
+    : "(no uncategorized portfolio items)";
+
   const schoolLines = school
     ? `School: ${school.school_name || "not set"} | Parent: ${school.parent_name || "not set"} | Address: ${
         school.address || "not set"
-      } | Phone: ${school.phone || "not set"} | Email: ${school.email || "not set"}`
-    : "(no school-of-record info saved yet — this appears on every child's official transcript)";
+      } | Phone: ${school.phone || "not set"} | Email: ${school.email || "not set"} | Accent color: ${
+        school.accent_color || "default"
+      } | Layout: ${school.layout_style}`
+    : "(no school-of-record info saved yet — this appears on every child's transcript)";
 
   return `You are the in-app assistant for FreeLoom, a homeschool transcript builder. You are helping a parent manage ${student.name}'s learning documentation through conversation — answering questions, giving guidance, and taking real actions in the app on their behalf using the tools available to you.
 
@@ -145,10 +170,13 @@ ${trackLines}
 Recent learning log entries (most recent first):
 ${logLines}
 
+Uncategorized portfolio items (uploaded but not yet filed under a class):
+${portfolioLines}
+
 Guidelines:
 1. You can both advise AND act. When the parent describes an activity, log it with create_learning_log rather than just telling them to do it themselves. When they ask you to approve, reject, edit, or fix something, use the matching tool.
 2. Only act on ${student.name}'s data — you have no tools to affect other children on this account, and you cannot create or delete student profiles (that's done from the Dashboard).
-3. You cannot upload photos or files — if the parent wants to attach a work sample, tell them to use the Portfolio Builder page for that.
+3. You cannot upload photos or files yourself — if the parent wants to attach a new work sample, tell them to use the Portfolio Builder page for that. But once something is uploaded, you CAN help file it under a class: use link_portfolio_item to attach an uncategorized item (see the list above) to an existing learning log, or call create_learning_log first if it describes a new activity, then link_portfolio_item with the resulting log id. Proactively mention uncategorized items when relevant and offer to sort them.
 4. Before an action with broad effect (rejecting several courses at once, generating a transcript when a lot looks unapproved), briefly confirm what you're about to do — otherwise just do it and report back.
 5. Ground rationale and advice in what's actually in the context above — don't invent facts about the student's history that aren't shown here.
 6. Keep replies conversational and concise. After taking actions, summarize what changed in plain language.

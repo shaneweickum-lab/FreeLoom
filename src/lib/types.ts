@@ -17,6 +17,8 @@ export type Student = {
   created_at: string;
 };
 
+export type LayoutStyle = "formal" | "casual";
+
 export type SchoolProfile = {
   user_id: string;
   school_name: string | null;
@@ -24,6 +26,9 @@ export type SchoolProfile = {
   address: string | null;
   phone: string | null;
   email: string | null;
+  logo_url: string | null;
+  accent_color: string | null;
+  layout_style: LayoutStyle;
   updated_at: string;
 };
 

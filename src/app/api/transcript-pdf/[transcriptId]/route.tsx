@@ -37,6 +37,9 @@ export async function GET(
       address: string | null;
       phone: string | null;
       email: string | null;
+      logo_url: string | null;
+      accent_color: string | null;
+      layout_style: "formal" | "casual" | null;
     };
     generated_at: string;
     courses: { course_title: string; subject_area: string; credit_hours: number; letter_grade: string | null; grade_level: string | null }[];
@@ -60,6 +63,9 @@ export async function GET(
         address: shared.school?.address ?? null,
         phone: shared.school?.phone ?? null,
         email: shared.school?.email ?? null,
+        logoUrl: shared.school?.logo_url ?? null,
+        accentColor: shared.school?.accent_color ?? null,
+        layoutStyle: shared.school?.layout_style ?? "formal",
       }}
     />
   );

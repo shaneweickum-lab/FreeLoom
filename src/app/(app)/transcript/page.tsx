@@ -6,7 +6,15 @@ import { useStudents } from "@/lib/studentContext";
 import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
 import type { SchoolProfile, TranslatedCourse, Transcript } from "@/lib/types";
 
-const EMPTY_SCHOOL_FORM = { schoolName: "", parentName: "", address: "", phone: "", email: "" };
+const EMPTY_SCHOOL_FORM = {
+  schoolName: "",
+  parentName: "",
+  address: "",
+  phone: "",
+  email: "",
+  accentColor: "#b45309",
+  layoutStyle: "formal" as "formal" | "casual",
+};
 
 export default function TranscriptPage() {
   const { currentStudent } = useStudents();
@@ -14,6 +22,7 @@ export default function TranscriptPage() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [schoolProfile, setSchoolProfile] = useState<SchoolProfile | null>(null);
   const [schoolForm, setSchoolForm] = useState(EMPTY_SCHOOL_FORM);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [savingSchool, setSavingSchool] = useState(false);
   const [schoolOpen, setSchoolOpen] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -36,6 +45,8 @@ export default function TranscriptPage() {
         address: school?.address || "",
         phone: school?.phone || "",
         email: school?.email || "",
+        accentColor: school?.accent_color || "#b45309",
+        layoutStyle: school?.layout_style || "formal",
       });
       // Default collapsed once a school profile already exists, but only on first
       // load — don't fight the user's own toggle on later re-renders/saves.
@@ -100,6 +111,20 @@ export default function TranscriptPage() {
     } = await supabase.auth.getUser();
     if (!user) return;
     setSavingSchool(true);
+
+    let logoUrl = schoolProfile?.logo_url ?? null;
+    if (logoFile) {
+      const ext = logoFile.name.split(".").pop() || "png";
+      const path = `${user.id}/logo.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("branding").upload(path, logoFile, { upsert: true });
+      if (!uploadError) {
+        const { data: publicUrlData } = supabase.storage.from("branding").getPublicUrl(path);
+        logoUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`;
+      } else {
+        console.error("Logo upload failed", uploadError);
+      }
+    }
+
     const { data } = await supabase
       .from("school_profiles")
       .upsert({
@@ -109,11 +134,15 @@ export default function TranscriptPage() {
         address: schoolForm.address || null,
         phone: schoolForm.phone || null,
         email: schoolForm.email || null,
+        logo_url: logoUrl,
+        accent_color: schoolForm.accentColor || null,
+        layout_style: schoolForm.layoutStyle,
         updated_at: new Date().toISOString(),
       })
       .select()
       .single();
     if (data) setSchoolProfile(data);
+    setLogoFile(null);
     setSavingSchool(false);
   }
 
@@ -201,6 +230,44 @@ export default function TranscriptPage() {
               onChange={(e) => setSchoolForm({ ...schoolForm, email: e.target.value })}
             />
           </div>
+
+          <p className="text-xs text-muted -mb-1">Make the transcript your own — logo, color, and overall look.</p>
+          <div className="grid gap-3 sm:grid-cols-3 items-center">
+            <label className="flex flex-col gap-1.5 text-xs text-muted">
+              Logo (optional)
+              {schoolProfile?.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={schoolProfile.logo_url} alt="Current logo" className="h-10 w-10 rounded-full object-cover mb-1" />
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                className="text-sm text-muted"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs text-muted">
+              Accent color
+              <input
+                type="color"
+                className="input h-10 p-1"
+                value={schoolForm.accentColor}
+                onChange={(e) => setSchoolForm({ ...schoolForm, accentColor: e.target.value })}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs text-muted">
+              Layout style
+              <select
+                className="input"
+                value={schoolForm.layoutStyle}
+                onChange={(e) => setSchoolForm({ ...schoolForm, layoutStyle: e.target.value as "formal" | "casual" })}
+              >
+                <option value="formal">Formal</option>
+                <option value="casual">Casual</option>
+              </select>
+            </label>
+          </div>
+
           <button type="submit" className="btn-primary w-fit text-sm" disabled={savingSchool}>
             {savingSchool ? "Saving…" : "Save school info"}
           </button>

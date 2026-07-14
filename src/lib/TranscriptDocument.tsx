@@ -1,7 +1,8 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { GRADE_LEVELS, computeGpa, groupByGradeLevel, type GradableCourse } from "@/lib/gpa";
+import type { LayoutStyle } from "@/lib/types";
 
-const ACCENT = "#b45309";
+const DEFAULT_ACCENT = "#b45309";
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 10, fontFamily: "Helvetica", color: "#1a1a1a" },
@@ -15,7 +16,6 @@ const styles = StyleSheet.create({
     height: 78,
     borderRadius: 39,
     borderWidth: 1.5,
-    borderColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
@@ -24,22 +24,29 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 3,
   },
   sealMarkText: { color: "#fff", fontSize: 10, fontWeight: 700 },
   sealText: { fontSize: 7, fontWeight: 700, textAlign: "center", letterSpacing: 0.5 },
-  sealRule: { width: 36, borderBottomWidth: 0.5, borderBottomColor: ACCENT, marginVertical: 2 },
+  sealRule: { width: 36, borderBottomWidth: 0.5, marginVertical: 2 },
   sealSubtext: { fontSize: 5.5, textAlign: "center", color: "#555" },
+  sealLogo: { width: 60, height: 60, borderRadius: 30 },
+
+  casualLockup: { flexDirection: "row", alignItems: "center", gap: 10 },
+  casualLogo: { width: 44, height: 44, borderRadius: 10 },
+  casualMonogram: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  casualMonogramText: { color: "#fff", fontSize: 18, fontWeight: 700 },
 
   infoGrid: { flexDirection: "row", gap: 24, marginBottom: 18 },
   infoCol: { flex: 1 },
-  infoHeading: { fontSize: 8.5, fontWeight: 700, marginBottom: 4, color: ACCENT, letterSpacing: 0.5 },
+  infoHeading: { fontSize: 8.5, fontWeight: 700, marginBottom: 4, letterSpacing: 0.5 },
   infoLine: { fontSize: 9, marginBottom: 1.5 },
 
   gradeBlockHeading: { fontSize: 10, fontWeight: 700, marginTop: 14, marginBottom: 6 },
+  gradeBlockPill: { alignSelf: "flex-start", borderRadius: 10, paddingVertical: 3, paddingHorizontal: 8, marginTop: 14, marginBottom: 6 },
+  gradeBlockPillText: { fontSize: 9, fontWeight: 700, color: "#fff" },
   row: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#ddd", paddingVertical: 4 },
   headerRowTable: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#333", paddingBottom: 4, fontWeight: 700 },
   colTitle: { width: "55%" },
@@ -49,6 +56,7 @@ const styles = StyleSheet.create({
 
   summaryByGradeHeading: { fontSize: 10, fontWeight: 700, marginTop: 20, marginBottom: 6 },
   summaryTable: { borderWidth: 1, borderColor: "#ccc" },
+  summaryTableCasual: { borderWidth: 1, borderColor: "#ccc", borderRadius: 6, overflow: "hidden" },
   summaryHeaderRow: { flexDirection: "row", backgroundColor: "#f3f1ea", borderBottomWidth: 1, borderBottomColor: "#ccc" },
   summaryRow: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#eee" },
   summaryLabelCell: { width: "25%", fontSize: 8.5, fontWeight: 700, padding: 5 },
@@ -56,6 +64,7 @@ const styles = StyleSheet.create({
 
   bottomSection: { flexDirection: "row", gap: 20, marginTop: 20 },
   bottomBox: { flex: 1, borderWidth: 1, borderColor: "#ccc", borderRadius: 3, padding: 10 },
+  bottomBoxCasual: { flex: 1, borderWidth: 1, borderRadius: 10, padding: 10 },
   bottomHeading: { fontSize: 8.5, fontWeight: 700, marginBottom: 6, letterSpacing: 0.5 },
   gradingRow: { flexDirection: "row" },
   gradingCell: { flex: 1, fontSize: 7.5, textAlign: "center", paddingVertical: 2 },
@@ -97,6 +106,9 @@ export type TranscriptPdfData = {
     address: string | null;
     phone: string | null;
     email: string | null;
+    logoUrl: string | null;
+    accentColor: string | null;
+    layoutStyle: LayoutStyle;
   };
 };
 
@@ -110,6 +122,10 @@ export function TranscriptDocument({
   totalCreditHours,
   school,
 }: TranscriptPdfData) {
+  const accent = school.accentColor || DEFAULT_ACCENT;
+  const casual = school.layoutStyle === "casual";
+  const monogram = (school.schoolName || studentName || "F").trim().charAt(0).toUpperCase() || "F";
+
   const grouped = groupByGradeLevel(courses);
   const cumulative = computeGpa(courses);
 
@@ -151,23 +167,45 @@ export function TranscriptDocument({
       <Page size="LETTER" style={styles.page}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.title}>High School Transcript</Text>
-            <Text style={styles.subtitle}>(Grades 9-12)</Text>
+            <Text style={styles.title}>{casual ? "Learning Record" : "High School Transcript"}</Text>
+            {!casual && <Text style={styles.subtitle}>(Grades 9-12)</Text>}
             <Text style={styles.subtitle}>Graduation Date: {gradDateLabel}</Text>
           </View>
-          <View style={styles.seal}>
-            <View style={styles.sealMark}>
-              <Text style={styles.sealMarkText}>F</Text>
+
+          {casual ? (
+            <View style={styles.casualLockup}>
+              {school.logoUrl ? (
+                // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf's Image, not an HTML img
+                <Image src={school.logoUrl} style={styles.casualLogo} />
+              ) : (
+                <View style={[styles.casualMonogram, { backgroundColor: accent }]}>
+                  <Text style={styles.casualMonogramText}>{monogram}</Text>
+                </View>
+              )}
+              <Text style={{ fontSize: 11, fontWeight: 700 }}>{school.schoolName || "Homeschool"}</Text>
             </View>
-            <Text style={styles.sealText}>FREELOOM</Text>
-            <View style={styles.sealRule} />
-            <Text style={styles.sealSubtext}>Official Transcript</Text>
-          </View>
+          ) : (
+            <View style={[styles.seal, { borderColor: accent }]}>
+              {school.logoUrl ? (
+                // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf's Image, not an HTML img
+                <Image src={school.logoUrl} style={styles.sealLogo} />
+              ) : (
+                <>
+                  <View style={[styles.sealMark, { backgroundColor: accent }]}>
+                    <Text style={styles.sealMarkText}>{monogram}</Text>
+                  </View>
+                  <Text style={styles.sealText}>{(school.schoolName || "FREELOOM").toUpperCase()}</Text>
+                  <View style={[styles.sealRule, { borderBottomColor: accent }]} />
+                  <Text style={styles.sealSubtext}>Official Transcript</Text>
+                </>
+              )}
+            </View>
+          )}
         </View>
 
         <View style={styles.infoGrid}>
           <View style={styles.infoCol}>
-            <Text style={styles.infoHeading}>SCHOOL OF RECORD</Text>
+            <Text style={[styles.infoHeading, { color: accent }]}>SCHOOL OF RECORD</Text>
             <Text style={styles.infoLine}>{school.schoolName || "Homeschool"}</Text>
             {school.parentName && <Text style={styles.infoLine}>{school.parentName}</Text>}
             {school.address && <Text style={styles.infoLine}>{school.address}</Text>}
@@ -175,7 +213,7 @@ export function TranscriptDocument({
             {school.email && <Text style={styles.infoLine}>{school.email}</Text>}
           </View>
           <View style={styles.infoCol}>
-            <Text style={styles.infoHeading}>STUDENT INFORMATION</Text>
+            <Text style={[styles.infoHeading, { color: accent }]}>STUDENT INFORMATION</Text>
             <Text style={styles.infoLine}>{studentName || "Unnamed Student"}</Text>
             {gender && <Text style={styles.infoLine}>Gender: {gender}</Text>}
             <Text style={styles.infoLine}>Date of Birth: {formatDate(birthDate)}</Text>
@@ -190,12 +228,17 @@ export function TranscriptDocument({
         ) : (
           grouped.map((bucket) => {
             const blockGpa = computeGpa(bucket.courses);
+            const heading = `Course Study ${bucket.level === "Other" ? "" : `— Grade ${bucket.level}`}`;
             return (
               <View key={bucket.level} wrap={false}>
-                <Text style={styles.gradeBlockHeading}>
-                  Course Study {bucket.level === "Other" ? "" : `— Grade ${bucket.level}`}
-                </Text>
-                <View style={styles.headerRowTable}>
+                {casual ? (
+                  <View style={[styles.gradeBlockPill, { backgroundColor: accent }]}>
+                    <Text style={styles.gradeBlockPillText}>{heading}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.gradeBlockHeading}>{heading}</Text>
+                )}
+                <View style={casual ? [styles.headerRowTable, { borderBottomColor: accent, borderBottomWidth: 0.75 }] : styles.headerRowTable}>
                   <Text style={styles.colTitle}>Course Title</Text>
                   <Text style={styles.colGrade}>Grade</Text>
                   <Text style={styles.colCredits}>Credits</Text>
@@ -214,7 +257,7 @@ export function TranscriptDocument({
         )}
 
         <Text style={styles.summaryByGradeHeading}>Summary By Grade</Text>
-        <View style={styles.summaryTable}>
+        <View style={casual ? styles.summaryTableCasual : styles.summaryTable}>
           <View style={styles.summaryHeaderRow}>
             <Text style={styles.summaryLabelCell}>Grade</Text>
             {summaryByGrade.map((s) => (
@@ -242,8 +285,8 @@ export function TranscriptDocument({
         </View>
 
         <View style={styles.bottomSection} wrap={false}>
-          <View style={styles.bottomBox}>
-            <Text style={styles.bottomHeading}>CUMULATIVE SUMMARY</Text>
+          <View style={casual ? [styles.bottomBoxCasual, { borderColor: accent }] : styles.bottomBox}>
+            <Text style={[styles.bottomHeading, casual ? { color: accent } : {}]}>CUMULATIVE SUMMARY</Text>
             <View style={styles.cumRow}>
               <Text style={styles.cumLabel}>Total Credits</Text>
               <Text style={styles.cumValue}>{totalCreditHours.toFixed(2)}</Text>
@@ -262,8 +305,8 @@ export function TranscriptDocument({
             </View>
           </View>
 
-          <View style={styles.bottomBox}>
-            <Text style={styles.bottomHeading}>GRADING SCALE</Text>
+          <View style={casual ? [styles.bottomBoxCasual, { borderColor: accent }] : styles.bottomBox}>
+            <Text style={[styles.bottomHeading, casual ? { color: accent } : {}]}>GRADING SCALE</Text>
             <View style={styles.gradingRow}>
               <Text style={styles.gradingCell}>90-100</Text>
               <Text style={styles.gradingCell}>80-89</Text>
