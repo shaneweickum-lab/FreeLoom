@@ -89,18 +89,34 @@ export type Transcript = {
   branding_snapshot: Record<string, unknown> | null;
 };
 
-export type TranslateLogRequest = {
-  raw_description: string;
-  activity_type: ActivityType;
-  source_platform?: string | null;
-  time_spent_minutes?: number | null;
-  grade_level?: string | null;
+export type EntryStatus = "draft" | "accepted" | "needs_human_review";
+export type SourceStage = "retrieval" | "template" | "human" | "legacy_ai";
+
+/** One subject grouping in a child's portfolio — the new schema's "class." */
+export type PipelineClass = {
+  id: string;
+  student_id: string;
+  subject_area: string;
+  title: string;
+  created_at: string;
 };
 
-export type TranslateLogResponse = {
-  course_title: string;
-  subject_area: string;
-  credit_hours: number;
-  rationale: string;
-  source: "ai" | "heuristic";
+/** A translated word dump: what the pipeline drafted, what the parent kept. */
+export type PipelineEntry = {
+  id: string;
+  class_id: string;
+  student_id: string;
+  raw_word_dump: string;
+  extracted_slots: { activity_type: string | null; source_platform: string | null; time_spent_minutes: number | null };
+  subject_tags: string[];
+  skill_tags: string[];
+  credit_value: number;
+  generated_description: string | null;
+  generated_reasoning: string | null;
+  final_description: string | null;
+  final_reasoning: string | null;
+  status: EntryStatus;
+  source_stage: SourceStage;
+  created_at: string;
+  updated_at: string;
 };
