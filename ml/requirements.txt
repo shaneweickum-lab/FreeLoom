@@ -1,0 +1,14 @@
+tokenizers>=0.20
+numpy>=1.26
+pytest>=8.0
+
+# MLX is Apple Silicon-only (Metal). Install this on the M5 MacBook to run
+# anything in ml/train/ or ml/eval/run_eval.py -- it cannot run in a
+# non-Apple-Silicon environment. mlx-lm is not required; ml/model/ is a
+# from-scratch architecture, not a wrapper around an existing checkpoint.
+mlx>=0.18
+
+# Only needed to run ml/data/generate_synthetic.py against the real
+# Anthropic API (requires a populated ANTHROPIC_API_KEY). Not needed for
+# anything else in this directory.
+anthropic>=0.40

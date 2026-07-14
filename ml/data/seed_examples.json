@@ -1,0 +1,35 @@
+{
+  "knowledge_base_entries": [
+    {"activity": "Factorio", "course_title": "Applied Logic & Systems Design", "subject_area": "Computer Science / Engineering", "credit_value": 0.5, "rationale": "Factorio requires designing interlocking production systems and automating decisions with in-game circuit logic, directly paralleling systems design and boolean logic coursework."},
+    {"activity": "Redstone circuits in Minecraft", "course_title": "Applied Digital Logic", "subject_area": "Computer Science", "credit_value": 0.5, "rationale": "Building redstone circuits means wiring functional logic gates and switching networks in-game, a hands-on introduction to boolean logic and digital circuit design."},
+    {"activity": "Stationeers", "course_title": "Applied Systems Engineering & Life Support Design", "subject_area": "Engineering / Design", "credit_value": 0.5, "rationale": "Stationeers requires managing interdependent power, atmosphere, and industrial systems to keep a space colony alive, directly paralleling engineering systems design and applied physical science."},
+    {"activity": "Minecraft", "course_title": "Applied Design & Spatial Engineering", "subject_area": "Engineering / Design", "credit_value": 0.5, "rationale": "Minecraft play involves planning structures, managing finite resources, and iterating on designs, which maps to introductory engineering and spatial design skills."},
+    {"activity": "Poker / card games", "course_title": "Introductory Statistics & Probability", "subject_area": "Mathematics", "credit_value": 0.25, "rationale": "Card games built around betting require constant probability estimation and expected-value tradeoffs, core concepts in an introductory statistics course."},
+    {"activity": "Chess", "course_title": "Strategic Reasoning & Game Theory", "subject_area": "Mathematics / Logic", "credit_value": 0.25, "rationale": "Chess play develops multi-step strategic planning and pattern recognition, foundational to game theory and formal logic."},
+    {"activity": "Recess (guided platform)", "course_title": "Self-Directed Project Studies", "subject_area": "Independent Study", "credit_value": 0.25, "rationale": "Structured self-directed activity on a guided platform demonstrates independent goal-setting and follow-through, credited as independent study time."},
+    {"activity": "Roblox Studio / game design", "course_title": "Introduction to Programming & Game Design", "subject_area": "Computer Science", "credit_value": 0.5, "rationale": "Building playable games requires writing and debugging logic and designing for a player experience, core introductory programming skills."},
+    {"activity": "Animal Crossing / Stardew Valley", "course_title": "Personal Finance & Resource Economics", "subject_area": "Economics / Life Skills", "credit_value": 0.25, "rationale": "Simulation games centered on earning, spending, and managing limited time build practical budgeting and economics intuition."},
+    {"activity": "Lego / building blocks", "course_title": "Applied Engineering & Design", "subject_area": "Engineering / Design", "credit_value": 0.25, "rationale": "Constructive building play develops structural intuition and fine motor precision central to introductory engineering."},
+    {"activity": "Cooking / baking", "course_title": "Culinary Science & Applied Measurement", "subject_area": "Family & Consumer Science", "credit_value": 0.25, "rationale": "Cooking and baking require precise measurement, fraction conversion, and understanding of chemical reactions like leavening."},
+    {"activity": "Gardening", "course_title": "Environmental Science & Botany", "subject_area": "Science", "credit_value": 0.25, "rationale": "Hands-on gardening involves observing plant life cycles and testing growing conditions, core botany and environmental science skills."},
+    {"activity": "Dinosaurs / paleontology", "course_title": "Earth Science & Paleontology", "subject_area": "Science", "credit_value": 0.25, "rationale": "Deep interest in dinosaurs and fossils builds research and classification skills central to earth science and paleontology."}
+  ],
+  "fragment_templates": {
+    "note": "Stage 3's fragment library (opening/connection/evaluation, per subject) — the compositional style the entry-drafting model should also learn to produce.",
+    "Language Arts (reading)": {
+      "opening": "Independent reading of age-appropriate material.",
+      "connection": "Regular reading builds vocabulary, comprehension, and exposure to varied sentence structure and narrative technique.",
+      "evaluation": "Sustained independent reading time is standard, credit-bearing coursework in a Language Arts curriculum."
+    },
+    "Physical Education (sports)": {
+      "opening": "Structured physical activity involving a specific sport or athletic practice.",
+      "connection": "Repeated practice builds physical conditioning, coordination, and goal-directed skill development.",
+      "evaluation": "Regular structured physical activity is standard, credit-bearing coursework in a Physical Education curriculum."
+    },
+    "generic (wildcard)": {
+      "opening": "A self-directed learning activity outside a formal curriculum.",
+      "connection": "This activity develops practical skills and understanding through direct, hands-on engagement rather than textbook instruction.",
+      "evaluation": "Documented, real-world engagement of this kind is recognized as credit-bearing coursework when tied to a specific subject area."
+    }
+  }
+}
