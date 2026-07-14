@@ -1,57 +1,48 @@
 import Link from "next/link";
-import { PLAN_LIMITS, PLAN_ORDER } from "@/lib/plans";
 
 const STEPS = [
   {
-    title: "Discover",
-    body: "Describe your child's hobbies and how they learn. FreeLoom suggests subject and skill tracks tied to those interests as a starting point.",
-  },
-  {
-    title: "Log",
-    body: "Jot down activities in plain language — a game, a book, a family project, a platform like Recess.",
+    title: "Word dump",
+    body: "Describe what your kid did today, in your own words — a game, a book, a family project, an afternoon that had nothing to do with a curriculum.",
   },
   {
     title: "Translate",
-    body: "The AI Translation Engine maps each activity to a formal course title, subject area, and credit estimate, grounded in a curated knowledge base.",
+    body: "FreeLoom classifies the activity, finds the closest thing it's seen before, and drafts a formally-worded class entry with its reasoning shown alongside it.",
   },
   {
-    title: "Export",
-    body: "Generate a clean, evaluator-ready transcript with credit hours, attach portfolio work samples, and export as a PDF or shareable link.",
+    title: "Review",
+    body: "Accept the draft, edit it, or write it yourself if nothing quite fits yet — every one of those choices makes the next draft better.",
   },
-];
-
-const ASSISTANT_CAPABILITIES = [
-  { icon: "📋", body: "Logs a new activity and drafts a course from a single sentence" },
-  { icon: "✅", body: "Approves, edits, or rejects AI-suggested courses" },
-  { icon: "✏️", body: "Updates your child's profile and discovery notes" },
-  { icon: "💡", body: "Suggests new subject tracks from their interests" },
-  { icon: "📄", body: "Generates a transcript and hands you a shareable link" },
+  {
+    title: "Export, if you need to",
+    body: "Generate a clean, branded transcript from the portfolio whenever an evaluator or program actually asks for one.",
+  },
 ];
 
 const FEATURES = [
   {
-    title: "Discovery Engine",
-    body: "Turn hobbies and personality into subject and skill track suggestions before you've logged a single activity.",
+    title: "Show-your-work reasoning",
+    body: "Every class entry comes with a plain-language explanation of why that activity counts — nothing is a black box, especially for parents who don't take AI-generated claims on faith.",
   },
   {
-    title: "AI Translation Engine",
-    body: "Every activity is mapped to a formal course title, subject area, and credit estimate, grounded in a curated knowledge base.",
+    title: "No neural model in the loop",
+    body: "Classification, matching, and drafting are handled by classical rules and statistics, not a hosted language model — transparent by construction, not just by promise.",
   },
   {
-    title: "Agentic Assistant",
-    body: "A conversational AI that doesn't just advise — it reads your child's real records and acts on them for you.",
+    title: "Portfolio, organized by class",
+    body: "Every child's record reads as a list of classes, each holding the entries that built up to it — not a folder of loose files.",
   },
   {
-    title: "Portfolio Builder",
-    body: "Attach photos, writing, and work samples as evidence behind every course on the transcript.",
+    title: "Brandable transcripts",
+    body: "Your logo, your color, your homeschool's name — the transcript looks like it came from your family, not a template.",
   },
   {
-    title: "Multi-Child Profiles",
-    body: "One parent account. A separate discovery log, transcript, and portfolio for every child.",
+    title: "Multi-child profiles",
+    body: "One parent account. A separate portfolio and transcript for every child, fully isolated from each other.",
   },
   {
-    title: "Shareable Transcripts",
-    body: "Export a clean PDF or send evaluators a read-only link — no account required on their end.",
+    title: "Grows with real use",
+    body: "Every entry a parent accepts, edits, or writes from scratch feeds back into the system — the drafts get better the more a family actually uses it.",
   },
 ];
 
@@ -63,16 +54,16 @@ export default function Home() {
           F
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-medium text-gold">
-          ✨ An agentic AI platform, not just a form builder
+          A record-keeper first, a transcript generator second
         </span>
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">FREELOOM</h1>
         <p className="text-lg text-gold">Real learning, formally recorded.</p>
         <p className="max-w-2xl text-muted text-base leading-relaxed">
-          We turn real-world and play-based learning into credible, structured transcripts and
-          portfolios — using an engine that actually understands games, curricula, and
-          unconventional teaching methods. A built-in AI assistant does the paperwork with you,
-          not just for you: it logs activities, approves courses, and builds transcripts inside
-          one conversation. One parent account, a separate profile and transcript for every child.
+          Built for unschooling and wildschooling families: log the informal, unstructured, real
+          stuff your kids actually do, and FreeLoom turns it into a structured class entry with
+          its reasoning shown right alongside it — so you can see exactly why, not just trust that
+          it&apos;s right. A transcript is something you generate from that record when you need one,
+          not the thing you&apos;re stuck maintaining every day.
         </p>
         <div className="flex flex-wrap justify-center gap-4 mt-2">
           <Link
@@ -82,43 +73,19 @@ export default function Home() {
             Get Started
           </Link>
           <a
-            href="#agentic-assistant"
+            href="#how-it-works"
             className="rounded-md border border-border bg-surface px-5 py-2.5 font-medium text-foreground shadow-sm hover:bg-surface-hover transition-colors"
           >
-            See what the assistant can do
+            See how it works
           </a>
         </div>
       </section>
 
-      <section id="agentic-assistant" className="rounded-xl border border-border bg-surface shadow-sm p-8 sm:p-10 grid gap-8 sm:grid-cols-2 items-center">
-        <div className="flex flex-col gap-3">
-          <div className="text-sm text-gold font-mono">Agentic, by design</div>
-          <h2 className="text-2xl font-bold">An assistant, not a chatbot</h2>
-          <p className="text-muted text-sm leading-relaxed">
-            Describe what your child did, in your own words, and FreeLoom&apos;s built-in AI assistant takes
-            it from there — reading your child&apos;s actual profile, learning log, and courses, then acting
-            on your behalf inside the same conversation. No forms to hunt for, no separate approval screen
-            to remember to visit.
-          </p>
-          <p className="text-muted text-xs">
-            Every action happens inside one conversation, scoped only to the child you&apos;re talking about.
-          </p>
-        </div>
-        <div className="flex flex-col gap-3">
-          {ASSISTANT_CAPABILITIES.map((c) => (
-            <div key={c.body} className="flex items-start gap-3 rounded-lg border border-border bg-background p-3">
-              <span className="text-lg leading-none">{c.icon}</span>
-              <p className="text-sm">{c.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-8">
+      <section id="how-it-works" className="flex flex-col gap-8">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-2">How it works</h2>
           <p className="text-muted text-sm max-w-xl mx-auto">
-            Four steps from a hobby to an evaluator-ready transcript.
+            Four steps from a word dump to a record worth keeping.
           </p>
         </div>
         <div className="grid gap-6 sm:grid-cols-2">
@@ -134,9 +101,9 @@ export default function Home() {
 
       <section className="flex flex-col gap-8">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Everything a transcript needs</h2>
+          <h2 className="text-2xl font-bold mb-2">Built for families who want to see the work</h2>
           <p className="text-muted text-sm max-w-xl mx-auto">
-            Built specifically for homeschool families, not adapted from a generic school SIS.
+            Not adapted from a generic school SIS, and not asking you to trust an AI you can&apos;t see inside of.
           </p>
         </div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -146,40 +113,6 @@ export default function Home() {
               <p className="text-muted text-sm leading-relaxed">{f.body}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-8">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Simple, transparent pricing</h2>
-          <p className="text-muted text-sm max-w-xl mx-auto">
-            Start free with one child. Upgrade any time as your family — or your assistant usage — grows.
-          </p>
-        </div>
-        <div className="grid gap-6 sm:grid-cols-3">
-          {PLAN_ORDER.map((planId) => {
-            const plan = PLAN_LIMITS[planId];
-            return (
-              <div key={planId} className="rounded-lg border border-border bg-surface shadow-sm p-6 flex flex-col gap-3">
-                <div>
-                  <div className="font-semibold text-lg">{plan.label}</div>
-                  <div className="text-2xl font-bold mt-1">
-                    {plan.priceMonthly === 0 ? "Free" : `$${plan.priceMonthly.toFixed(2)}`}
-                    {plan.priceMonthly > 0 && <span className="text-sm text-muted font-normal">/mo</span>}
-                  </div>
-                </div>
-                <div className="text-sm text-muted">
-                  {plan.maxChildren === null
-                    ? "Unlimited children"
-                    : `${plan.maxChildren} child${plan.maxChildren === 1 ? "" : "ren"}`}
-                </div>
-                <div className="text-sm text-muted">{plan.monthlyActions} AI actions / month</div>
-                <Link href="/login" className="btn-secondary text-sm text-center mt-2">
-                  Get Started
-                </Link>
-              </div>
-            );
-          })}
         </div>
       </section>
 

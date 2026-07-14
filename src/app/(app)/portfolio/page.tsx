@@ -1,63 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import type { LearningLog, PortfolioItem, TranslatedCourse } from "@/lib/types";
+import { sumCredits } from "@/lib/pipeline/credit-calculation";
+import type { PipelineClass, PipelineEntry } from "@/lib/types";
 
-type LogWithCourse = LearningLog & { translated_courses: TranslatedCourse[] };
-type PortfolioItemWithCourse = PortfolioItem & {
-  signedUrl?: string;
-  learning_logs: LogWithCourse | null;
-};
-
-const UNCATEGORIZED = "Uncategorized";
+type ClassWithEntries = PipelineClass & { entries: PipelineEntry[] };
 
 export default function PortfolioPage() {
   const { currentStudent } = useStudents();
-  const [items, setItems] = useState<PortfolioItemWithCourse[]>([]);
-  const [logs, setLogs] = useState<LogWithCourse[]>([]);
+  const [classes, setClasses] = useState<ClassWithEntries[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [caption, setCaption] = useState("");
-  const [learningLogId, setLearningLogId] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
 
   async function load() {
     if (!currentStudent) {
-      setItems([]);
-      setLogs([]);
+      setClasses([]);
       setLoading(false);
       return;
     }
     setLoading(true);
     const supabase = createClient();
+    // Only accepted entries make it into the portfolio -- drafts and
+    // needs-your-input entries are still a work in progress over on /log.
+    const { data } = await supabase
+      .from("classes")
+      .select("*, entries(*)")
+      .eq("student_id", currentStudent.id)
+      .order("subject_area", { ascending: true });
 
-    const [{ data: portfolioItems }, { data: learningLogs }] = await Promise.all([
-      supabase
-        .from("portfolio_items")
-        .select("*, learning_logs(*, translated_courses(*))")
-        .eq("student_id", currentStudent.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("learning_logs")
-        .select("*, translated_courses(*)")
-        .eq("student_id", currentStudent.id)
-        .order("created_at", { ascending: false }),
-    ]);
+    const withAcceptedOnly = ((data as ClassWithEntries[]) || [])
+      .map((c) => ({ ...c, entries: c.entries.filter((e) => e.status === "accepted") }))
+      .filter((c) => c.entries.length > 0);
 
-    const withUrls = await Promise.all(
-      ((portfolioItems as PortfolioItemWithCourse[]) || []).map(async (item) => {
-        const { data } = await supabase.storage.from("portfolio").createSignedUrl(item.file_url, 3600);
-        return { ...item, signedUrl: data?.signedUrl };
-      })
-    );
-
-    setItems(withUrls);
-    setLogs((learningLogs as LogWithCourse[]) || []);
+    setClasses(withAcceptedOnly);
     setLoading(false);
   }
 
@@ -67,51 +44,34 @@ export default function PortfolioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStudent]);
 
-  async function addItem(e: React.FormEvent) {
-    e.preventDefault();
-    if (!currentStudent || !file) return;
-    setUploading(true);
-    setError(null);
-    const supabase = createClient();
-    const path = `${currentStudent.id}/${crypto.randomUUID()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from("portfolio").upload(path, file);
-    if (uploadError) {
-      console.error("Portfolio upload failed", uploadError);
-      setError(`Upload failed: ${uploadError.message}`);
-      setUploading(false);
-      return;
-    }
-    const { error: insertError } = await supabase.from("portfolio_items").insert({
-      student_id: currentStudent.id,
-      learning_log_id: learningLogId || null,
-      file_url: path,
-      caption: caption || null,
-    });
-    if (insertError) {
-      console.error("Portfolio item insert failed", insertError);
-      setError(`Couldn't save that item: ${insertError.message}`);
-      // Best-effort: don't leave an orphaned file in storage with no matching row.
-      await supabase.storage.from("portfolio").remove([path]);
-      setUploading(false);
-      return;
-    }
-    setCaption("");
-    setLearningLogId("");
-    setFile(null);
-    await load();
-    setUploading(false);
+  function editField(entryId: string, patch: { finalDescription?: string; finalReasoning?: string; creditValue?: number }) {
+    setEdits((prev) => ({ ...prev, [entryId]: { ...prev[entryId], ...patch } }));
   }
 
-  async function deleteItem(item: PortfolioItem) {
+  async function saveEntry(entry: PipelineEntry) {
+    const pending = edits[entry.id];
+    if (!pending) return;
     const supabase = createClient();
-    setError(null);
-    const { error: removeError } = await supabase.storage.from("portfolio").remove([item.file_url]);
-    if (removeError) console.error("Portfolio file removal failed", removeError);
-    const { error: deleteError } = await supabase.from("portfolio_items").delete().eq("id", item.id);
-    if (deleteError) {
-      console.error("Portfolio item delete failed", deleteError);
-      setError(`Couldn't delete that item: ${deleteError.message}`);
-    }
+    await supabase
+      .from("entries")
+      .update({
+        final_description: pending.finalDescription ?? entry.final_description,
+        final_reasoning: pending.finalReasoning ?? entry.final_reasoning,
+        credit_value: pending.creditValue ?? entry.credit_value,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", entry.id);
+    setEdits((prev) => {
+      const next = { ...prev };
+      delete next[entry.id];
+      return next;
+    });
+    await load();
+  }
+
+  async function removeEntry(entry: PipelineEntry) {
+    const supabase = createClient();
+    await supabase.from("entries").delete().eq("id", entry.id);
     await load();
   }
 
@@ -120,106 +80,78 @@ export default function PortfolioPage() {
   }
   if (loading) return null;
 
-  const logOptions = logs.filter((l) => l.translated_courses?.[0]);
-
-  const groups = new Map<string, PortfolioItemWithCourse[]>();
-  for (const item of items) {
-    const course = item.learning_logs?.translated_courses?.[0];
-    const key = course ? course.subject_area : UNCATEGORIZED;
-    groups.set(key, [...(groups.get(key) ?? []), item]);
-  }
-  const orderedSubjects = [...groups.keys()].filter((k) => k !== UNCATEGORIZED).sort();
-  if (groups.has(UNCATEGORIZED)) orderedSubjects.push(UNCATEGORIZED);
-
   return (
     <div className="flex flex-col gap-10">
       <div>
-        <h1 className="text-2xl font-bold mb-1">Portfolio Builder</h1>
+        <h1 className="text-2xl font-bold mb-1">Portfolio</h1>
         <p className="text-muted text-sm">
-          Work samples and photos, organized by class — with a note on why each one landed there.
+          Every class {currentStudent.name} has built up, and the reasoning behind each entry —
+          edit anything that needs a second look. New activities are logged from the Learning Log page.
         </p>
       </div>
 
-      <form onSubmit={addItem} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input
-            className="input"
-            placeholder="Caption (e.g. Factorio factory blueprint)"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-          />
-          <select className="input" value={learningLogId} onChange={(e) => setLearningLogId(e.target.value)}>
-            <option value="">Not linked to a class yet</option>
-            {logOptions.map((l) => {
-              const course = l.translated_courses[0];
-              return (
-                <option key={l.id} value={l.id}>
-                  {course.course_title} — {course.subject_area}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="file"
-            accept="image/*,.pdf"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-muted min-w-0"
-          />
-          <button type="submit" className="btn-primary ml-auto" disabled={!file || uploading}>
-            {uploading ? "Uploading…" : "Add to portfolio"}
-          </button>
-        </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-      </form>
+      {classes.length === 0 && (
+        <p className="text-muted text-sm">
+          Nothing accepted into the portfolio yet — log and accept an activity from the Learning Log page first.
+        </p>
+      )}
 
-      {items.length === 0 && <p className="text-muted text-sm">No portfolio items yet.</p>}
-
-      {orderedSubjects.map((subject) => (
-        <div key={subject} className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-semibold">{subject}</h2>
-            {subject === UNCATEGORIZED && (
-              <Link href="/assistant" className="text-xs text-gold hover:underline">
-                Ask AI to sort these
-              </Link>
-            )}
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {groups.get(subject)!.map((item) => {
-              const course = item.learning_logs?.translated_courses?.[0];
-              return (
-                <div key={item.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-col gap-2">
-                  {item.signedUrl && /\.(png|jpe?g|gif|webp)$/i.test(item.file_url) && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.signedUrl} alt={item.caption || "portfolio item"} className="rounded-md max-h-48 object-cover w-full" />
-                  )}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium">{item.caption || "Untitled"}</div>
-                      <div className="text-xs text-muted">{new Date(item.created_at).toLocaleDateString()}</div>
+      {classes.map((cls) => {
+        const classCredits = sumCredits(cls.entries.map((e) => e.credit_value));
+        return (
+          <div key={cls.id} className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold">{cls.title}</h2>
+              <span className="text-xs text-muted">{classCredits.toFixed(2)} credits</span>
+            </div>
+            <div className="flex flex-col gap-3">
+              {cls.entries.map((entry) => {
+                const pending = edits[entry.id];
+                const hasPendingEdits = !!pending;
+                return (
+                  <div key={entry.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-col gap-2">
+                    <div className="text-xs text-muted">{new Date(entry.created_at).toLocaleDateString()}</div>
+                    <p className="text-xs text-muted italic">&quot;{entry.raw_word_dump}&quot;</p>
+                    <input
+                      className="input font-medium bg-transparent border-none px-0"
+                      value={pending?.finalDescription ?? entry.final_description ?? ""}
+                      onChange={(e) => editField(entry.id, { finalDescription: e.target.value })}
+                    />
+                    <textarea
+                      className="input text-sm bg-transparent border-none px-0 text-muted min-h-16"
+                      value={pending?.finalReasoning ?? entry.final_reasoning ?? ""}
+                      onChange={(e) => editField(entry.id, { finalReasoning: e.target.value })}
+                    />
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="number"
+                          step={0.05}
+                          min={0}
+                          className="input w-20"
+                          value={pending?.creditValue ?? entry.credit_value}
+                          onChange={(e) => editField(entry.id, { creditValue: Number(e.target.value) })}
+                        />
+                        <span className="text-muted">credit value</span>
+                      </label>
+                      <div className="flex gap-2">
+                        {hasPendingEdits && (
+                          <button onClick={() => saveEntry(entry)} className="btn-primary text-xs">
+                            Save
+                          </button>
+                        )}
+                        <button onClick={() => removeEntry(entry)} className="text-xs text-muted hover:text-red-600">
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={() => deleteItem(item)} className="text-xs text-muted hover:text-red-600 shrink-0">
-                      Delete
-                    </button>
                   </div>
-                  {course && (
-                    <p className="text-xs text-muted italic">
-                      Filed under {course.course_title}: {course.ai_rationale}
-                    </p>
-                  )}
-                  {item.signedUrl && (
-                    <a href={item.signedUrl} target="_blank" rel="noreferrer" className="text-xs text-gold w-fit">
-                      Open file
-                    </a>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -2,8 +2,6 @@ export type ActivityType = "game" | "book" | "project" | "platform" | "other";
 
 export const ACTIVITY_TYPES: ActivityType[] = ["game", "book", "project", "platform", "other"];
 
-export type CourseStatus = "suggested" | "approved" | "edited" | "rejected";
-
 export type Student = {
   id: string;
   user_id: string;
@@ -47,88 +45,56 @@ export type ProfileNote = {
   updated_at: string;
 };
 
-export type LearningLog = {
-  id: string;
-  student_id: string;
-  raw_description: string;
-  activity_type: ActivityType;
-  source_platform: string | null;
-  time_spent_minutes: number | null;
-  date_logged: string;
-  created_at: string;
-};
-
-export type TranslatedCourse = {
-  id: string;
-  learning_log_id: string;
-  course_title: string;
-  subject_area: string;
-  credit_hours: number;
-  ai_rationale: string;
-  status: CourseStatus;
-  letter_grade: string | null;
-  grade_level: string | null;
-  created_at: string;
-};
-
-export type PortfolioItem = {
-  id: string;
-  student_id: string;
-  learning_log_id: string | null;
-  file_url: string;
-  caption: string | null;
-  created_at: string;
-};
-
 export type Transcript = {
   id: string;
   student_id: string;
   generated_at: string;
   pdf_url: string | null;
-  included_course_ids: string[];
+  included_entry_ids: string[];
+  branding_snapshot: Record<string, unknown> | null;
 };
 
-export type TranslateLogRequest = {
-  raw_description: string;
-  activity_type: ActivityType;
-  source_platform?: string | null;
-  time_spent_minutes?: number | null;
-  grade_level?: string | null;
+export type StateRegulation = {
+  state: string;
+  compulsory_attendance: string | null;
+  required_subjects: string[] | null;
+  instructional_hours: { days?: number; hours?: number } | null;
+  reporting_requirements: string | null;
+  testing_requirements: string | null;
+  last_verified_date: string | null;
+  source_url: string | null;
 };
 
-export type TranslateLogResponse = {
-  course_title: string;
+export type EntryStatus = "draft" | "accepted" | "needs_human_review";
+export type SourceStage = "retrieval" | "template" | "human" | "legacy_ai";
+
+/** One subject grouping in a child's portfolio — the new schema's "class." */
+export type PipelineClass = {
+  id: string;
+  student_id: string;
   subject_area: string;
-  credit_hours: number;
-  rationale: string;
-  source: "ai" | "heuristic";
-};
-
-export type ChatMessageRole = "user" | "assistant";
-export type ChatMessageKind = "user" | "assistant" | "tool_bridge";
-
-export type ChatMessage = {
-  id: string;
-  student_id: string;
-  conversation_id: string;
-  role: ChatMessageRole;
-  kind: ChatMessageKind;
-  content: unknown[];
+  title: string;
   created_at: string;
 };
 
-export type ChatConversation = {
+/** A translated word dump: what the pipeline drafted, what the parent kept. */
+export type PipelineEntry = {
   id: string;
+  class_id: string;
   student_id: string;
-  title: string | null;
+  raw_word_dump: string;
+  extracted_slots: { activity_type: string | null; source_platform: string | null; time_spent_minutes: number | null };
+  subject_tags: string[];
+  skill_tags: string[];
+  credit_value: number;
+  generated_description: string | null;
+  generated_reasoning: string | null;
+  final_description: string | null;
+  final_reasoning: string | null;
+  letter_grade: string | null;
+  grade_level: string | null;
+  status: EntryStatus;
+  source_stage: SourceStage;
   created_at: string;
-  updated_at: string;
-};
-
-export type PlanId = "free" | "plus" | "pro";
-
-export type AccountPlan = {
-  user_id: string;
-  plan: PlanId;
   updated_at: string;
 };

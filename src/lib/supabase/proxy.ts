@@ -8,8 +8,6 @@ const PROTECTED_PREFIXES = [
   "/transcript",
   "/portfolio",
   "/students",
-  "/assistant",
-  "/billing",
 ];
 
 export async function updateSession(request: NextRequest) {

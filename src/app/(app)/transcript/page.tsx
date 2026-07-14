@@ -4,7 +4,30 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
-import type { SchoolProfile, TranslatedCourse, Transcript } from "@/lib/types";
+import type { PipelineClass, PipelineEntry, SchoolProfile, Transcript } from "@/lib/types";
+
+type EntryWithClass = PipelineEntry & { classes: Pick<PipelineClass, "subject_area"> | null };
+
+/** The shape gpa.ts and TranscriptDocument already expect — mapped from an accepted entry. */
+type TranscriptCourse = {
+  id: string;
+  course_title: string;
+  subject_area: string;
+  credit_hours: number;
+  letter_grade: string | null;
+  grade_level: string | null;
+};
+
+function toTranscriptCourse(entry: EntryWithClass): TranscriptCourse {
+  return {
+    id: entry.id,
+    course_title: entry.final_description ?? "Untitled entry",
+    subject_area: entry.classes?.subject_area ?? entry.subject_tags[0] ?? "Uncategorized",
+    credit_hours: entry.credit_value,
+    letter_grade: entry.letter_grade,
+    grade_level: entry.grade_level,
+  };
+}
 
 const EMPTY_SCHOOL_FORM = {
   schoolName: "",
@@ -18,7 +41,7 @@ const EMPTY_SCHOOL_FORM = {
 
 export default function TranscriptPage() {
   const { currentStudent } = useStudents();
-  const [courses, setCourses] = useState<TranslatedCourse[]>([]);
+  const [courses, setCourses] = useState<TranscriptCourse[]>([]);
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [schoolProfile, setSchoolProfile] = useState<SchoolProfile | null>(null);
   const [schoolForm, setSchoolForm] = useState(EMPTY_SCHOOL_FORM);
@@ -64,17 +87,12 @@ export default function TranscriptPage() {
     }
     setLoading(true);
 
-    const { data: logs } = await supabase.from("learning_logs").select("id").eq("student_id", currentStudent.id);
-    const logIds = (logs || []).map((l) => l.id);
-
-    const { data: approvedCourses } = logIds.length
-      ? await supabase
-          .from("translated_courses")
-          .select("*")
-          .in("learning_log_id", logIds)
-          .in("status", ["approved", "edited"])
-          .order("created_at", { ascending: true })
-      : { data: [] };
+    const { data: acceptedEntries } = await supabase
+      .from("entries")
+      .select("*, classes(subject_area)")
+      .eq("student_id", currentStudent.id)
+      .eq("status", "accepted")
+      .order("created_at", { ascending: true });
 
     const { data: pastTranscripts } = await supabase
       .from("transcripts")
@@ -82,7 +100,7 @@ export default function TranscriptPage() {
       .eq("student_id", currentStudent.id)
       .order("generated_at", { ascending: false });
 
-    setCourses(approvedCourses || []);
+    setCourses(((acceptedEntries as EntryWithClass[]) || []).map(toTranscriptCourse));
     setTranscripts(pastTranscripts || []);
     setLoading(false);
   }
@@ -97,10 +115,10 @@ export default function TranscriptPage() {
   const cumulative = computeGpa(courses);
   const grouped = groupByGradeLevel(courses);
 
-  async function updateCourseField(courseId: string, patch: Partial<TranslatedCourse>) {
+  async function updateCourseField(entryId: string, patch: { letter_grade?: string | null; grade_level?: string | null }) {
     const supabase = createClient();
-    setCourses((prev) => prev.map((c) => (c.id === courseId ? { ...c, ...patch } : c)));
-    await supabase.from("translated_courses").update(patch).eq("id", courseId);
+    setCourses((prev) => prev.map((c) => (c.id === entryId ? { ...c, ...patch } : c)));
+    await supabase.from("entries").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", entryId);
   }
 
   async function saveSchoolProfile(e: React.FormEvent) {
@@ -152,7 +170,7 @@ export default function TranscriptPage() {
     const supabase = createClient();
     await supabase.from("transcripts").insert({
       student_id: currentStudent.id,
-      included_course_ids: courses.map((c) => c.id),
+      included_entry_ids: courses.map((c) => c.id),
     });
     await load();
     setGenerating(false);
@@ -175,7 +193,7 @@ export default function TranscriptPage() {
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold mb-1">Transcript</h1>
-          <p className="text-muted text-sm">Approved courses for {currentStudent.name}, with cumulative GPA and credit hours.</p>
+          <p className="text-muted text-sm">Accepted entries for {currentStudent.name}, with cumulative GPA and credit hours.</p>
         </div>
         <button onClick={generateTranscript} className="btn-primary" disabled={generating || courses.length === 0}>
           {generating ? "Generating…" : "Generate transcript"}
@@ -283,7 +301,7 @@ export default function TranscriptPage() {
 
         {courses.length === 0 ? (
           <p className="text-muted text-sm">
-            No approved courses yet. Approve translated activities from the Learning Log to build your transcript.
+            No accepted entries yet. Accept a logged activity from the Learning Log page to build your transcript.
           </p>
         ) : (
           grouped.map((bucket) => {
@@ -377,7 +395,7 @@ export default function TranscriptPage() {
             <div key={t.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
               <div className="text-sm">
                 <div>{new Date(t.generated_at).toLocaleString()}</div>
-                <div className="text-muted text-xs">{t.included_course_ids.length} course(s)</div>
+                <div className="text-muted text-xs">{t.included_entry_ids.length} course(s)</div>
               </div>
               <div className="flex gap-2">
                 <a href={`/api/transcript-pdf/${t.id}`} className="btn-secondary text-xs">
