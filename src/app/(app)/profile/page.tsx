@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import type { ProfileNote, SuggestedTrack } from "@/lib/types";
+import { resolveStateName } from "@/lib/usStates";
+import type { ProfileNote, StateRegulation, SuggestedTrack } from "@/lib/types";
 
 export default function ProfilePage() {
   const { currentStudent } = useStudents();
@@ -12,6 +13,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [stateRegulation, setStateRegulation] = useState<StateRegulation | null>(null);
+  const [stateRegulationChecked, setStateRegulationChecked] = useState(false);
 
   useEffect(() => {
     if (!currentStudent) {
@@ -31,6 +34,23 @@ export default function ProfilePage() {
         setContent(data?.content ?? "");
         setLoading(false);
       });
+
+    const stateName = resolveStateName(currentStudent.state);
+    setStateRegulation(null);
+    setStateRegulationChecked(false);
+    if (stateName) {
+      supabase
+        .from("state_regulations")
+        .select("*")
+        .eq("state", stateName)
+        .maybeSingle()
+        .then(({ data }) => {
+          setStateRegulation(data);
+          setStateRegulationChecked(true);
+        });
+    } else {
+      setStateRegulationChecked(true);
+    }
   }, [currentStudent]);
 
   async function saveContent() {
@@ -105,6 +125,68 @@ export default function ProfilePage() {
           subject tracks tied to those interests as a starting point you can accept, edit, or dismiss.
         </p>
       </div>
+
+      {stateRegulationChecked && (
+        <div className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-col gap-3">
+          <h2 className="font-semibold text-sm">State requirements</h2>
+          {!resolveStateName(currentStudent.state) ? (
+            <p className="text-sm text-muted">
+              Set {currentStudent.name}&apos;s state on the Dashboard to see homeschool requirements for it here.
+            </p>
+          ) : !stateRegulation ? (
+            <p className="text-sm text-muted">
+              We don&apos;t have {resolveStateName(currentStudent.state)}&apos;s requirements loaded yet.
+            </p>
+          ) : (
+            <>
+              <ul className="flex flex-col gap-2 text-sm">
+                <li>
+                  <span className="font-medium">Compulsory attendance: </span>
+                  <span className="text-muted">{stateRegulation.compulsory_attendance ?? "Not specified"}</span>
+                </li>
+                <li>
+                  <span className="font-medium">Required subjects: </span>
+                  <span className="text-muted">
+                    {stateRegulation.required_subjects?.length ? stateRegulation.required_subjects.join(", ") : "None mandated"}
+                  </span>
+                </li>
+                <li>
+                  <span className="font-medium">Instructional time: </span>
+                  <span className="text-muted">
+                    {stateRegulation.instructional_hours?.days || stateRegulation.instructional_hours?.hours
+                      ? [
+                          stateRegulation.instructional_hours.days ? `${stateRegulation.instructional_hours.days} days` : null,
+                          stateRegulation.instructional_hours.hours ? `${stateRegulation.instructional_hours.hours} hours` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" / ")
+                      : "Not specified"}
+                  </span>
+                </li>
+                <li>
+                  <span className="font-medium">Reporting: </span>
+                  <span className="text-muted">{stateRegulation.reporting_requirements ?? "Not specified"}</span>
+                </li>
+                <li>
+                  <span className="font-medium">Testing/evaluation: </span>
+                  <span className="text-muted">{stateRegulation.testing_requirements ?? "Not specified"}</span>
+                </li>
+              </ul>
+              <p className="text-xs text-muted border-t border-border pt-2">
+                Last verified {stateRegulation.last_verified_date ?? "unknown"} —{" "}
+                {stateRegulation.source_url ? (
+                  <a href={stateRegulation.source_url} target="_blank" rel="noreferrer" className="text-gold hover:underline">
+                    verify against the source
+                  </a>
+                ) : (
+                  "source not recorded"
+                )}
+                . Homeschool law changes — always confirm anything time-sensitive yourself before relying on it.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-3">
         <textarea

@@ -54,6 +54,17 @@ export type Transcript = {
   branding_snapshot: Record<string, unknown> | null;
 };
 
+export type StateRegulation = {
+  state: string;
+  compulsory_attendance: string | null;
+  required_subjects: string[] | null;
+  instructional_hours: { days?: number; hours?: number } | null;
+  reporting_requirements: string | null;
+  testing_requirements: string | null;
+  last_verified_date: string | null;
+  source_url: string | null;
+};
+
 export type EntryStatus = "draft" | "accepted" | "needs_human_review";
 export type SourceStage = "retrieval" | "template" | "human" | "legacy_ai";
 
