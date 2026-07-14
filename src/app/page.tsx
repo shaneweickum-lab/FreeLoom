@@ -22,11 +22,7 @@ const STEPS = [
 const FEATURES = [
   {
     title: "Show-your-work reasoning",
-    body: "Every class entry comes with a plain-language explanation of why that activity counts — nothing is a black box, especially for parents who don't take AI-generated claims on faith.",
-  },
-  {
-    title: "No neural model in the loop",
-    body: "Classification, matching, and drafting are handled by classical rules and statistics, not a hosted language model — transparent by construction, not just by promise.",
+    body: "Every class entry comes with a plain-language explanation of why that activity counts — nothing is a black box you're asked to take on faith.",
   },
   {
     title: "Portfolio, organized by class",
@@ -103,7 +99,7 @@ export default function Home() {
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-2">Built for families who want to see the work</h2>
           <p className="text-muted text-sm max-w-xl mx-auto">
-            Not adapted from a generic school SIS, and not asking you to trust an AI you can&apos;t see inside of.
+            Not adapted from a generic school SIS, and not asking you to trust something you can&apos;t see inside of.
           </p>
         </div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

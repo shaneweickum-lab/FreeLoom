@@ -24,7 +24,15 @@ const DISCOVERY_MAP: DiscoveryMapEntry[] = [
     ],
   },
   {
-    keywords: ["animal", "animals", "wildlife", "zoo", "aquarium", "pet", "pets"],
+    // Just an interest in animals (visiting a zoo, watching wildlife) --
+    // doesn't imply the responsibility of actually owning one, so no Life
+    // Skills suggestion here. That's its own cluster below, gated on
+    // actually mentioning a pet.
+    keywords: ["animal", "animals", "wildlife", "zoo", "aquarium", "creature"],
+    suggestions: [{ subjectArea: "Biology", description: "Animal anatomy, behavior, and habitat classification." }],
+  },
+  {
+    keywords: ["pet", "pets"],
     suggestions: [
       { subjectArea: "Biology", description: "Animal anatomy, behavior, and habitat classification." },
       { subjectArea: "Life Skills", description: "Responsibility and care routines from pet ownership." },
