@@ -13,6 +13,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!currentStudent) {
@@ -34,57 +35,67 @@ export default function ProfilePage() {
       });
   }, [currentStudent]);
 
-  async function saveContent() {
-    if (!currentStudent) return;
+  /**
+   * Upsert on student_id rather than a manual "check, then insert-or-update"
+   * — the textarea's onBlur and the Save button can both fire close
+   * together (blur-then-click), and a manual check-then-write is a race:
+   * both calls can see "no row yet" and both insert, leaving two rows for
+   * the same student. Every later single-row update then fails forever
+   * (matches more than one row). onConflict makes concurrent calls
+   * collapse into one row no matter how they're timed.
+   */
+  async function saveContent(): Promise<ProfileNote | null> {
+    if (!currentStudent) return null;
     setSaving(true);
     setError(null);
     const supabase = createClient();
-    if (note) {
-      const { data, error: updateError } = await supabase
-        .from("profile_notes")
-        .update({ content, updated_at: new Date().toISOString() })
-        .eq("id", note.id)
-        .select()
-        .single();
-      if (updateError) setError(`Couldn't save notes: ${updateError.message}`);
-      else if (data) setNote(data);
-    } else {
-      const { data, error: insertError } = await supabase
-        .from("profile_notes")
-        .insert({ student_id: currentStudent.id, content, ai_suggested_tracks: [] })
-        .select()
-        .single();
-      if (insertError) setError(`Couldn't save notes: ${insertError.message}`);
-      else if (data) setNote(data);
-    }
+    const { data, error: saveError } = await supabase
+      .from("profile_notes")
+      .upsert(
+        { student_id: currentStudent.id, content, updated_at: new Date().toISOString() },
+        { onConflict: "student_id" }
+      )
+      .select()
+      .single();
     setSaving(false);
+    if (saveError) {
+      setError(`Couldn't save notes: ${saveError.message}`);
+      return null;
+    }
+    setNote(data);
+    setLastSavedAt(new Date());
+    return data;
   }
 
   async function suggestTracks() {
     if (!currentStudent || !content.trim()) return;
     setSuggesting(true);
     setError(null);
-    await saveContent();
     try {
+      const saved = await saveContent();
+      if (!saved) return;
+
       const res = await fetch("/api/suggest-tracks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, grade_level: currentStudent.grade_level }),
       });
-      if (!res.ok) throw new Error("suggest-tracks failed");
+      if (!res.ok) throw new Error(`suggest-tracks request failed (${res.status})`);
       const { tracks } = (await res.json()) as { tracks: SuggestedTrack[] };
+      const merged = [...(saved.ai_suggested_tracks ?? []), ...tracks];
+
       const supabase = createClient();
-      const merged = [...(note?.ai_suggested_tracks ?? []), ...tracks];
       const { data, error: updateError } = await supabase
         .from("profile_notes")
         .update({ ai_suggested_tracks: merged })
-        .eq("student_id", currentStudent.id)
+        .eq("id", saved.id)
         .select()
         .single();
       if (updateError) throw updateError;
-      if (data) setNote(data);
-    } catch {
-      setError("Couldn't suggest tracks — try again.");
+      setNote(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown error";
+      setError(`Couldn't suggest tracks: ${message}`);
     } finally {
       setSuggesting(false);
     }
@@ -125,15 +136,18 @@ export default function ProfilePage() {
           placeholder="e.g. obsessed with dinosaurs, loves drawing, plays a lot of Minecraft, curious and hands-on, needs movement breaks, learns best by teaching someone else what they figured out"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          onBlur={saveContent}
+          onBlur={() => saveContent()}
         />
-        <div className="flex gap-2">
-          <button onClick={saveContent} className="btn-secondary" disabled={saving}>
+        <div className="flex items-center gap-3">
+          <button onClick={() => saveContent()} className="btn-secondary" disabled={saving}>
             {saving ? "Saving…" : "Save notes"}
           </button>
           <button onClick={suggestTracks} className="btn-primary" disabled={suggesting || !content.trim()}>
             {suggesting ? "Thinking…" : "Suggest tracks from interests"}
           </button>
+          {!saving && lastSavedAt && (
+            <span className="text-xs text-muted">Saved at {lastSavedAt.toLocaleTimeString()}</span>
+          )}
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
