@@ -3,13 +3,19 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import { ACTIVITY_TYPES, type ActivityType, type PipelineClass, type PipelineEntry } from "@/lib/types";
-import type { ClassifyResult } from "@/lib/pipeline/classify";
+import { ACTIVITY_TYPES, type ActivityType, type PipelineClass, type PipelineEntry, type SourceStage } from "@/lib/types";
+import type { ClassifyResult, DraftSource } from "@/lib/pipeline/classify";
+import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
 
 type EntryWithClass = PipelineEntry & { classes: Pick<PipelineClass, "subject_area" | "title"> | null };
 
 const EMPTY_FORM = { rawWordDump: "", activityType: "other" as ActivityType, sourcePlatform: "", minutes: "" };
 const EMPTY_MANUAL_FORM = { subjectArea: "", courseTitle: "", creditValue: "0.25", description: "" };
+
+/** Knowledge-base and cluster matches are both a "template" draft in DB terms — only retrieval gets its own tag. */
+function toSourceStage(draftSource: DraftSource): SourceStage {
+  return draftSource === "retrieval" ? "retrieval" : "template";
+}
 
 export default function LogPage() {
   const { currentStudent } = useStudents();
@@ -82,6 +88,7 @@ export default function LogPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           raw_word_dump: form.rawWordDump,
+          student_id: currentStudent.id,
           activity_type: form.activityType,
           source_platform: form.sourcePlatform || null,
           time_spent_minutes: form.minutes ? Number(form.minutes) : null,
@@ -113,7 +120,7 @@ export default function LogPage() {
         final_description: result.courseTitle,
         final_reasoning: result.reasoning,
         status: "draft",
-        source_stage: "template",
+        source_stage: toSourceStage(result.source),
       });
       if (insertError) throw insertError;
 
@@ -163,6 +170,13 @@ export default function LogPage() {
         resolved_at: new Date().toISOString(),
       });
 
+      await recordRetrievalCase(supabase, entry.id, needsReview.rawWordDump, {
+        subjectArea: manualForm.subjectArea.trim(),
+        courseTitle: entry.final_description,
+        creditValue: entry.credit_value,
+        reasoning: entry.final_reasoning,
+      });
+
       setNeedsReview(null);
       setManualForm(EMPTY_MANUAL_FORM);
       await loadEntries();
@@ -183,16 +197,26 @@ export default function LogPage() {
       await supabase.from("entries").delete().eq("id", entry.id);
     } else {
       const pending = edits[entry.id];
+      const finalDescription = pending?.finalDescription ?? entry.final_description;
+      const finalReasoning = pending?.finalReasoning ?? entry.final_reasoning;
+      const creditValue = pending?.creditValue ?? entry.credit_value;
       await supabase
         .from("entries")
         .update({
-          final_description: pending?.finalDescription ?? entry.final_description,
-          final_reasoning: pending?.finalReasoning ?? entry.final_reasoning,
-          credit_value: pending?.creditValue ?? entry.credit_value,
+          final_description: finalDescription,
+          final_reasoning: finalReasoning,
+          credit_value: creditValue,
           status: "accepted",
           updated_at: new Date().toISOString(),
         })
         .eq("id", entry.id);
+
+      await recordRetrievalCase(supabase, entry.id, entry.raw_word_dump, {
+        subjectArea: entry.classes?.subject_area ?? entry.subject_tags[0] ?? "",
+        courseTitle: finalDescription ?? "",
+        creditValue,
+        reasoning: finalReasoning ?? "",
+      });
     }
     setEdits((prev) => {
       const next = { ...prev };

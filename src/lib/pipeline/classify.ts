@@ -28,6 +28,17 @@ export type ExtractedSlots = {
   time_spent_minutes: number | null;
 };
 
+/**
+ * Which match actually produced this draft. "knowledge_base" (a specific,
+ * hand-curated game/platform match) and "heuristic_cluster" (a generic
+ * keyword match) both save as entries.source_stage = 'template' — the
+ * distinction matters one layer up, at the API route: only a generic
+ * cluster match is weak enough to be worth also trying Stage 2 retrieval
+ * against, since a knowledge-base hit is already as good an answer as v0
+ * produces. "retrieval" is set by the route itself, never by this file.
+ */
+export type DraftSource = "knowledge_base" | "heuristic_cluster" | "retrieval";
+
 export type ConfidentDraft = {
   confident: true;
   subjectArea: string;
@@ -35,6 +46,7 @@ export type ConfidentDraft = {
   creditValue: number;
   reasoning: string;
   extractedSlots: ExtractedSlots;
+  source: DraftSource;
 };
 
 export type NeedsHumanReview = {
@@ -118,6 +130,7 @@ export function classifyWordDump(input: WordDumpInput): ClassifyResult {
       creditValue: estimateCreditValue(input.timeSpentMinutes, kbMatch.baseCreditHours),
       reasoning: kbMatch.rationale,
       extractedSlots,
+      source: "knowledge_base",
     };
   }
 
@@ -130,6 +143,7 @@ export function classifyWordDump(input: WordDumpInput): ClassifyResult {
       creditValue: estimateCreditValue(input.timeSpentMinutes, 0.1),
       reasoning: `Matched to ${cluster.subjectArea.toLowerCase()} based on keywords in the activity description.`,
       extractedSlots,
+      source: "heuristic_cluster",
     };
   }
 
