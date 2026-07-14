@@ -1,3 +1,5 @@
+import { matchesAnyKeyword } from "@/lib/keywordMatch";
+
 export type KnowledgeBaseEntry = {
   keywords: string[];
   courseTitle: string;
@@ -22,6 +24,24 @@ export const KNOWLEDGE_BASE: KnowledgeBaseEntry[] = [
     baseCreditHours: 0.5,
     rationale:
       "Factorio requires designing interlocking production systems and automating decisions with in-game circuit logic, directly paralleling systems design and boolean logic coursework.",
+  },
+  {
+    keywords: ["redstone", "logic gate", "logic gates"],
+    courseTitle: "Applied Digital Logic",
+    subjectArea: "Computer Science",
+    skills: ["boolean logic", "circuit design", "systematic debugging"],
+    baseCreditHours: 0.5,
+    rationale:
+      "Building redstone circuits means wiring functional logic gates and switching networks in-game, a hands-on introduction to boolean logic and digital circuit design.",
+  },
+  {
+    keywords: ["stationeers"],
+    courseTitle: "Applied Systems Engineering & Life Support Design",
+    subjectArea: "Engineering / Design",
+    skills: ["systems thinking", "power and atmospheric management", "resource logistics"],
+    baseCreditHours: 0.5,
+    rationale:
+      "Stationeers requires managing interdependent power, atmosphere, and industrial systems to keep a space colony alive, directly paralleling engineering systems design and applied physical science.",
   },
   {
     keywords: ["minecraft"],
@@ -116,9 +136,8 @@ export const KNOWLEDGE_BASE: KnowledgeBaseEntry[] = [
 ];
 
 export function findKnowledgeBaseMatch(description: string): KnowledgeBaseEntry | null {
-  const normalized = description.toLowerCase();
   for (const entry of KNOWLEDGE_BASE) {
-    if (entry.keywords.some((keyword) => normalized.includes(keyword))) {
+    if (matchesAnyKeyword(description, entry.keywords)) {
       return entry;
     }
   }

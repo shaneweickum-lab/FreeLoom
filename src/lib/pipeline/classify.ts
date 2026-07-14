@@ -13,6 +13,7 @@
  */
 
 import { findKnowledgeBaseMatch } from "@/lib/knowledgeBase";
+import { matchesAnyKeyword } from "@/lib/keywordMatch";
 
 export type WordDumpInput = {
   rawWordDump: string;
@@ -77,7 +78,7 @@ const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
   { keywords: ["measure", "recipe", "bake", "cook", "kitchen"], subjectArea: "Family & Consumer Science", courseTitle: "Applied Kitchen Science" },
   { keywords: ["build", "design", "construct", "engineer", "prototype", "lego"], subjectArea: "Engineering / Design", courseTitle: "Applied Design & Engineering" },
   { keywords: ["plant", "garden", "grow", "seed"], subjectArea: "Science", courseTitle: "Applied Environmental Science" },
-  { keywords: ["animal", "wildlife", "pet", "creature"], subjectArea: "Biology", courseTitle: "Applied Biology & Animal Studies" },
+  { keywords: ["animal", "animals", "wildlife", "zoo", "aquarium", "pet", "pets", "creature"], subjectArea: "Biology", courseTitle: "Applied Biology & Animal Studies" },
   { keywords: ["write", "wrote", "story", "journal", "poem", "essay"], subjectArea: "Language Arts", courseTitle: "Creative & Expository Writing" },
   { keywords: ["read", "book", "novel", "chapter"], subjectArea: "Language Arts", courseTitle: "Literature & Reading Comprehension" },
   { keywords: ["draw", "paint", "sketch", "art", "craft"], subjectArea: "Fine Arts", courseTitle: "Studio Art" },
@@ -91,8 +92,7 @@ const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
 ];
 
 function findHeuristicCluster(description: string): HeuristicCluster | null {
-  const normalized = description.toLowerCase();
-  return HEURISTIC_CLUSTERS.find((cluster) => cluster.keywords.some((keyword) => normalized.includes(keyword))) ?? null;
+  return HEURISTIC_CLUSTERS.find((cluster) => matchesAnyKeyword(description, cluster.keywords)) ?? null;
 }
 
 /**

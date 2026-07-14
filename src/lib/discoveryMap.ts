@@ -1,3 +1,5 @@
+import { matchesAnyKeyword } from "@/lib/keywordMatch";
+
 export type DiscoverySuggestion = {
   subjectArea: string;
   description: string;
@@ -22,7 +24,7 @@ const DISCOVERY_MAP: DiscoveryMapEntry[] = [
     ],
   },
   {
-    keywords: ["animal", "wildlife", "zoo", "pet"],
+    keywords: ["animal", "animals", "wildlife", "zoo", "aquarium", "pet", "pets"],
     suggestions: [
       { subjectArea: "Biology", description: "Animal anatomy, behavior, and habitat classification." },
       { subjectArea: "Life Skills", description: "Responsibility and care routines from pet ownership." },
@@ -65,6 +67,20 @@ const DISCOVERY_MAP: DiscoveryMapEntry[] = [
     ],
   },
   {
+    keywords: ["redstone", "circuit", "circuits", "logic gate", "logic gates"],
+    suggestions: [
+      { subjectArea: "Computer Science", description: "Redstone and circuit-building mechanics teach boolean logic and digital circuit design." },
+      { subjectArea: "Engineering / Design", description: "Building functional in-game circuits develops iterative systems design and troubleshooting skills." },
+    ],
+  },
+  {
+    keywords: ["stationeers"],
+    suggestions: [
+      { subjectArea: "Engineering / Design", description: "Managing power, atmosphere, and industrial systems in a space-colony survival sim builds real systems-engineering thinking." },
+      { subjectArea: "Astronomy / Physics", description: "Atmospheric composition and life-support mechanics introduce practical physics and chemistry concepts." },
+    ],
+  },
+  {
     keywords: ["cooking", "baking"],
     suggestions: [
       { subjectArea: "Family & Consumer Science", description: "Measurement, fractions, and kitchen chemistry." },
@@ -103,11 +119,10 @@ const DISCOVERY_MAP: DiscoveryMapEntry[] = [
 ];
 
 export function findDiscoverySuggestions(hobbies: string): DiscoverySuggestion[] {
-  const normalized = hobbies.toLowerCase();
   const matches: DiscoverySuggestion[] = [];
   const seenSubjects = new Set<string>();
   for (const entry of DISCOVERY_MAP) {
-    if (entry.keywords.some((keyword) => normalized.includes(keyword))) {
+    if (matchesAnyKeyword(hobbies, entry.keywords)) {
       for (const suggestion of entry.suggestions) {
         if (!seenSubjects.has(suggestion.subjectArea)) {
           seenSubjects.add(suggestion.subjectArea);
