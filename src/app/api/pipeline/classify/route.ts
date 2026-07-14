@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { classifyWordDump, type ClassifyResult } from "@/lib/pipeline/classify";
 import { findRetrievalMatch } from "@/lib/pipeline/retrieve";
+import { composeFromFragments } from "@/lib/pipeline/compose";
 
-// Stage 1 (classify) -> Stage 2 (retrieve), combined into one request since
-// Stage 4's confidence check needs both results before it can decide
-// whether to flag Stage 5 anyway. No AI call, no external API, anywhere in
-// this chain — see src/lib/pipeline/classify.ts and retrieve.ts.
+// Stage 1 (classify) -> Stage 2 (retrieve) -> Stage 3 (fragment compose),
+// combined into one request since Stage 4's confidence check needs all
+// three results before it can decide whether to flag Stage 5 anyway. No AI
+// call, no external API, anywhere in this chain.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const rawWordDump = typeof body?.raw_word_dump === "string" ? body.raw_word_dump : "";
@@ -39,8 +40,8 @@ export async function POST(req: NextRequest) {
   });
 
   // A knowledge-base hit is already as specific an answer as v0 gets --
-  // only a generic cluster guess (or no match at all) is worth checking
-  // this child's own accepted history for something closer.
+  // only a generic cluster guess (or no match at all) is worth trying
+  // Stage 2/3 against.
   const worthRetrying = !stage1.confident || stage1.source === "heuristic_cluster";
   if (worthRetrying) {
     const match = await findRetrievalMatch(supabase, studentId, rawWordDump);
@@ -55,6 +56,28 @@ export async function POST(req: NextRequest) {
         source: "retrieval",
       };
       return NextResponse.json(result);
+    }
+
+    // Stage 3 needs at least a subject guess to pick fragments for --
+    // a generic cluster match has one, but a true Stage 1 miss doesn't,
+    // so there's nothing for composition to work from either.
+    if (stage1.confident) {
+      const composed = await composeFromFragments(supabase, {
+        subjectArea: stage1.subjectArea,
+        activityType: stage1.extractedSlots.activity_type,
+      });
+      if (composed) {
+        const result: ClassifyResult = {
+          confident: true,
+          subjectArea: stage1.subjectArea,
+          courseTitle: composed.courseTitle,
+          creditValue: stage1.creditValue,
+          reasoning: composed.reasoning,
+          extractedSlots: stage1.extractedSlots,
+          source: "fragment_composition",
+        };
+        return NextResponse.json(result);
+      }
     }
   }
 

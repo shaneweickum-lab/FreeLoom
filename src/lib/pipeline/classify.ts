@@ -33,11 +33,13 @@ export type ExtractedSlots = {
  * hand-curated game/platform match) and "heuristic_cluster" (a generic
  * keyword match) both save as entries.source_stage = 'template' — the
  * distinction matters one layer up, at the API route: only a generic
- * cluster match is weak enough to be worth also trying Stage 2 retrieval
- * against, since a knowledge-base hit is already as good an answer as v0
- * produces. "retrieval" is set by the route itself, never by this file.
+ * cluster match is weak enough to be worth also trying Stage 2 retrieval,
+ * and then Stage 3 fragment composition, against, since a knowledge-base
+ * hit is already as good an answer as v0 produces. "retrieval" and
+ * "fragment_composition" are both set by the route itself, never by this
+ * file.
  */
-export type DraftSource = "knowledge_base" | "heuristic_cluster" | "retrieval";
+export type DraftSource = "knowledge_base" | "heuristic_cluster" | "retrieval" | "fragment_composition";
 
 export type ConfidentDraft = {
   confident: true;
