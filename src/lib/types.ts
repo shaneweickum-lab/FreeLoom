@@ -71,15 +71,6 @@ export type TranslatedCourse = {
   created_at: string;
 };
 
-export type PortfolioItem = {
-  id: string;
-  student_id: string;
-  learning_log_id: string | null;
-  file_url: string;
-  caption: string | null;
-  created_at: string;
-};
-
 export type Transcript = {
   id: string;
   student_id: string;
