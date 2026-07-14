@@ -152,7 +152,7 @@ export default function TranscriptPage() {
     const supabase = createClient();
     await supabase.from("transcripts").insert({
       student_id: currentStudent.id,
-      included_course_ids: courses.map((c) => c.id),
+      included_entry_ids: courses.map((c) => c.id),
     });
     await load();
     setGenerating(false);
@@ -377,7 +377,7 @@ export default function TranscriptPage() {
             <div key={t.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
               <div className="text-sm">
                 <div>{new Date(t.generated_at).toLocaleString()}</div>
-                <div className="text-muted text-xs">{t.included_course_ids.length} course(s)</div>
+                <div className="text-muted text-xs">{t.included_entry_ids.length} course(s)</div>
               </div>
               <div className="flex gap-2">
                 <a href={`/api/transcript-pdf/${t.id}`} className="btn-secondary text-xs">

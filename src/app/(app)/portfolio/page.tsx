@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import type { LearningLog, PortfolioItem, TranslatedCourse } from "@/lib/types";
@@ -180,11 +179,6 @@ export default function PortfolioPage() {
         <div key={subject} className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold">{subject}</h2>
-            {subject === UNCATEGORIZED && (
-              <Link href="/assistant" className="text-xs text-gold hover:underline">
-                Ask AI to sort these
-              </Link>
-            )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {groups.get(subject)!.map((item) => {

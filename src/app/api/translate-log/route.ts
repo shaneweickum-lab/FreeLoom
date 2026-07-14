@@ -27,6 +27,6 @@ export async function POST(req: NextRequest) {
     grade_level: body?.grade_level || null,
   };
 
-  const result = await translateLearningLog(input, { supabase, userId: user.id });
+  const result = await translateLearningLog(input);
   return NextResponse.json(result);
 }

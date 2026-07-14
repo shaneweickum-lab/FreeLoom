@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { suggestTracks } from "@/lib/translate";
+import { findDiscoverySuggestions } from "@/lib/discoveryMap";
+import type { SuggestedTrack } from "@/lib/types";
 
+// Keyword-matched against DISCOVERY_MAP, same as the rest of the
+// algorithmic-MVP pipeline — no model call, no external API, just a lookup
+// table a parent's own words either hit or don't.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const content = typeof body?.content === "string" ? body.content : "";
-  const gradeLevel = typeof body?.grade_level === "string" ? body.grade_level : null;
 
   const supabase = await createClient();
   const {
@@ -15,6 +18,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const tracks = await suggestTracks(content, gradeLevel, { supabase, userId: user.id });
+  const tracks: SuggestedTrack[] = findDiscoverySuggestions(content).map((s) => ({
+    subject: s.subjectArea,
+    rationale: s.description,
+    status: "suggested",
+  }));
+
   return NextResponse.json({ tracks });
 }

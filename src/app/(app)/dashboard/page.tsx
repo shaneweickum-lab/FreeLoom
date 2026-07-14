@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import { usePlan } from "@/lib/planContext";
 import type { Student } from "@/lib/types";
 
 const EMPTY_FORM = {
@@ -30,8 +28,6 @@ export default function DashboardPage() {
     createError,
     loading: studentsLoading,
   } = useStudents();
-  const { summary } = usePlan();
-  const atChildLimit = summary?.maxChildren != null && students.length >= summary.maxChildren;
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -183,22 +179,9 @@ export default function DashboardPage() {
       {createError && <p className="text-sm text-red-600">{createError}</p>}
 
       {!showForm ? (
-        atChildLimit ? (
-          <div className="rounded-lg border border-gold/40 bg-surface shadow-sm p-4 max-w-lg flex flex-col gap-2">
-            <p className="text-sm font-medium">You&apos;ve reached your plan&apos;s child limit</p>
-            <p className="text-sm text-muted">
-              Your {summary?.plan} plan allows {summary?.maxChildren} child
-              {summary?.maxChildren === 1 ? "" : "ren"}. Upgrade to add more.
-            </p>
-            <Link href="/billing" className="btn-primary text-xs px-3 py-2 w-fit">
-              View plans
-            </Link>
-          </div>
-        ) : (
-          <button onClick={startCreate} className="btn-secondary w-fit">
-            + Add another child
-          </button>
-        )
+        <button onClick={startCreate} className="btn-secondary w-fit">
+          + Add another child
+        </button>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4 max-w-lg">
           <h2 className="font-semibold">{editingId ? "Edit child profile" : "New child profile"}</h2>

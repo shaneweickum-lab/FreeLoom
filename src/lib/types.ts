@@ -85,7 +85,8 @@ export type Transcript = {
   student_id: string;
   generated_at: string;
   pdf_url: string | null;
-  included_course_ids: string[];
+  included_entry_ids: string[];
+  branding_snapshot: Record<string, unknown> | null;
 };
 
 export type TranslateLogRequest = {
@@ -102,33 +103,4 @@ export type TranslateLogResponse = {
   credit_hours: number;
   rationale: string;
   source: "ai" | "heuristic";
-};
-
-export type ChatMessageRole = "user" | "assistant";
-export type ChatMessageKind = "user" | "assistant" | "tool_bridge";
-
-export type ChatMessage = {
-  id: string;
-  student_id: string;
-  conversation_id: string;
-  role: ChatMessageRole;
-  kind: ChatMessageKind;
-  content: unknown[];
-  created_at: string;
-};
-
-export type ChatConversation = {
-  id: string;
-  student_id: string;
-  title: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type PlanId = "free" | "plus" | "pro";
-
-export type AccountPlan = {
-  user_id: string;
-  plan: PlanId;
-  updated_at: string;
 };
