@@ -184,7 +184,7 @@ export default function TranscriptPage() {
   }
 
   if (!currentStudent) {
-    return <p className="text-muted text-sm">Add a child from the dashboard first.</p>;
+    return <p className="text-muted text-sm">Add a student from the dashboard first.</p>;
   }
   if (loading) return null;
 
@@ -212,7 +212,7 @@ export default function TranscriptPage() {
         {schoolOpen && (
         <form onSubmit={saveSchoolProfile} className="flex flex-col gap-3 mt-4">
           <p className="text-xs text-muted">
-            Shared across every child on this account — appears on every transcript.
+            Shared across every student on this account — appears on every transcript.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
