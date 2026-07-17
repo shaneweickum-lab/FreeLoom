@@ -67,11 +67,7 @@ export function StudentProvider({ children }: { children: ReactNode }) {
       .select()
       .single();
     if (error || !data) {
-      setCreateError(
-        error?.message?.includes("child_limit_reached")
-          ? "You've reached your plan's child limit. Upgrade to add more."
-          : "Couldn't create that profile."
-      );
+      setCreateError(error?.message ? `Couldn't create that profile: ${error.message}` : "Couldn't create that profile.");
       return null;
     }
     setStudents((prev) => [...prev, data]);
