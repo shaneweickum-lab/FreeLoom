@@ -26,15 +26,15 @@ const FEATURES = [
   },
   {
     title: "Portfolio, organized by class",
-    body: "Every child's record reads as a list of classes, each holding the entries that built up to it — not a folder of loose files.",
+    body: "Every student's record reads as a list of classes, each holding the entries that built up to it — not a folder of loose files.",
   },
   {
     title: "Brandable transcripts",
     body: "Your logo, your color, your homeschool's name — the transcript looks like it came from your family, not a template.",
   },
   {
-    title: "Multi-child profiles",
-    body: "One parent account. A separate portfolio and transcript for every child, fully isolated from each other.",
+    title: "Multi-student profiles",
+    body: "One parent account. A separate portfolio and transcript for every student, fully isolated from each other.",
   },
   {
     title: "Grows with real use",
@@ -115,7 +115,7 @@ export default function Home() {
       <section className="text-center flex flex-col items-center gap-4 rounded-xl border border-border bg-surface shadow-sm p-10">
         <h2 className="text-2xl font-bold">Ready to see what your kids have actually been learning?</h2>
         <p className="text-muted text-sm max-w-lg">
-          Create your parent account and add your first child in under two minutes.
+          Create your parent account and add your first student in under two minutes.
         </p>
         <Link
           href="/login"

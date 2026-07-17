@@ -126,8 +126,8 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold mb-1">Your students</h1>
         <p className="text-muted text-sm">
-          One FreeLoom account for your whole family — add a profile for each child and switch between them
-          any time from the nav bar. Every child gets their own discovery notes, learning log, transcript, and
+          One FreeLoom account for your whole family — add a profile for each student and switch between them
+          any time from the nav bar. Every student gets their own discovery notes, learning log, transcript, and
           portfolio.
         </p>
       </div>
@@ -171,15 +171,15 @@ export default function DashboardPage() {
 
       {!showForm ? (
         <button onClick={startCreate} className="btn-secondary w-fit">
-          + Add another child
+          + Add another student
         </button>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4 max-w-lg">
-          <h2 className="font-semibold">{editingId ? "Edit child profile" : "New child profile"}</h2>
+          <h2 className="font-semibold">{editingId ? "Edit student profile" : "New student profile"}</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               className="input"
-              placeholder="Child's name"
+              placeholder="Student's name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required

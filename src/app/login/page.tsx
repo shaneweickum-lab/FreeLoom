@@ -68,7 +68,7 @@ function LoginForm() {
         <p className="text-muted text-sm mt-2">
           {mode === "signin"
             ? "One account for your whole family."
-            : "Add a profile for each of your children once you're in."}
+            : "Add a profile for each of your students once you're in."}
         </p>
       </div>
 
