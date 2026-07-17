@@ -124,7 +124,7 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold mb-1">Your children</h1>
+        <h1 className="text-2xl font-bold mb-1">Your students</h1>
         <p className="text-muted text-sm">
           One FreeLoom account for your whole family — add a profile for each child and switch between them
           any time from the nav bar. Every child gets their own discovery notes, learning log, transcript, and
