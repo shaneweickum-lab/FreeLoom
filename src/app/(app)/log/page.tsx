@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { ACTIVITY_TYPES, type ActivityType, type PipelineClass, type PipelineEntry, type SourceStage } from "@/lib/types";
@@ -11,6 +12,7 @@ type EntryWithClass = PipelineEntry & { classes: Pick<PipelineClass, "subject_ar
 
 const EMPTY_FORM = { rawWordDump: "", activityType: "other" as ActivityType, sourcePlatform: "", minutes: "" };
 const EMPTY_MANUAL_FORM = { subjectArea: "", courseTitle: "", creditValue: "0.25", description: "" };
+const EMPTY_QUICK_ADD = { subjectArea: "", courseTitle: "", creditValue: "0.25", description: "", rawWordDump: "" };
 
 /** Knowledge-base and cluster matches are both a "template" draft in DB terms — only retrieval gets its own tag. */
 function toSourceStage(draftSource: DraftSource): SourceStage {
@@ -18,6 +20,16 @@ function toSourceStage(draftSource: DraftSource): SourceStage {
 }
 
 export default function LogPage() {
+  return (
+    <Suspense fallback={null}>
+      <LogPageInner />
+    </Suspense>
+  );
+}
+
+function LogPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentStudent } = useStudents();
   const [entries, setEntries] = useState<EntryWithClass[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +45,25 @@ export default function LogPage() {
   const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
   const [resolving, setResolving] = useState(false);
 
+  // Set when arriving from an accepted suggested class on the Profile page
+  // (?subject=...&rationale=...) -- a fresh entry for an already-decided
+  // class, not a Stage 4 fallback, so it skips classify() entirely and
+  // skips the human_resolutions logging that's specifically for pipeline
+  // misses.
+  const [quickAdd, setQuickAdd] = useState<typeof EMPTY_QUICK_ADD | null>(null);
+  const [quickAdding, setQuickAdding] = useState(false);
+
   const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
+
+  useEffect(() => {
+    const subject = searchParams.get("subject");
+    if (!subject) return;
+    const rationale = searchParams.get("rationale") ?? "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setQuickAdd({ ...EMPTY_QUICK_ADD, subjectArea: subject, description: rationale });
+    router.replace("/log");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadEntries() {
     if (!currentStudent) {
@@ -187,6 +217,50 @@ export default function LogPage() {
     }
   }
 
+  async function submitQuickAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!currentStudent || !quickAdd || !quickAdd.rawWordDump.trim() || !quickAdd.description.trim()) return;
+    setQuickAdding(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const pipelineClass = await findOrCreateClass(currentStudent.id, quickAdd.subjectArea.trim());
+      const { data: entry, error: insertError } = await supabase
+        .from("entries")
+        .insert({
+          class_id: pipelineClass.id,
+          student_id: currentStudent.id,
+          raw_word_dump: quickAdd.rawWordDump.trim(),
+          extracted_slots: {},
+          subject_tags: [quickAdd.subjectArea.trim()],
+          credit_value: Number(quickAdd.creditValue) || 0,
+          generated_description: null,
+          generated_reasoning: null,
+          final_description: quickAdd.courseTitle.trim() || quickAdd.subjectArea.trim(),
+          final_reasoning: quickAdd.description.trim(),
+          status: "accepted",
+          source_stage: "human",
+        })
+        .select()
+        .single();
+      if (insertError || !entry) throw insertError;
+
+      await recordRetrievalCase(supabase, entry.id, quickAdd.rawWordDump.trim(), {
+        subjectArea: quickAdd.subjectArea.trim(),
+        courseTitle: entry.final_description,
+        creditValue: entry.credit_value,
+        reasoning: entry.final_reasoning,
+      });
+
+      setQuickAdd(null);
+      await loadEntries();
+    } catch {
+      setError("Couldn't save that entry — try again.");
+    } finally {
+      setQuickAdding(false);
+    }
+  }
+
   function editField(entryId: string, patch: { finalDescription?: string; finalReasoning?: string; creditValue?: number }) {
     setEdits((prev) => ({ ...prev, [entryId]: { ...prev[entryId], ...patch } }));
   }
@@ -240,6 +314,69 @@ export default function LogPage() {
           reasoning shown alongside it. If nothing matches, you write it yourself instead.
         </p>
       </div>
+
+      {quickAdd && (
+        <form onSubmit={submitQuickAdd} className="flex flex-col gap-3 rounded-lg border border-gold/40 bg-surface shadow-sm p-4">
+          <p className="text-sm font-medium">New entry for {quickAdd.subjectArea}</p>
+          <p className="text-xs text-muted">
+            Accepted from the Discovery notes on the Profile page — describe the specific activity below to
+            log the first entry for this class.
+          </p>
+          <textarea
+            className="input min-h-20"
+            placeholder="What did they actually do?"
+            value={quickAdd.rawWordDump}
+            onChange={(e) => setQuickAdd({ ...quickAdd, rawWordDump: e.target.value })}
+            required
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              className="input"
+              placeholder="Subject"
+              value={quickAdd.subjectArea}
+              onChange={(e) => setQuickAdd({ ...quickAdd, subjectArea: e.target.value })}
+              required
+            />
+            <input
+              className="input"
+              placeholder="Class/course title"
+              value={quickAdd.courseTitle}
+              onChange={(e) => setQuickAdd({ ...quickAdd, courseTitle: e.target.value })}
+            />
+          </div>
+          <textarea
+            className="input min-h-20"
+            placeholder="Why this counts toward that subject"
+            value={quickAdd.description}
+            onChange={(e) => setQuickAdd({ ...quickAdd, description: e.target.value })}
+            required
+          />
+          <label className="flex items-center gap-2 text-sm w-fit">
+            <input
+              type="number"
+              step={0.05}
+              min={0}
+              className="input w-24"
+              value={quickAdd.creditValue}
+              onChange={(e) => setQuickAdd({ ...quickAdd, creditValue: e.target.value })}
+            />
+            <span className="text-muted">credit value</span>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="btn-primary w-fit"
+              disabled={quickAdding || !quickAdd.rawWordDump.trim() || !quickAdd.description.trim()}
+            >
+              {quickAdding ? "Saving…" : "Save entry"}
+            </button>
+            <button type="button" className="btn-secondary w-fit" onClick={() => setQuickAdd(null)}>
+              Discard
+            </button>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </form>
+      )}
 
       {!needsReview ? (
         <form onSubmit={submitWordDump} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4">

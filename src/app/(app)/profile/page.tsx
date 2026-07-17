@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import type { ProfileNote, SuggestedTrack } from "@/lib/types";
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { currentStudent } = useStudents();
   const [note, setNote] = useState<ProfileNote | null>(null);
   const [content, setContent] = useState("");
@@ -111,8 +113,18 @@ export default function ProfilePage() {
       .eq("id", note.id)
       .select()
       .single();
-    if (updateError) setError(`Couldn't update that track: ${updateError.message}`);
+    if (updateError) setError(`Couldn't update that class: ${updateError.message}`);
     else if (data) setNote(data);
+  }
+
+  /** Accepting a suggested class hands off to the Learning Log to add the specific
+   * activity, rather than leaving an accepted-but-empty class sitting here. */
+  async function acceptTrack(index: number) {
+    if (!note) return;
+    const track = note.ai_suggested_tracks[index];
+    await setTrackStatus(index, "accepted");
+    const params = new URLSearchParams({ subject: track.subject, rationale: track.rationale });
+    router.push(`/log?${params.toString()}`);
   }
 
   if (!currentStudent) {
@@ -126,7 +138,8 @@ export default function ProfilePage() {
         <h1 className="text-2xl font-bold mb-1">Student Profile &amp; Discovery</h1>
         <p className="text-muted text-sm">
           Describe {currentStudent.name}&apos;s hobbies, personality, and how they learn. We&apos;ll suggest
-          subject tracks tied to those interests as a starting point you can accept, edit, or dismiss.
+          classes tied to those interests — accept one to start logging entries for it in the Learning
+          Log, or dismiss it.
         </p>
       </div>
 
@@ -143,7 +156,7 @@ export default function ProfilePage() {
             {saving ? "Saving…" : "Save notes"}
           </button>
           <button onClick={suggestTracks} className="btn-primary" disabled={suggesting || !content.trim()}>
-            {suggesting ? "Thinking…" : "Suggest tracks from interests"}
+            {suggesting ? "Thinking…" : "Suggest classes from interests"}
           </button>
           {!saving && lastSavedAt && (
             <span className="text-xs text-muted">Saved at {lastSavedAt.toLocaleTimeString()}</span>
@@ -154,7 +167,7 @@ export default function ProfilePage() {
 
       {!!note?.ai_suggested_tracks?.length && (
         <div className="flex flex-col gap-3">
-          <h2 className="font-semibold">Suggested tracks</h2>
+          <h2 className="font-semibold">Suggested classes</h2>
           {note.ai_suggested_tracks.map((track, i) => (
             <div
               key={i}
@@ -172,7 +185,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex gap-2 shrink-0">
                 <button
-                  onClick={() => setTrackStatus(i, "accepted")}
+                  onClick={() => acceptTrack(i)}
                   className={`text-xs px-2 py-1 rounded ${
                     track.status === "accepted" ? "bg-gold text-white" : "hover:bg-surface-hover"
                   }`}
