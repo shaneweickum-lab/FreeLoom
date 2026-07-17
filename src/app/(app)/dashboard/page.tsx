@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useStudents } from "@/lib/studentContext";
 import type { Student } from "@/lib/types";
 
@@ -15,12 +15,21 @@ const EMPTY_FORM = {
   graduationDate: "",
 };
 
-type StudentStats = { courseCount: number; creditHours: number };
-
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardPageInner />
+    </Suspense>
+  );
+}
+
+function DashboardPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     students,
     currentStudent,
+    stats,
     selectStudent,
     createStudent,
     updateStudent,
@@ -32,7 +41,6 @@ export default function DashboardPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const [stats, setStats] = useState<Record<string, StudentStats>>({});
 
   useEffect(() => {
     // Only after the real student list has loaded — students.length is 0 on
@@ -45,29 +53,17 @@ export default function DashboardPage() {
   }, [studentsLoading, students.length]);
 
   useEffect(() => {
-    if (students.length === 0) {
+    // Deep link from the nav switcher's "+ Add a student" (?new=1) —
+    // open the create form immediately instead of landing on a page the
+    // parent then has to find the button on themselves.
+    if (searchParams.get("new") === "1") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setStats({});
-      return;
+      setShowForm(true);
+      setEditingId(null);
+      router.replace("/dashboard");
     }
-    const supabase = createClient();
-    const studentIds = students.map((s) => s.id);
-    (async () => {
-      const { data: entries } = await supabase
-        .from("entries")
-        .select("student_id, credit_value")
-        .in("student_id", studentIds)
-        .eq("status", "accepted");
-      const next: Record<string, StudentStats> = {};
-      for (const entry of entries || []) {
-        const stat = next[entry.student_id] || { courseCount: 0, creditHours: 0 };
-        stat.courseCount += 1;
-        stat.creditHours += entry.credit_value;
-        next[entry.student_id] = stat;
-      }
-      setStats(next);
-    })();
-  }, [students]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function startCreate() {
     setEditingId(null);
