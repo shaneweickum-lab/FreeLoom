@@ -1,101 +1,166 @@
-# Proprietary SLM strategy
+# Proprietary SLM strategy — settled architecture
 
-Claude stays the production engine. This is a scoping pass for a future, purpose-built
-small language model dedicated to FreeLoom's specific jobs — not a decision to start
-training yet.
+Scoping and architecture decisions only — no training has started yet. The rule-based
+pipeline (`src/lib/pipeline/`: classify → retrieve → compose → confidence check → human
+resolution) stays the production engine. The SLM's job is narrower than "replace the
+pipeline": fill the specific gap the pipeline already flags, and help grow the
+pipeline's own content over time. This is also an explicit learning project — training
+from scratch, not just fine-tuning an existing checkpoint, is the intended path.
 
-## 1. What it would actually need to do
+## 1. What it needs to do — two jobs, not five
 
-FreeLoom's AI usage is narrow and structured, not open-ended chat. The concrete jobs,
-all currently handled by Claude via `src/lib/translate.ts` and `src/lib/assistantTools.ts`:
+Stages 1–3 (rules, retrieval, fragment composition) already work well for anything the
+knowledge base and fragment library cover. The gap is Stage 4/5: when nothing produces a
+confident match, a parent gets a blank form today. Two concrete jobs for the SLM, both
+scoped to that gap:
 
-1. **Log translation** (`translateLearningLog`): plain-language activity description →
-   `{course_title, subject_area, credit_hours, rationale}`.
-2. **Discovery track suggestion** (`suggestTracks`): free-text notes → a short list of
-   `{subject, rationale}` suggestions.
-3. **Portfolio categorization** (new, see Part C of the product plan): an uncategorized
-   portfolio item's caption/description → a matching class (`learning_log_id`) or a new
-   one, with a rationale.
+1. **Entry drafting** — a single activity description → a candidate
+   `{course_title, credit_value, rationale}` for the Stage 5 "needs your input" form,
+   pre-filled instead of blank.
+2. **Knowledge-base authoring** — a cluster of similar unresolved activities
+   (`human_resolutions`) plus existing `knowledgeBase.ts` entries as style examples → a
+   drafted new entry, for a human to approve before it ships.
 
-All three are variations on the same shape: unstructured parent text in, a small
-structured object with a short natural-language rationale out. That's a much narrower
-target than general chat, which is exactly what makes a small model plausible here.
+Everything else in the pipeline stays classical, deliberately:
+- **Subject-area classification** — a closed, stable label set. An embeddings +
+  lightweight classifier (building on the same hashed vectors `src/lib/pipeline/vectorize.ts`
+  already computes for Stage 2 retrieval) is more reliable and cheaper than asking a
+  generative model to pick a label out of thin air.
+- **Credit-hour estimation** — a duration-based heuristic/regression, not a language
+  model's job.
 
-## 2. Candidate small open architectures
+This keeps the SLM's actual surface area to exactly two generative tasks.
 
-None of these are benchmarked against FreeLoom's actual task yet — that only happens
-once there's real data to test against (Section 4). Rough shortlist, smallest to
-largest:
+## 2. Architecture: one shared base, two LoRA adapters, deterministic switching
 
-- **Qwen2.5 0.5B / 1.5B / 3B** — strong instruction-following for its size, Apache 2.0,
-  good multilingual/structured-output track record. Likely starting point.
-- **SmolLM2 1.7B** — purpose-built to be small and efficient; worth a look given the
-  low complexity of the target task.
-- **Llama 3.2 1B / 3B** — solid baseline, but Llama's community license has usage
-  restrictions worth checking against FreeLoom's business model before committing.
-- **Phi-3.5-mini (3.8B)** — punches above its size on reasoning-flavored tasks; heavier
-  than the others here, worth it only if the smaller models underperform on rationale
-  quality.
-- **Gemma 2 2B** — another credible mid-point if 1.5B-class models fall short.
+Not two fully separate models, and not a learned Mixture-of-Experts router — both were
+considered and both have real downsides for this specific case:
 
-Recommendation: start the smallest (Qwen2.5 0.5B or SmolLM2) and only move up if
-quality genuinely requires it — the task is narrow enough that a bigger model may be
-unnecessary cost.
+- **Fully separate models** would mean each one redundantly re-learns basic English
+  fluency and FreeLoom's domain vocabulary from scratch — wasted capacity and wasted
+  training data at a scale where both are already scarce.
+- **A learned MoE router** solves a routing-ambiguity problem FreeLoom doesn't have.
+  The calling code always knows deterministically which job it needs (Stage 4/5 fallback
+  vs. the periodic content-review pass) — there's nothing for a router to learn.
+- **A single fully-shared encoder with two output heads** (naive hard parameter
+  sharing) risks a well-documented failure mode called negative transfer: a shared
+  representation forced to serve two meaningfully different output shapes (single
+  example → title+rationale, vs. multiple examples + few-shot context → a structured
+  multi-field entry) can get pulled in conflicting directions and underperform on both.
 
-## 3. Hybrid ML recommendation, not just "one model"
+The settled design: **one shared base model, fine-tuned once for FreeLoom's general
+domain, with two lightweight LoRA adapters on top** — one per job. The shared base
+carries the "understands English and FreeLoom's task domain" competence once; each
+adapter carries only the last-mile specialization for its own job, avoiding the
+negative-transfer failure mode that a naive shared-head design would risk. The
+application code — which already knows which job it needs — swaps in the right adapter.
+No learned gate, no ambiguity to resolve at inference time.
 
-`subject_area` is a closed, fairly stable label set (Math, Life Science, PE, etc.) —
-that's a classification problem, not a generation problem. A cheap
-**sentence-transformer embedding + a lightweight classifier** (logistic regression or
-k-NN over embeddings) will likely be more reliable and far cheaper than asking a
-generative model to pick a label out of thin air, and it degrades more predictably at
-low data volumes.
+## 3. Size and architecture: 60M parameters, native BitNet b1.58
 
-Suggested split:
-- **Subject-area classification** → embeddings + classifier (traditional ML, not an
-  LM at all).
-- **Credit-hour estimation** → likely a simple regression/heuristic (activity duration,
-  activity type) rather than something an LM should be guessing either.
-- **Course title + rationale text** → the one part that's genuinely open-ended
-  generation, and the only piece that actually needs the small LM.
+- **60M ternary parameters**, trained natively at 1.58 bits (BitNet's `BitLinear` layer,
+  not post-hoc quantization of an existing model).
+- This size is unusually well-evidenced for BitNet specifically: published small-scale
+  BitNet research ("BitNet b1.58 Reloaded") tested ternary models in the 100K–48M
+  parameter range, right at the edge of 60M — much better precedent than the
+  unstudied gap between that research scale and Microsoft's only public checkpoint
+  (2B parameters).
+- Real-world coherent generation at small scale has separate, strong precedent too:
+  the TinyStories research showed models under 50M parameters — even under 10M — produce
+  coherent, grammatical text, *provided the training data is narrowed to match the task*
+  rather than general web text (Section 4 leans directly on this).
+- **Reference implementations to build from, not a blank file**: `exo-explore/mlx-bitnet`
+  (real, working MLX-native ternary/BitLinear + QAT training code for Apple Silicon) for
+  the BitNet-specific pieces, and `nanoGPT` (Karpathy) as the pedagogical foundation for
+  understanding the standard dense-transformer training loop before layering ternary
+  weights on top — reading and adapting working reference code is the standard way this
+  is actually learned, not a shortcut around learning it.
 
-This keeps the LM's job as small as possible, which matters a lot at the parameter
-counts above.
+## 4. Training data: synthetic, style-matched — not a slice of a general web corpus
 
-## 4. Training data strategy
+At 60M parameters, following TinyStories' validated method matters more than following
+the "grab a slice of FineWeb-Edu" approach that would make sense at 1B+ scale:
 
-No new UI is needed to start collecting this. It already exists, in disguise:
+- **Seed material**: the ~15 hand-authored `knowledgeBase.ts` entries and the fragment
+  library (`fragments`/`composition_rules`) are already (description → structured
+  output) pairs in exactly FreeLoom's target voice and format — too few alone to train
+  on, but the style template for everything else.
+- **Synthetic corpus generation**: use a larger model, one time, offline, to generate a
+  large volume (thousands of examples) of synthetic (activity description → course
+  title + rationale) pairs covering many hobbies/games/subjects, in the same consistent
+  voice as the seed entries. This is knowledge distillation via synthetic data
+  generation — a one-time offline data-authoring aid, not a live production dependency,
+  and it's the specific technique that made TinyStories work at this scale.
+- **Real data, as it accumulates**: `entries.generated_description`/`generated_reasoning`
+  vs. `final_description`/`final_reasoning` (the correction signal) and
+  `human_resolutions` joined to `entries` where `source_stage = 'human'` (the highest-value
+  cases — things the rule-based pipeline genuinely couldn't handle). Real usage is very
+  low right now, so this supplements the synthetic corpus rather than replacing it in
+  the near term.
 
-- Every `translated_courses` row created by Claude is a labeled example
-  (input description → structured output).
-- The `status` field (`suggested` → `approved` / `edited` / `rejected`) is an implicit
-  correction signal: an `edited` row means Claude's first guess was wrong and the
-  parent's edit is the corrected label — exactly the kind of data a fine-tune wants,
-  and higher-value than an unedited `approved` row.
-- The only action item here: don't let this data go stale/unused. Once volume exists,
-  export `(raw_description, activity_type, ai output, final approved/edited output)`
-  tuples as the training set.
+## 5. Training plan on the actual hardware (MacBook Pro, M5, 24GB unified memory)
 
-## 5. Fine-tuning approach and go/no-go threshold
+- Base M5 (not Pro/Max): 10-core GPU, 24GB unified memory, 153.6GB/s bandwidth. At 60M
+  parameters this is comfortably within budget for both LoRA and full/QAT training —
+  meaningfully easier than the 1B-parameter case already sized as workable-but-tighter.
+- No confirmed M5-specific pretraining throughput benchmark exists publicly; Apple
+  Silicon is well-documented to lag discrete NVIDIA GPUs specifically for training
+  workloads (vs. inference, where MLX is competitive). Time estimates here are
+  order-of-magnitude, not precise — and time is not the constraint for this project.
+- **Validate the pipeline at tiny scale first**: a ~10–25M parameter run on a small data
+  slice (minutes to hours, not days) to confirm the tokenizer, data loading, BitLinear
+  layer, and loss curve all behave correctly, before committing a multi-day run to the
+  full 60M attempt. Standard practice, not a shortcut — catches a pipeline bug in an
+  hour instead of after days of training.
 
-LoRA or QLoRA on the chosen base model, not a full fine-tune — far cheaper, and the
-task is narrow enough that a full fine-tune is unlikely to be worth its cost.
+## 6. Where it plugs into the pipeline
 
-Don't start this until there's a meaningful volume of real `edited` corrections to
-train against — a model fine-tuned on too little data will just overfit to a handful
-of families' phrasing. No fabricated number here; the honest answer is "enough that a
-held-out test set actually means something," which needs revisiting once usage data
-exists.
+Not a new API surface — it sits inside the existing Stage 4 confidence check:
 
-## 6. Rollout path
+1. Stage 1 → 2 → 3 run exactly as they do today.
+2. Only if all three produce no confident result: call the entry-drafting adapter for a
+   candidate instead of immediately flagging Stage 5.
+3. The candidate still renders in `/log`'s existing "needs your input" form, pre-filled
+   instead of blank — the parent reviews/edits/accepts exactly like any other draft.
+   Nothing about the transparency model changes: the SLM never writes directly to
+   `entries` unreviewed.
+4. Separately, on a periodic schedule (not per-request), the knowledge-base-authoring
+   adapter reviews accumulated `human_resolutions`, drafts candidate new
+   `knowledgeBase.ts`/`fragments` entries, and hands them off for human approval before
+   they ship — the automated version of the manual "content-authoring pass" already
+   used as a stopgap.
 
-- Claude remains the default and the fallback in every case (already the existing
-  pattern in `translate.ts` — AI result falls back to a heuristic on any failure; the
-  SLM would slot in as a candidate ahead of Claude, not a replacement for the fallback
-  chain).
-- Once a candidate model is trained, introduce a feature-flag'd traffic split (e.g. a
-  percentage of `translateLearningLog` calls routed to the SLM instead of Claude).
-- Use the **correction rate** as the automatic quality signal: compare how often the
-  SLM's suggestions get `edited` vs. `approved` unchanged, against Claude's existing
-  rate on the same slice of traffic. Promote only if the SLM's correction rate is
-  competitive.
+## 7. Safeguards against negative transfer and quality regressions
+
+Same defense-in-depth pattern the rule-based pipeline already uses everywhere else,
+applied to the SLM's output — not a new subsystem, an extension of the existing one:
+
+- **Held-out eval set per adapter**, scored on every retrain. If updating one adapter
+  ever degrades the other's score, that's negative transfer showing up as a number
+  before it ships, not after.
+- **Output-format validation** — reject a draft that doesn't have a valid subject_area,
+  a plausible credit_value, or all required fields; fall through to Stage 5 same as any
+  other low-confidence case.
+- **Cross-check against the classical subject-area classifier** (Section 1) — if the
+  entry-drafting adapter's subject guess substantially disagrees with the independent
+  classical prediction, flag for human review instead of trusting the SLM silently.
+  Costs nothing new to build; it's two existing signals compared against each other.
+- **Per-adapter acceptance-rate monitoring** — Stage 5's UI already captures
+  accept/edit/reject on every draft; track it separately per adapter. A drop after a
+  retrain is a real-time quality-regression signal.
+- **Canary/shadow rollout** before fully replacing a live adapter with a retrained one.
+- **The existing backstop, unchanged**: the SLM never bypasses Stage 5's human review
+  regardless of any of the above. Worst case for a quality regression is a worse first
+  draft that gets edited or rejected more often — not bad information silently entering
+  a child's record.
+
+## 8. Rollout path
+
+- No traffic served by either adapter until there's a trained checkpoint and an offline
+  eval showing it beats "leave it blank" (entry-drafting) or "no suggestion" (knowledge-base
+  authoring) on held-out cases.
+- Feature-flag'd, Stage-4-fallback-only at first — never overriding a Stage 1–3
+  confident result.
+- Promote based on acceptance rate vs. rejection/heavy-edit rate on real Stage 5
+  outcomes, same idea as the original scoping pass's "correction rate," now tracked
+  per adapter per Section 7.
