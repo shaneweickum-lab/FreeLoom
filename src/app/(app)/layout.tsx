@@ -13,7 +13,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <StudentProvider>
       <div className="flex flex-col md:flex-row min-h-screen">
         <AppRail />
-        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-8 sm:py-10">{children}</main>
+        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
+          {/* Every page here was built assuming the old root layout's
+              max-w-5xl wrapper; without a cap here they'd stretch
+              edge-to-edge next to the rail on a wide screen. */}
+          <div className="max-w-4xl">{children}</div>
+        </main>
       </div>
     </StudentProvider>
   );
