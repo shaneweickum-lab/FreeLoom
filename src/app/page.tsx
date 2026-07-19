@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import LogoMark from "@/components/LogoMark";
 import StitchDivider from "@/components/StitchDivider";
@@ -96,10 +97,21 @@ const FEATURES = [
   },
 ];
 
-function GlowBackdrop() {
+function HeroBackdrop() {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-16 -z-10 flex justify-center">
-      <div className="h-[28rem] w-[90vw] max-w-[48rem] rounded-full bg-gradient-to-br from-gold/20 via-violet/15 to-transparent blur-3xl" />
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-24 -z-10 h-[42rem] overflow-hidden">
+      <Image
+        src="/IMG_5290.png"
+        alt=""
+        fill
+        preload
+        sizes="100vw"
+        className="object-cover opacity-70"
+      />
+      {/* Fade the photo into the navy background on every edge so it reads as
+          atmosphere behind the hero copy, not a hard-edged inserted photo. */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background" />
+      <div className="absolute inset-0 bg-gradient-to-r from-background via-transparent to-background" />
     </div>
   );
 }
@@ -132,7 +144,7 @@ export default function Home() {
 
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 flex flex-col gap-24 py-16 sm:py-24">
         <section className="relative text-center flex flex-col items-center gap-6">
-          <GlowBackdrop />
+          <HeroBackdrop />
           <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-medium text-gold font-mono">
             A record-keeper first, a transcript generator second
           </span>
