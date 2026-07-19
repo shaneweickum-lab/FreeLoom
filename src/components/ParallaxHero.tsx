@@ -91,6 +91,9 @@ export default function ParallaxHero() {
 
       <section className="relative min-h-screen flex flex-col items-center justify-center gap-6 px-4 text-center">
         <h1 className="font-serif text-6xl sm:text-8xl font-bold tracking-tight">FreeLoom</h1>
+        <p className="max-w-md text-base sm:text-lg text-foreground/85 tracking-wide [text-shadow:0_2px_16px_rgba(10,13,28,0.85)]">
+          Transcript builder and records keeper for alternative schooling families
+        </p>
         <button
           onClick={scrollToReveal}
           aria-label="Scroll down"
