@@ -1,6 +1,7 @@
 import Link from "next/link";
 import ParallaxHero from "@/components/ParallaxHero";
 import StitchDivider from "@/components/StitchDivider";
+import WaitlistForm from "@/components/WaitlistForm";
 
 const STEPS = [
   {
@@ -106,6 +107,18 @@ export default function Home() {
           it edge-to-edge, not just within the centered max-w-5xl column. */}
       <div className="relative bg-background">
         <main className="mx-auto w-full max-w-5xl px-4 sm:px-6 flex flex-col gap-24 py-16 sm:py-24">
+          <section className="rounded-xl border border-gold/30 bg-navy-soft px-6 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-medium text-gold font-mono">
+                Platform coming soon
+              </span>
+              <p className="text-sm text-muted mt-2 max-w-sm">
+                FreeLoom isn&apos;t open yet — join the waitlist and we&apos;ll email you the moment it is.
+              </p>
+            </div>
+            <WaitlistForm />
+          </section>
+
           <section className="flex flex-col gap-6">
           <div className="mx-auto w-full max-w-3xl rounded-xl border border-navy-line shadow-lg overflow-hidden flex flex-col sm:flex-row">
             <div className="p-6 bg-navy-soft sm:w-1/2">

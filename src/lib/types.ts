@@ -124,3 +124,11 @@ export type PipelineEntrySubjectTag = {
   source_stage: TagSource;
   created_at: string;
 };
+
+/** A landing-page waitlist signup -- public, anonymous, insert-only from the
+ * visitor's side; only readable by the admin account (see /admin). */
+export type WaitlistSignup = {
+  id: string;
+  email: string;
+  created_at: string;
+};
