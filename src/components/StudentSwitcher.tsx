@@ -60,14 +60,6 @@ function PlusIcon() {
   );
 }
 
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-gold">
-      <path d="M5 12.5l4.5 4.5L19 7" />
-    </svg>
-  );
-}
-
 export default function StudentSwitcher() {
   const { students, currentStudent, stats, loading, selectStudent } = useStudents();
   const [open, setOpen] = useState(false);
@@ -146,8 +138,8 @@ export default function StudentSwitcher() {
                     selectStudent(s.id);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-hover ${
-                    active ? "bg-gold/5" : ""
+                  className={`flex w-full items-center gap-3 border-l-[3px] py-2.5 pr-3 text-left transition-colors hover:bg-surface-hover ${
+                    active ? "border-gold bg-gold/5 pl-[9px]" : "border-transparent pl-3"
                   }`}
                 >
                   <Avatar student={s} />
@@ -163,7 +155,6 @@ export default function StudentSwitcher() {
                       )}
                     </span>
                   </span>
-                  {active && <CheckIcon />}
                 </button>
               );
             })}

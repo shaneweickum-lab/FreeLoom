@@ -36,11 +36,11 @@ export default function RootLayout({
       className={`${inter.variable} ${fraunces.variable} ${plexMono.variable} h-full antialiased`}
     >
       {/*
-        No shared NavBar/footer here on purpose: the landing page and the
-        authenticated app now have genuinely different chrome (a
-        self-contained marketing nav with anchor links vs. the app's own
-        nav), so each route group supplies its own instead of one wrapper
-        trying to serve both. See src/app/(app)/layout.tsx and
+        No shared nav/footer here on purpose: the landing page and the
+        authenticated app have genuinely different chrome (a self-contained
+        marketing nav with anchor links vs. the app's own left rail), so
+        each route group supplies its own instead of one wrapper trying to
+        serve both. See src/app/(app)/layout.tsx (AppRail) and
         src/app/page.tsx.
       */}
       <body className="min-h-full flex flex-col">{children}</body>

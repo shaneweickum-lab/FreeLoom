@@ -3,16 +3,23 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Student } from "@/lib/types";
+import { computeSubjectLedger } from "@/lib/pipeline/ledger";
 
 const CURRENT_STUDENT_KEY = "freeloom-current-student-id";
 
 export type StudentStats = { courseCount: number; creditHours: number };
+export type SubjectLedgerRow = { subjectArea: string; creditHours: number; targetCredits: number | null };
 
 type StudentContextValue = {
   students: Student[];
   currentStudent: Student | null;
   loading: boolean;
   stats: Record<string, StudentStats>;
+  /** Per-subject credit ledger for the *current* student only (unlike
+   * `stats`, which covers every student for the dashboard's list view) --
+   * the left rail only ever needs to show the active student's own
+   * breakdown. */
+  subjectLedger: SubjectLedgerRow[];
   selectStudent: (id: string) => void;
   refresh: () => Promise<void>;
   createStudent: (input: Partial<Student> & { name: string }) => Promise<Student | null>;
@@ -29,6 +36,7 @@ export function StudentProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [createError, setCreateError] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, StudentStats>>({});
+  const [subjectLedger, setSubjectLedger] = useState<SubjectLedgerRow[]>([]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -84,6 +92,34 @@ export function StudentProvider({ children }: { children: ReactNode }) {
     })();
   }, [students]);
 
+  // Per-subject ledger for the left rail: sums entry_subject_tags (not
+  // entries.credit_value directly) grouped by subject, since one entry can
+  // now contribute credit to more than one subject. Only accepted entries
+  // count toward earned credit, matching the stats effect above.
+  useEffect(() => {
+    if (!currentId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSubjectLedger([]);
+      return;
+    }
+    const supabase = createClient();
+    (async () => {
+      const [{ data: tagRows }, { data: classRows }] = await Promise.all([
+        supabase
+          .from("entry_subject_tags")
+          .select("subject_area, credit_value, entries!inner(status)")
+          .eq("student_id", currentId)
+          .eq("entries.status", "accepted"),
+        supabase.from("classes").select("subject_area, target_credits").eq("student_id", currentId),
+      ]);
+      const ledgerRows = computeSubjectLedger(
+        (tagRows ?? []).map((row) => ({ subjectArea: row.subject_area, creditValue: row.credit_value }))
+      );
+      const targetBySubject = new Map((classRows ?? []).map((c) => [c.subject_area, c.target_credits]));
+      setSubjectLedger(ledgerRows.map((row) => ({ ...row, targetCredits: targetBySubject.get(row.subjectArea) ?? null })));
+    })();
+  }, [currentId]);
+
   const selectStudent = useCallback((id: string) => setCurrentId(id), []);
 
   const createStudent = useCallback(async (input: Partial<Student> & { name: string }) => {
@@ -136,6 +172,7 @@ export function StudentProvider({ children }: { children: ReactNode }) {
         currentStudent,
         loading,
         stats,
+        subjectLedger,
         selectStudent,
         refresh,
         createStudent,

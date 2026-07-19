@@ -1,31 +1,20 @@
 "use client";
 
 import { StudentProvider } from "@/lib/studentContext";
-import StudentSwitcher from "@/components/StudentSwitcher";
-import NavBar from "@/components/NavBar";
+import AppRail from "@/components/AppRail";
 
-// NavBar + the main wrapper + footer used to live in the root layout,
-// shared by every route. Moved here because the landing page now has its
-// own self-contained nav/footer (see src/app/page.tsx) -- this is the
-// authenticated app's own chrome. Slated to become the left-rail layout
-// from the app redesign brief; until then this keeps every existing
-// authenticated page looking and working exactly as before.
+// The persistent left rail from the app redesign brief: brand mark, the
+// student switcher, nav links, and the per-subject credit ledger, all in
+// one column that stays put while the main content area changes. Stacks
+// above the content on mobile instead of a sidebar (AppRail renders its own
+// compact top bar + off-canvas drawer below md).
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <StudentProvider>
-      <NavBar />
-      <main className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 py-8 sm:py-10">
-        <div className="flex flex-col gap-6">
-          <StudentSwitcher />
-          {children}
-        </div>
-      </main>
-      <footer className="border-t border-border">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
-          <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
-          <span>A record-keeping platform for unschooling and wildschooling families.</span>
-        </div>
-      </footer>
+      <div className="flex flex-col md:flex-row min-h-screen">
+        <AppRail />
+        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-8 sm:py-10">{children}</main>
+      </div>
     </StudentProvider>
   );
 }
