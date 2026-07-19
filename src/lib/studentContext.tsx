@@ -20,6 +20,11 @@ type StudentContextValue = {
    * the left rail only ever needs to show the active student's own
    * breakdown. */
   subjectLedger: SubjectLedgerRow[];
+  /** Re-fetches subjectLedger for the current student -- call after any
+   * entry_subject_tags mutation (the reasoning panel's edit/remove/add
+   * actions), since those don't otherwise change `currentId` and so
+   * wouldn't trigger the ledger effect below on their own. */
+  refreshSubjectLedger: () => Promise<void>;
   selectStudent: (id: string) => void;
   refresh: () => Promise<void>;
   createStudent: (input: Partial<Student> & { name: string }) => Promise<Student | null>;
@@ -96,29 +101,35 @@ export function StudentProvider({ children }: { children: ReactNode }) {
   // entries.credit_value directly) grouped by subject, since one entry can
   // now contribute credit to more than one subject. Only accepted entries
   // count toward earned credit, matching the stats effect above.
+  const fetchSubjectLedger = useCallback(async (studentId: string) => {
+    const supabase = createClient();
+    const [{ data: tagRows }, { data: classRows }] = await Promise.all([
+      supabase
+        .from("entry_subject_tags")
+        .select("subject_area, credit_value, entries!inner(status)")
+        .eq("student_id", studentId)
+        .eq("entries.status", "accepted"),
+      supabase.from("classes").select("subject_area, target_credits").eq("student_id", studentId),
+    ]);
+    const ledgerRows = computeSubjectLedger(
+      (tagRows ?? []).map((row) => ({ subjectArea: row.subject_area, creditValue: row.credit_value }))
+    );
+    const targetBySubject = new Map((classRows ?? []).map((c) => [c.subject_area, c.target_credits]));
+    setSubjectLedger(ledgerRows.map((row) => ({ ...row, targetCredits: targetBySubject.get(row.subjectArea) ?? null })));
+  }, []);
+
   useEffect(() => {
     if (!currentId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSubjectLedger([]);
       return;
     }
-    const supabase = createClient();
-    (async () => {
-      const [{ data: tagRows }, { data: classRows }] = await Promise.all([
-        supabase
-          .from("entry_subject_tags")
-          .select("subject_area, credit_value, entries!inner(status)")
-          .eq("student_id", currentId)
-          .eq("entries.status", "accepted"),
-        supabase.from("classes").select("subject_area, target_credits").eq("student_id", currentId),
-      ]);
-      const ledgerRows = computeSubjectLedger(
-        (tagRows ?? []).map((row) => ({ subjectArea: row.subject_area, creditValue: row.credit_value }))
-      );
-      const targetBySubject = new Map((classRows ?? []).map((c) => [c.subject_area, c.target_credits]));
-      setSubjectLedger(ledgerRows.map((row) => ({ ...row, targetCredits: targetBySubject.get(row.subjectArea) ?? null })));
-    })();
-  }, [currentId]);
+    fetchSubjectLedger(currentId);
+  }, [currentId, fetchSubjectLedger]);
+
+  const refreshSubjectLedger = useCallback(async () => {
+    if (currentId) await fetchSubjectLedger(currentId);
+  }, [currentId, fetchSubjectLedger]);
 
   const selectStudent = useCallback((id: string) => setCurrentId(id), []);
 
@@ -173,6 +184,7 @@ export function StudentProvider({ children }: { children: ReactNode }) {
         loading,
         stats,
         subjectLedger,
+        refreshSubjectLedger,
         selectStudent,
         refresh,
         createStudent,

@@ -4,25 +4,12 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import type {
-  ActivityType,
-  EntryStatus,
-  PipelineClass,
-  PipelineEntry,
-  PipelineEntrySubjectTag,
-  SourceStage,
-  TagConfidence,
-  TagSource,
-} from "@/lib/types";
-import { ACTIVITY_TYPES } from "@/lib/types";
+import type { ActivityType, EntryStatus, PipelineEntry, SourceStage, TagConfidence, TagSource } from "@/lib/types";
 import type { ClassifyResult, DraftSource } from "@/lib/pipeline/classify";
 import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
-
-type EntryWithClass = PipelineEntry & {
-  classes: Pick<PipelineClass, "subject_area" | "title"> | null;
-  entry_subject_tags: PipelineEntrySubjectTag[];
-};
+import CaptureCard, { type CaptureForm } from "@/components/CaptureCard";
+import RecordCard, { type EntryWithTags } from "@/components/RecordCard";
 
 type TagInput = {
   subjectArea: string;
@@ -58,11 +45,11 @@ export default function LogPage() {
 function LogPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { currentStudent } = useStudents();
-  const [entries, setEntries] = useState<EntryWithClass[]>([]);
+  const { currentStudent, refreshSubjectLedger } = useStudents();
+  const [entries, setEntries] = useState<EntryWithTags[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<CaptureForm>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,7 +94,7 @@ function LogPageInner() {
       .eq("student_id", currentStudent.id)
       .order("created_at", { ascending: false })
       .order("created_at", { foreignTable: "entry_subject_tags", ascending: true });
-    setEntries((data as EntryWithClass[]) || []);
+    setEntries((data as EntryWithTags[]) || []);
     setLoading(false);
   }
 
@@ -357,7 +344,81 @@ function LogPageInner() {
     setEdits((prev) => ({ ...prev, [entryId]: { ...prev[entryId], ...patch } }));
   }
 
-  async function decide(entry: EntryWithClass, decision: "accept" | "reject") {
+  /**
+   * Keeps entries' legacy singular columns mirroring the *first*
+   * entry_subject_tags row after any tag-level mutation (the reasoning
+   * panel's change-subject/remove/add actions) -- same principle as
+   * insertEntryWithTags, applied on the update side.
+   */
+  async function syncEntryLegacyFields(entryId: string) {
+    const supabase = createClient();
+    const { data: tags } = await supabase
+      .from("entry_subject_tags")
+      .select("*")
+      .eq("entry_id", entryId)
+      .order("created_at", { ascending: true });
+    const [primary] = tags ?? [];
+    await supabase
+      .from("entries")
+      .update({
+        subject_tags: (tags ?? []).map((t) => t.subject_area),
+        credit_value: sumCredits((tags ?? []).map((t) => t.credit_value)),
+        final_description: primary?.course_title ?? null,
+        final_reasoning: primary?.reasoning ?? null,
+      })
+      .eq("id", entryId);
+  }
+
+  /** The reasoning panel's "change subject" action -- writes back
+   * immediately, no separate save step, per the brief. */
+  async function changeTag(tagId: string, patch: { subjectArea?: string; courseTitle?: string }) {
+    const supabase = createClient();
+    const updates: { subject_area?: string; course_title?: string } = {};
+    if (patch.subjectArea !== undefined) updates.subject_area = patch.subjectArea;
+    if (patch.courseTitle !== undefined) updates.course_title = patch.courseTitle;
+    const { data: tag } = await supabase.from("entry_subject_tags").update(updates).eq("id", tagId).select("entry_id").single();
+    if (!tag) return;
+    await syncEntryLegacyFields(tag.entry_id);
+    await refreshSubjectLedger();
+    await loadEntries();
+  }
+
+  /** The reasoning panel's "remove" action -- also revokes that tag's
+   * credit from its subject's ledger immediately. */
+  async function removeTag(tagId: string) {
+    const supabase = createClient();
+    const { data: tag } = await supabase.from("entry_subject_tags").select("entry_id").eq("id", tagId).single();
+    if (!tag) return;
+    await supabase.from("entry_subject_tags").delete().eq("id", tagId);
+    await syncEntryLegacyFields(tag.entry_id);
+    await refreshSubjectLedger();
+    await loadEntries();
+  }
+
+  /** The reasoning panel's "add a subject" action, for a tag the system
+   * missed. Confidence is always "human" here -- a parent-added tag isn't
+   * a system estimate at all. */
+  async function addTag(entry: EntryWithTags, input: { subjectArea: string; courseTitle: string; creditValue: number }) {
+    if (!currentStudent) return;
+    const supabase = createClient();
+    await findOrCreateClass(currentStudent.id, input.subjectArea);
+    await supabase.from("entry_subject_tags").insert({
+      entry_id: entry.id,
+      student_id: currentStudent.id,
+      subject_area: input.subjectArea,
+      course_title: input.courseTitle,
+      credit_value: input.creditValue,
+      confidence: "human",
+      quoted_phrase: null,
+      reasoning: "Added by a parent — not drafted by the pipeline.",
+      source_stage: "human",
+    });
+    await syncEntryLegacyFields(entry.id);
+    await refreshSubjectLedger();
+    await loadEntries();
+  }
+
+  async function decide(entry: EntryWithTags, decision: "accept" | "reject") {
     const supabase = createClient();
     if (decision === "reject") {
       await supabase.from("entries").delete().eq("id", entry.id);
@@ -411,6 +472,7 @@ function LogPageInner() {
             ];
 
       await recordRetrievalCase(supabase, entry.id, entry.raw_word_dump, { tags });
+      await refreshSubjectLedger();
     }
     setEdits((prev) => {
       const next = { ...prev };
@@ -499,38 +561,7 @@ function LogPageInner() {
       )}
 
       {!needsReview ? (
-        <form onSubmit={submitWordDump} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4">
-          <textarea
-            className="input min-h-24"
-            placeholder="e.g. Spent the afternoon building automated factories in Factorio, wiring up circuit logic for the first time"
-            value={form.rawWordDump}
-            onChange={(e) => setForm({ ...form, rawWordDump: e.target.value })}
-          />
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="text-muted">Activity type</span>
-              <select className="input" value={form.activityType} onChange={(e) => setForm({ ...form, activityType: e.target.value as ActivityType })}>
-                {ACTIVITY_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="text-muted">Source / platform (optional)</span>
-              <input className="input" placeholder="e.g. Factorio, Recess" value={form.sourcePlatform} onChange={(e) => setForm({ ...form, sourcePlatform: e.target.value })} />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="text-muted">Time spent, minutes (optional)</span>
-              <input type="number" min={0} className="input" value={form.minutes} onChange={(e) => setForm({ ...form, minutes: e.target.value })} />
-            </label>
-          </div>
-          <button type="submit" className="btn-primary w-fit" disabled={submitting || !form.rawWordDump.trim()}>
-            {submitting ? "Classifying…" : "Log activity"}
-          </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-        </form>
+        <CaptureCard form={form} onChange={setForm} onSubmit={submitWordDump} submitting={submitting} error={error} />
       ) : (
         <form onSubmit={submitManualResolution} className="flex flex-col gap-3 rounded-lg border border-gold/40 bg-surface shadow-sm p-4">
           <p className="text-sm font-medium">Needs your input</p>
@@ -586,61 +617,23 @@ function LogPageInner() {
 
       <div className="flex flex-col gap-4">
         {loading && <p className="text-muted text-sm">Loading…</p>}
-        {!loading && entries.length === 0 && <p className="text-muted text-sm">No activities logged yet.</p>}
-        {entries.map((entry) => {
-          const pending = edits[entry.id];
-          return (
-            <div key={entry.id} className="rounded-lg border border-border bg-surface shadow-sm p-4">
-              <div className="text-xs text-muted mb-1">{new Date(entry.created_at).toLocaleDateString()}</div>
-              <p className="text-sm">{entry.raw_word_dump}</p>
-
-              <div className="mt-3 rounded-md bg-background border border-border p-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <input
-                    className="input font-medium text-gold bg-transparent border-none px-0"
-                    value={pending?.finalDescription ?? entry.final_description ?? ""}
-                    disabled={entry.status !== "draft"}
-                    onChange={(e) => editField(entry.id, { finalDescription: e.target.value })}
-                  />
-                  <span className="text-xs text-muted font-mono uppercase">{entry.status.replace("_", " ")}</span>
-                </div>
-                <div className="text-sm text-muted">{entry.classes?.subject_area}</div>
-                <textarea
-                  className="input text-xs bg-transparent border-none px-0 text-muted italic min-h-12"
-                  value={pending?.finalReasoning ?? entry.final_reasoning ?? ""}
-                  disabled={entry.status !== "draft"}
-                  onChange={(e) => editField(entry.id, { finalReasoning: e.target.value })}
-                />
-                <div className="flex items-center justify-between flex-wrap gap-2 mt-1">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="number"
-                      step={0.05}
-                      min={0}
-                      className="input w-20"
-                      value={pending?.creditValue ?? entry.credit_value}
-                      disabled={entry.status !== "draft"}
-                      onChange={(e) => editField(entry.id, { creditValue: Number(e.target.value) })}
-                    />
-                    <span className="text-muted">credit value</span>
-                  </label>
-                  {entry.status === "draft" ? (
-                    <div className="flex gap-2">
-                      <button onClick={() => decide(entry, "reject")} className="btn-secondary text-xs">
-                        Reject
-                      </button>
-                      <button onClick={() => decide(entry, "accept")} className="btn-primary text-xs">
-                        Accept
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-muted">Accepted</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {!loading && entries.length === 0 && (
+          <p className="text-muted text-sm">
+            Nothing woven yet — describe today&apos;s first activity above and FreeLoom will draft the record.
+          </p>
+        )}
+        {entries.map((entry) => (
+          <RecordCard
+            key={entry.id}
+            entry={entry}
+            pending={edits[entry.id]}
+            onEditField={(patch) => editField(entry.id, patch)}
+            onDecide={(decision) => decide(entry, decision)}
+            onChangeTag={changeTag}
+            onRemoveTag={removeTag}
+            onAddTag={(input) => addTag(entry, input)}
+          />
+        ))}
       </div>
     </div>
   );
