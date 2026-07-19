@@ -35,7 +35,7 @@ const EMPTY_SCHOOL_FORM = {
   address: "",
   phone: "",
   email: "",
-  accentColor: "#b45309",
+  accentColor: "#c7a252",
   layoutStyle: "formal" as "formal" | "casual",
 };
 
@@ -68,7 +68,7 @@ export default function TranscriptPage() {
         address: school?.address || "",
         phone: school?.phone || "",
         email: school?.email || "",
-        accentColor: school?.accent_color || "#b45309",
+        accentColor: school?.accent_color || "#c7a252",
         layoutStyle: school?.layout_style || "formal",
       });
       // Default collapsed once a school profile already exists, but only on first
