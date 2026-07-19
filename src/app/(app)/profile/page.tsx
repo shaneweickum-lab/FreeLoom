@@ -187,7 +187,7 @@ export default function ProfilePage() {
                 <button
                   onClick={() => acceptTrack(i)}
                   className={`text-xs px-2 py-1 rounded ${
-                    track.status === "accepted" ? "bg-gold text-white" : "hover:bg-surface-hover"
+                    track.status === "accepted" ? "bg-gold text-ink" : "hover:bg-surface-hover"
                   }`}
                 >
                   Accept

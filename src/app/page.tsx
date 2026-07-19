@@ -94,140 +94,238 @@ const FEATURES = [
   },
 ];
 
+/**
+ * Placeholder brand mark: a two-tone (gold/violet) woven "F" on a navy
+ * square, meant to evoke the product's name (a loom). This is a stand-in,
+ * not final brand art -- flag for real logo design later. The two offset
+ * strokes are a cheap approximation of a woven/interlaced look without
+ * needing true path-braiding.
+ */
+function LogoMark({ size = 40 }: { size?: number }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-lg border border-navy-line bg-navy-soft"
+      style={{ width: size, height: size }}
+    >
+      <svg viewBox="0 0 32 32" width={size * 0.55} height={size * 0.55} fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 26V9h13" stroke="var(--violet)" strokeWidth="3.25" transform="translate(1.2,-1.2)" />
+        <path d="M10 25V8h13M10 16h9.5" stroke="var(--gold)" strokeWidth="2.75" />
+      </svg>
+    </span>
+  );
+}
+
+/** The signature "stitched thread" divider between the raw note and the
+ * formal record -- a dashed gold rule, oriented horizontal when stacked
+ * (mobile) and vertical between side-by-side cards (desktop): two elements,
+ * swapped via Tailwind's responsive display utilities since the inline
+ * background-image gradient direction can't itself respond to a breakpoint.
+ * Static by design; the global prefers-reduced-motion rule in globals.css
+ * means any future animated variant here is automatically safe too. */
+function StitchDivider() {
+  return (
+    <>
+      <div
+        aria-hidden
+        className="sm:hidden h-2 w-full shrink-0"
+        style={{
+          backgroundImage: "repeating-linear-gradient(90deg, var(--gold) 0 10px, transparent 10px 18px)",
+          backgroundSize: "18px 2px",
+          backgroundRepeat: "repeat-x",
+          backgroundPosition: "center",
+        }}
+      />
+      <div
+        aria-hidden
+        className="hidden sm:block w-2 shrink-0 self-stretch"
+        style={{
+          backgroundImage: "repeating-linear-gradient(180deg, var(--gold) 0 10px, transparent 10px 18px)",
+          backgroundSize: "2px 18px",
+          backgroundRepeat: "repeat-y",
+          backgroundPosition: "center",
+        }}
+      />
+    </>
+  );
+}
+
 function GlowBackdrop() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-16 -z-10 flex justify-center">
-      <div className="h-[28rem] w-[90vw] max-w-[48rem] rounded-full bg-gradient-to-br from-gold/25 via-violet/15 to-transparent blur-3xl" />
+      <div className="h-[28rem] w-[90vw] max-w-[48rem] rounded-full bg-gradient-to-br from-gold/20 via-violet/15 to-transparent blur-3xl" />
     </div>
   );
 }
 
 export default function Home() {
   return (
-    <div className="flex flex-col gap-24">
-      <section className="relative text-center flex flex-col items-center gap-6 py-16">
-        <GlowBackdrop />
-        <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-white text-2xl font-bold shadow-md">
-          F
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-medium text-gold">
-          A record-keeper first, a transcript generator second
-        </span>
-        <h1 className="text-5xl sm:text-6xl font-bold tracking-tight">FREELOOM</h1>
-        <p className="text-xl text-gold font-medium">Real learning, formally recorded.</p>
-        <p className="max-w-2xl text-muted text-base leading-relaxed">
-          Built for unschooling and wildschooling families: log the informal, unstructured, real
-          stuff your kids actually do, and FreeLoom turns it into a structured class entry with
-          its reasoning shown right alongside it — so you can see exactly why, not just trust that
-          it&apos;s right. A transcript is something you generate from that record when you need one,
-          not the thing you&apos;re stuck maintaining every day.
-        </p>
-        <div className="flex flex-wrap justify-center gap-4 mt-2">
-          <Link
-            href="/login"
-            className="rounded-md bg-gold px-5 py-2.5 font-medium text-white shadow-sm hover:bg-gold-hover hover:shadow-md transition-all"
-          >
-            Get Started
+    <div className="flex flex-col min-h-full">
+      <nav className="border-b border-navy-line">
+        <div className="mx-auto max-w-5xl flex items-center justify-between px-4 sm:px-6 py-4">
+          <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-wide">
+            <LogoMark size={36} />
+            <span className="font-serif">FREELOOM</span>
           </Link>
-          <a
-            href="#how-it-works"
-            className="rounded-md border border-border bg-surface px-5 py-2.5 font-medium text-foreground shadow-sm hover:bg-surface-hover transition-colors"
-          >
-            See how it works
-          </a>
-        </div>
-        <p className="text-xs text-muted">No credit card required — just a parent account and two minutes.</p>
-      </section>
-
-      <section className="flex flex-col gap-6">
-        <div className="mx-auto w-full max-w-3xl rounded-xl border border-border bg-surface shadow-lg overflow-hidden">
-          <div className="flex items-center gap-1.5 border-b border-border bg-background px-4 py-3">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
-            <span className="h-2.5 w-2.5 rounded-full bg-green-400/70" />
-            <span className="ml-3 text-xs text-muted font-mono">freeloom.app/log</span>
+          <div className="flex items-center gap-6 text-sm">
+            <a href="#how-it-works" className="hidden sm:inline text-muted hover:text-foreground transition-colors">
+              How it works
+            </a>
+            <a href="#features" className="hidden sm:inline text-muted hover:text-foreground transition-colors">
+              Features
+            </a>
+            <Link
+              href="/login"
+              className="rounded-md border border-gold/40 px-4 py-1.5 font-medium text-gold hover:bg-gold/10 transition-colors"
+            >
+              Sign in
+            </Link>
           </div>
-          <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border">
-            <div className="p-6">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-3">What you typed</div>
-              <p className="text-sm leading-relaxed">
+        </div>
+      </nav>
+
+      <main className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 flex flex-col gap-24 py-16 sm:py-24">
+        <section className="relative text-center flex flex-col items-center gap-6">
+          <GlowBackdrop />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-medium text-gold font-mono">
+            A record-keeper first, a transcript generator second
+          </span>
+          <h1 className="font-serif text-5xl sm:text-6xl font-bold tracking-tight">FreeLoom</h1>
+          <p className="text-xl text-gold font-medium font-serif">Real learning, formally recorded.</p>
+          <p className="max-w-2xl text-muted text-base leading-relaxed">
+            Built for unschooling and wildschooling families: log the informal, unstructured, real
+            stuff your kids actually do, and FreeLoom turns it into a structured class entry with
+            its reasoning shown right alongside it — so you can see exactly why, not just trust that
+            it&apos;s right. A transcript is something you generate from that record when you need one,
+            not the thing you&apos;re stuck maintaining every day.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4 mt-2">
+            <Link
+              href="/login"
+              className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink shadow-sm hover:bg-gold-hover hover:shadow-md transition-all"
+            >
+              Get Started
+            </Link>
+            <a
+              href="#how-it-works"
+              className="rounded-md border border-border bg-surface px-5 py-2.5 font-medium text-foreground shadow-sm hover:bg-surface-hover transition-colors"
+            >
+              See how it works
+            </a>
+          </div>
+          <p className="text-xs text-muted">No credit card required — just a parent account and two minutes.</p>
+        </section>
+
+        <section className="flex flex-col gap-6">
+          <div className="mx-auto w-full max-w-3xl rounded-xl border border-navy-line shadow-lg overflow-hidden flex flex-col sm:flex-row">
+            <div className="p-6 bg-navy-soft sm:w-1/2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-3 font-mono">What you typed</div>
+              <p className="text-sm leading-relaxed italic font-serif">
                 &ldquo;Spent like 2 hours today building a redstone elevator in Minecraft. Kept
                 debugging why it wouldn&apos;t reset right.&rdquo;
               </p>
             </div>
-            <div className="p-6 bg-gold/5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-gold mb-3">What FreeLoom drafted</div>
-              <div className="text-sm font-semibold mb-1">Applied Digital Logic</div>
-              <div className="text-xs text-muted mb-3">Computer Science · 0.5 credit hours</div>
-              <p className="text-sm leading-relaxed text-foreground/85">
+            <StitchDivider />
+            <div className="p-6 bg-parchment text-ink sm:w-1/2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-ink-soft mb-3 font-mono">What FreeLoom drafted</div>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="text-sm font-semibold font-serif">Applied Digital Logic</div>
+                <span className="rounded-full bg-gold/20 text-ink text-xs font-mono px-2 py-0.5 shrink-0">0.5 cr</span>
+              </div>
+              <div className="text-xs text-ink-soft mb-3">Computer Science</div>
+              <p className="text-sm leading-relaxed text-ink/85">
                 Building redstone circuits means wiring functional logic gates and switching
                 networks in-game, a hands-on introduction to boolean logic and digital circuit
                 design.
               </p>
             </div>
           </div>
-        </div>
-        <p className="text-center text-xs text-muted">A real draft, from a real entry in FreeLoom&apos;s knowledge base.</p>
-      </section>
+          <p className="text-center text-xs text-muted">A real draft, from a real entry in FreeLoom&apos;s knowledge base.</p>
+        </section>
 
-      <section id="how-it-works" className="flex flex-col gap-8">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">How it works</h2>
-          <p className="text-muted text-sm max-w-xl mx-auto">
-            Four steps from a word dump to a record worth keeping.
+        <section id="how-it-works" className="flex flex-col gap-10">
+          <div className="text-center">
+            <h2 className="font-serif text-2xl font-bold mb-2">How it works</h2>
+            <p className="text-muted text-sm max-w-xl mx-auto">
+              Four steps from a word dump to a record worth keeping.
+            </p>
+          </div>
+          <div className="grid gap-8 lg:grid-cols-4">
+            {STEPS.map((step, i) => (
+              <div key={step.title} className="relative flex flex-col items-center text-center gap-3">
+                {i < STEPS.length - 1 && (
+                  <div
+                    aria-hidden
+                    className="hidden lg:block absolute top-5 left-1/2 h-px"
+                    style={{
+                      width: "calc(100% + 2rem)", // 2rem matches this grid's gap-8, so the line reaches the next column's circle instead of stopping short at this column's edge
+                      backgroundImage: "repeating-linear-gradient(90deg, var(--gold) 0 8px, transparent 8px 14px)",
+                    }}
+                  />
+                )}
+                <span className="relative z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gold text-ink text-sm font-semibold font-mono shadow-sm">
+                  {i + 1}
+                </span>
+                <h3 className="font-semibold text-lg font-serif">{step.title}</h3>
+                <p className="text-muted text-sm leading-relaxed">{step.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="features" className="flex flex-col gap-8">
+          <div className="text-center">
+            <h2 className="font-serif text-2xl font-bold mb-2">Built for families who want to see the work</h2>
+            <p className="text-muted text-sm max-w-xl mx-auto">
+              Not adapted from a generic school SIS, and not asking you to trust something you can&apos;t see inside of.
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map((f, i) => {
+              const violetTint = i % 2 === 1;
+              return (
+                <div
+                  key={f.title}
+                  className="rounded-lg border border-navy-line bg-navy-soft shadow-sm p-6 transition-all hover:shadow-md hover:-translate-y-0.5"
+                >
+                  <span
+                    className={`inline-flex h-10 w-10 items-center justify-center rounded-full mb-3 ${
+                      violetTint ? "bg-violet/15 text-violet-soft" : "bg-gold/15 text-gold"
+                    }`}
+                  >
+                    <f.icon className="h-5 w-5" />
+                  </span>
+                  <h3 className="font-semibold text-lg mb-1 font-serif">{f.title}</h3>
+                  <p className="text-muted text-sm leading-relaxed">{f.body}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="relative rounded-xl border border-gold/30 bg-navy-soft p-10 shadow-lg overflow-hidden text-center flex flex-col items-center gap-4">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-gold/15 via-violet/10 to-transparent"
+          />
+          <h2 className="font-serif text-2xl font-bold">Ready to see what your kids have actually been learning?</h2>
+          <p className="text-muted text-sm max-w-lg">
+            Create your parent account and add your first student in under two minutes.
           </p>
-        </div>
-        <div className="grid gap-6 sm:grid-cols-2">
-          {STEPS.map((step, i) => (
-            <div
-              key={step.title}
-              className="relative rounded-lg border border-border bg-surface shadow-sm p-6 pl-8 transition-shadow hover:shadow-md"
-            >
-              <span className="absolute -left-4 top-6 inline-flex h-8 w-8 items-center justify-center rounded-full bg-gold text-white text-sm font-semibold shadow-sm">
-                {i + 1}
-              </span>
-              <h3 className="font-semibold text-lg mb-1">{step.title}</h3>
-              <p className="text-muted text-sm leading-relaxed">{step.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+          <Link
+            href="/login"
+            className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink shadow-sm hover:bg-gold-hover transition-colors"
+          >
+            Get Started
+          </Link>
+        </section>
+      </main>
 
-      <section className="flex flex-col gap-8">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Built for families who want to see the work</h2>
-          <p className="text-muted text-sm max-w-xl mx-auto">
-            Not adapted from a generic school SIS, and not asking you to trust something you can&apos;t see inside of.
-          </p>
+      <footer className="border-t border-navy-line">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
+          <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
+          <span>A record-keeping platform for unschooling and wildschooling families.</span>
         </div>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f) => (
-            <div
-              key={f.title}
-              className="rounded-lg border border-border bg-surface shadow-sm p-6 transition-all hover:shadow-md hover:-translate-y-0.5"
-            >
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gold/10 text-gold mb-3">
-                <f.icon className="h-5 w-5" />
-              </span>
-              <h3 className="font-semibold text-lg mb-1">{f.title}</h3>
-              <p className="text-muted text-sm leading-relaxed">{f.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="relative text-center flex flex-col items-center gap-4 rounded-xl bg-gradient-to-br from-gold to-violet p-10 shadow-lg overflow-hidden">
-        <h2 className="text-2xl font-bold text-white">Ready to see what your kids have actually been learning?</h2>
-        <p className="text-white/85 text-sm max-w-lg">
-          Create your parent account and add your first student in under two minutes.
-        </p>
-        <Link
-          href="/login"
-          className="rounded-md bg-white px-5 py-2.5 font-medium text-gold-hover shadow-sm hover:bg-white/90 transition-colors"
-        >
-          Get Started
-        </Link>
-      </section>
+      </footer>
     </div>
   );
 }

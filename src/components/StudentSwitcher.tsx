@@ -5,7 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { useStudents } from "@/lib/studentContext";
 import type { Student } from "@/lib/types";
 
-const AVATAR_COLORS = ["#b45309", "#6d28d9", "#3b6e8f", "#4d7c5f", "#9a3412"];
+// Darker avatar-safe variants of the brand gold/violet -- the brand tokens
+// themselves (--gold #c7a252, --violet #8968c9) are too light for reliable
+// white-text contrast in a small avatar circle; these hit >=5:1 against
+// white while staying in the same gold/violet family.
+const AVATAR_COLORS = ["#8a6a2f", "#5b3d99", "#3b6e8f", "#4d7c5f", "#9a3412"];
 
 function avatarColor(id: string): string {
   let hash = 0;
