@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { classifyWordDump, type ClassifyResult } from "@/lib/pipeline/classify";
+import { classifyWordDump, type ClassifyResult, type TagConfidence } from "@/lib/pipeline/classify";
 import { findRetrievalMatch } from "@/lib/pipeline/retrieve";
 import { composeFromFragments } from "@/lib/pipeline/compose";
+
+/** Maps a retrieval match's similarity score to the same confidence
+ * vocabulary the rest of the pipeline uses, instead of introducing a raw
+ * number the reasoning panel would have to interpret on its own. */
+function confidenceFromSimilarity(similarity: number): TagConfidence {
+  if (similarity >= 0.9) return "high";
+  if (similarity >= 0.8) return "medium";
+  return "low";
+}
 
 // Stage 1 (classify) -> Stage 2 (retrieve) -> Stage 3 (fragment compose),
 // combined into one request since Stage 4's confidence check needs all
@@ -39,45 +48,50 @@ export async function POST(req: NextRequest) {
     timeSpentMinutes: typeof body?.time_spent_minutes === "number" ? body.time_spent_minutes : null,
   });
 
-  // A knowledge-base hit is already as specific an answer as v0 gets --
-  // only a generic cluster guess (or no match at all) is worth trying
-  // Stage 2/3 against.
-  const worthRetrying = !stage1.confident || stage1.source === "heuristic_cluster";
+  // A knowledge-base hit on any tag is already as specific an answer as v0
+  // gets for that tag; only worth trying Stage 2/3 when every tag so far is
+  // a generic cluster guess (or Stage 1 found nothing at all).
+  const worthRetrying = !stage1.confident || stage1.tags.every((tag) => tag.source === "heuristic_cluster");
   if (worthRetrying) {
     const match = await findRetrievalMatch(supabase, studentId, rawWordDump);
     if (match) {
+      // A retrieval match replaces the whole tag set with what was
+      // actually accepted for a similar past word dump -- there's no
+      // quoted phrase (it's matched against a *different* entry's text,
+      // not a substring of this one).
       const result: ClassifyResult = {
         confident: true,
-        subjectArea: match.snapshot.subjectArea,
-        courseTitle: match.snapshot.courseTitle,
-        creditValue: match.snapshot.creditValue,
-        reasoning: match.snapshot.reasoning,
+        tags: match.snapshot.tags.map((tag) => ({
+          ...tag,
+          confidence: confidenceFromSimilarity(match.similarity),
+          quotedPhrase: null,
+          source: "retrieval",
+        })),
         extractedSlots: stage1.extractedSlots,
-        source: "retrieval",
       };
       return NextResponse.json(result);
     }
 
-    // Stage 3 needs at least a subject guess to pick fragments for --
-    // a generic cluster match has one, but a true Stage 1 miss doesn't,
-    // so there's nothing for composition to work from either.
+    // Stage 3 needs at least a subject guess to pick fragments for -- a
+    // generic cluster tag has one, but a true Stage 1 miss doesn't, so
+    // there's nothing for composition to work from either. Runs per tag:
+    // only upgrades the canned "matched based on keywords" sentence into
+    // an assembled one, doesn't touch the subject/credit/confidence, which
+    // are still exactly as sure as the underlying keyword match was.
     if (stage1.confident) {
-      const composed = await composeFromFragments(supabase, {
-        subjectArea: stage1.subjectArea,
-        activityType: stage1.extractedSlots.activity_type,
-      });
-      if (composed) {
-        const result: ClassifyResult = {
-          confident: true,
-          subjectArea: stage1.subjectArea,
-          courseTitle: composed.courseTitle,
-          creditValue: stage1.creditValue,
-          reasoning: composed.reasoning,
-          extractedSlots: stage1.extractedSlots,
-          source: "fragment_composition",
-        };
-        return NextResponse.json(result);
-      }
+      const composedTags = await Promise.all(
+        stage1.tags.map(async (tag) => {
+          if (tag.source !== "heuristic_cluster") return tag;
+          const composed = await composeFromFragments(supabase, {
+            subjectArea: tag.subjectArea,
+            activityType: stage1.extractedSlots.activity_type,
+          });
+          if (!composed) return tag;
+          return { ...tag, courseTitle: composed.courseTitle, reasoning: composed.reasoning, source: "fragment_composition" as const };
+        })
+      );
+      const result: ClassifyResult = { confident: true, tags: composedTags, extractedSlots: stage1.extractedSlots };
+      return NextResponse.json(result);
     }
   }
 

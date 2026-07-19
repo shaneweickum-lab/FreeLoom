@@ -4,19 +4,47 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import { ACTIVITY_TYPES, type ActivityType, type PipelineClass, type PipelineEntry, type SourceStage } from "@/lib/types";
+import type {
+  ActivityType,
+  EntryStatus,
+  PipelineClass,
+  PipelineEntry,
+  PipelineEntrySubjectTag,
+  SourceStage,
+  TagConfidence,
+  TagSource,
+} from "@/lib/types";
+import { ACTIVITY_TYPES } from "@/lib/types";
 import type { ClassifyResult, DraftSource } from "@/lib/pipeline/classify";
 import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
+import { sumCredits } from "@/lib/pipeline/credit-calculation";
 
-type EntryWithClass = PipelineEntry & { classes: Pick<PipelineClass, "subject_area" | "title"> | null };
+type EntryWithClass = PipelineEntry & {
+  classes: Pick<PipelineClass, "subject_area" | "title"> | null;
+  entry_subject_tags: PipelineEntrySubjectTag[];
+};
+
+type TagInput = {
+  subjectArea: string;
+  courseTitle: string;
+  creditValue: number;
+  reasoning: string;
+  confidence: TagConfidence;
+  quotedPhrase: string | null;
+  source: TagSource;
+};
 
 const EMPTY_FORM = { rawWordDump: "", activityType: "other" as ActivityType, sourcePlatform: "", minutes: "" };
 const EMPTY_MANUAL_FORM = { subjectArea: "", courseTitle: "", creditValue: "0.25", description: "" };
 const EMPTY_QUICK_ADD = { subjectArea: "", courseTitle: "", creditValue: "0.25", description: "", rawWordDump: "" };
 
-/** Knowledge-base and cluster matches are both a "template" draft in DB terms — only retrieval gets its own tag. */
-function toSourceStage(draftSource: DraftSource): SourceStage {
-  return draftSource === "retrieval" ? "retrieval" : "template";
+/** At least one tag drawn from a past accepted entry (Stage 2) makes the
+ * whole entry a "retrieval" draft in DB terms; every other automated
+ * combination (knowledge base, keyword cluster, fragment composition)
+ * still counts as a "template" derivation, matching the original
+ * single-tag mapping generalized to a tag list. */
+function toSourceStage(tags: { source: DraftSource }[]): SourceStage {
+  return tags.some((tag) => tag.source === "retrieval") ? "retrieval" : "template";
 }
 
 export default function LogPage() {
@@ -75,9 +103,10 @@ function LogPageInner() {
     const supabase = createClient();
     const { data } = await supabase
       .from("entries")
-      .select("*, classes(subject_area, title)")
+      .select("*, classes(subject_area, title), entry_subject_tags(*)")
       .eq("student_id", currentStudent.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("created_at", { foreignTable: "entry_subject_tags", ascending: true });
     setEntries((data as EntryWithClass[]) || []);
     setLoading(false);
   }
@@ -105,6 +134,71 @@ function LogPageInner() {
       .single();
     if (createError || !created) throw createError;
     return created;
+  }
+
+  /**
+   * Creates one entries row plus one entry_subject_tags row per tag. The
+   * legacy singular columns (subject_tags, credit_value, final_description,
+   * final_reasoning, class_id) mirror the *first* tag so pages that haven't
+   * been updated to read the full tag list yet (portfolio, transcript
+   * credit rollups) keep working against real, consistent data --
+   * credit_value specifically is the sum across every tag, not just the
+   * first, so those rollups don't silently under-count a multi-tag entry.
+   */
+  async function insertEntryWithTags(params: {
+    studentId: string;
+    rawWordDump: string;
+    extractedSlots: PipelineEntry["extracted_slots"];
+    tags: TagInput[];
+    status: EntryStatus;
+    sourceStage: SourceStage;
+    generatedFromPipeline: boolean;
+  }) {
+    const supabase = createClient();
+    const [primaryTag] = params.tags;
+    const primaryClass = await findOrCreateClass(params.studentId, primaryTag.subjectArea);
+    const totalCredit = sumCredits(params.tags.map((t) => t.creditValue));
+
+    const { data: entry, error: insertError } = await supabase
+      .from("entries")
+      .insert({
+        class_id: primaryClass.id,
+        student_id: params.studentId,
+        raw_word_dump: params.rawWordDump,
+        extracted_slots: params.extractedSlots,
+        subject_tags: params.tags.map((t) => t.subjectArea),
+        credit_value: totalCredit,
+        generated_description: params.generatedFromPipeline ? primaryTag.courseTitle : null,
+        generated_reasoning: params.generatedFromPipeline ? primaryTag.reasoning : null,
+        final_description: primaryTag.courseTitle,
+        final_reasoning: primaryTag.reasoning,
+        status: params.status,
+        source_stage: params.sourceStage,
+      })
+      .select()
+      .single();
+    if (insertError || !entry) throw insertError;
+
+    for (const tag of params.tags) {
+      // The primary tag's class was already created/found above; every
+      // other tag can belong to a different subject/class entirely.
+      if (tag !== primaryTag) await findOrCreateClass(params.studentId, tag.subjectArea);
+
+      const { error: tagError } = await supabase.from("entry_subject_tags").insert({
+        entry_id: entry.id,
+        student_id: params.studentId,
+        subject_area: tag.subjectArea,
+        course_title: tag.courseTitle,
+        credit_value: tag.creditValue,
+        confidence: tag.confidence,
+        quoted_phrase: tag.quotedPhrase,
+        reasoning: tag.reasoning,
+        source_stage: tag.source,
+      });
+      if (tagError) throw tagError;
+    }
+
+    return entry;
   }
 
   async function submitWordDump(e: React.FormEvent) {
@@ -136,23 +230,15 @@ function LogPageInner() {
         return;
       }
 
-      const supabase = createClient();
-      const pipelineClass = await findOrCreateClass(currentStudent.id, result.subjectArea);
-      const { error: insertError } = await supabase.from("entries").insert({
-        class_id: pipelineClass.id,
-        student_id: currentStudent.id,
-        raw_word_dump: form.rawWordDump,
-        extracted_slots: result.extractedSlots,
-        subject_tags: [result.subjectArea],
-        credit_value: result.creditValue,
-        generated_description: result.courseTitle,
-        generated_reasoning: result.reasoning,
-        final_description: result.courseTitle,
-        final_reasoning: result.reasoning,
+      await insertEntryWithTags({
+        studentId: currentStudent.id,
+        rawWordDump: form.rawWordDump,
+        extractedSlots: result.extractedSlots,
+        tags: result.tags,
         status: "draft",
-        source_stage: toSourceStage(result.source),
+        sourceStage: toSourceStage(result.tags),
+        generatedFromPipeline: true,
       });
-      if (insertError) throw insertError;
 
       setForm(EMPTY_FORM);
       await loadEntries();
@@ -170,26 +256,25 @@ function LogPageInner() {
     setError(null);
     try {
       const supabase = createClient();
-      const pipelineClass = await findOrCreateClass(currentStudent.id, manualForm.subjectArea.trim());
-      const { data: entry, error: insertError } = await supabase
-        .from("entries")
-        .insert({
-          class_id: pipelineClass.id,
-          student_id: currentStudent.id,
-          raw_word_dump: needsReview.rawWordDump,
-          extracted_slots: needsReview.result.extractedSlots,
-          subject_tags: [manualForm.subjectArea.trim()],
-          credit_value: Number(manualForm.creditValue) || 0,
-          generated_description: null,
-          generated_reasoning: null,
-          final_description: manualForm.courseTitle.trim() || manualForm.subjectArea.trim(),
-          final_reasoning: manualForm.description.trim(),
-          status: "accepted",
-          source_stage: "human",
-        })
-        .select()
-        .single();
-      if (insertError || !entry) throw insertError;
+      const entry = await insertEntryWithTags({
+        studentId: currentStudent.id,
+        rawWordDump: needsReview.rawWordDump,
+        extractedSlots: needsReview.result.extractedSlots,
+        tags: [
+          {
+            subjectArea: manualForm.subjectArea.trim(),
+            courseTitle: manualForm.courseTitle.trim() || manualForm.subjectArea.trim(),
+            creditValue: Number(manualForm.creditValue) || 0,
+            reasoning: manualForm.description.trim(),
+            confidence: "human",
+            quotedPhrase: null,
+            source: "human",
+          },
+        ],
+        status: "accepted",
+        sourceStage: "human",
+        generatedFromPipeline: false,
+      });
 
       // This is exactly what grows Stage 3's coverage over time: every
       // parent-resolved entry is logged for later review as a candidate
@@ -201,10 +286,14 @@ function LogPageInner() {
       });
 
       await recordRetrievalCase(supabase, entry.id, needsReview.rawWordDump, {
-        subjectArea: manualForm.subjectArea.trim(),
-        courseTitle: entry.final_description,
-        creditValue: entry.credit_value,
-        reasoning: entry.final_reasoning,
+        tags: [
+          {
+            subjectArea: manualForm.subjectArea.trim(),
+            courseTitle: entry.final_description,
+            creditValue: entry.credit_value,
+            reasoning: entry.final_reasoning,
+          },
+        ],
       });
 
       setNeedsReview(null);
@@ -224,32 +313,35 @@ function LogPageInner() {
     setError(null);
     try {
       const supabase = createClient();
-      const pipelineClass = await findOrCreateClass(currentStudent.id, quickAdd.subjectArea.trim());
-      const { data: entry, error: insertError } = await supabase
-        .from("entries")
-        .insert({
-          class_id: pipelineClass.id,
-          student_id: currentStudent.id,
-          raw_word_dump: quickAdd.rawWordDump.trim(),
-          extracted_slots: {},
-          subject_tags: [quickAdd.subjectArea.trim()],
-          credit_value: Number(quickAdd.creditValue) || 0,
-          generated_description: null,
-          generated_reasoning: null,
-          final_description: quickAdd.courseTitle.trim() || quickAdd.subjectArea.trim(),
-          final_reasoning: quickAdd.description.trim(),
-          status: "accepted",
-          source_stage: "human",
-        })
-        .select()
-        .single();
-      if (insertError || !entry) throw insertError;
+      const entry = await insertEntryWithTags({
+        studentId: currentStudent.id,
+        rawWordDump: quickAdd.rawWordDump.trim(),
+        extractedSlots: { activity_type: null, source_platform: null, time_spent_minutes: null },
+        tags: [
+          {
+            subjectArea: quickAdd.subjectArea.trim(),
+            courseTitle: quickAdd.courseTitle.trim() || quickAdd.subjectArea.trim(),
+            creditValue: Number(quickAdd.creditValue) || 0,
+            reasoning: quickAdd.description.trim(),
+            confidence: "human",
+            quotedPhrase: null,
+            source: "human",
+          },
+        ],
+        status: "accepted",
+        sourceStage: "human",
+        generatedFromPipeline: false,
+      });
 
       await recordRetrievalCase(supabase, entry.id, quickAdd.rawWordDump.trim(), {
-        subjectArea: quickAdd.subjectArea.trim(),
-        courseTitle: entry.final_description,
-        creditValue: entry.credit_value,
-        reasoning: entry.final_reasoning,
+        tags: [
+          {
+            subjectArea: quickAdd.subjectArea.trim(),
+            courseTitle: entry.final_description,
+            creditValue: entry.credit_value,
+            reasoning: entry.final_reasoning,
+          },
+        ],
       });
 
       setQuickAdd(null);
@@ -285,12 +377,40 @@ function LogPageInner() {
         })
         .eq("id", entry.id);
 
-      await recordRetrievalCase(supabase, entry.id, entry.raw_word_dump, {
-        subjectArea: entry.classes?.subject_area ?? entry.subject_tags[0] ?? "",
-        courseTitle: finalDescription ?? "",
-        creditValue,
-        reasoning: finalReasoning ?? "",
-      });
+      // This card only exposes one description/reasoning/credit field each,
+      // pre-dating multi-tag support -- edits here apply to the primary
+      // (first) tag only. Editing other tags on a multi-tag entry is the
+      // reasoning panel's job (Part 4), not this form.
+      const [primaryTag] = entry.entry_subject_tags;
+      if (primaryTag && pending) {
+        await supabase
+          .from("entry_subject_tags")
+          .update({
+            course_title: finalDescription ?? primaryTag.course_title,
+            reasoning: finalReasoning ?? primaryTag.reasoning,
+            credit_value: pending.creditValue ?? primaryTag.credit_value,
+          })
+          .eq("id", primaryTag.id);
+      }
+
+      const tags =
+        entry.entry_subject_tags.length > 0
+          ? entry.entry_subject_tags.map((tag, i) => ({
+              subjectArea: tag.subject_area,
+              courseTitle: i === 0 ? finalDescription ?? tag.course_title : tag.course_title,
+              creditValue: i === 0 ? pending?.creditValue ?? tag.credit_value : tag.credit_value,
+              reasoning: i === 0 ? finalReasoning ?? tag.reasoning : tag.reasoning,
+            }))
+          : [
+              {
+                subjectArea: entry.classes?.subject_area ?? entry.subject_tags[0] ?? "",
+                courseTitle: finalDescription ?? "",
+                creditValue,
+                reasoning: finalReasoning ?? "",
+              },
+            ];
+
+      await recordRetrievalCase(supabase, entry.id, entry.raw_word_dump, { tags });
     }
     setEdits((prev) => {
       const next = { ...prev };
