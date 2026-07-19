@@ -1,6 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
-import LogoMark from "@/components/LogoMark";
+import ParallaxHero from "@/components/ParallaxHero";
 import StitchDivider from "@/components/StitchDivider";
 
 const STEPS = [
@@ -97,84 +96,17 @@ const FEATURES = [
   },
 ];
 
-function HeroBackdrop() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-24 -z-10 h-[42rem] overflow-hidden">
-      <Image
-        src="/IMG_5290.png"
-        alt=""
-        fill
-        preload
-        sizes="100vw"
-        className="object-cover opacity-70"
-      />
-      {/* Fade the photo into the navy background on every edge so it reads as
-          atmosphere behind the hero copy, not a hard-edged inserted photo. */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background" />
-      <div className="absolute inset-0 bg-gradient-to-r from-background via-transparent to-background" />
-    </div>
-  );
-}
-
 export default function Home() {
   return (
     <div className="flex flex-col min-h-full">
-      <nav className="border-b border-navy-line">
-        <div className="mx-auto max-w-5xl flex items-center justify-between px-4 sm:px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-wide">
-            <LogoMark size={36} />
-            <span className="font-serif">FREELOOM</span>
-          </Link>
-          <div className="flex items-center gap-6 text-sm">
-            <a href="#how-it-works" className="hidden sm:inline text-muted hover:text-foreground transition-colors">
-              How it works
-            </a>
-            <a href="#features" className="hidden sm:inline text-muted hover:text-foreground transition-colors">
-              Features
-            </a>
-            <Link
-              href="/login"
-              className="rounded-md border border-gold/40 px-4 py-1.5 font-medium text-gold hover:bg-gold/10 transition-colors"
-            >
-              Sign in
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <ParallaxHero />
 
-      <main className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 flex flex-col gap-24 py-16 sm:py-24">
-        <section className="relative text-center flex flex-col items-center gap-6">
-          <HeroBackdrop />
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-xs font-medium text-gold font-mono">
-            A record-keeper first, a transcript generator second
-          </span>
-          <h1 className="font-serif text-5xl sm:text-6xl font-bold tracking-tight">FreeLoom</h1>
-          <p className="text-xl text-gold font-medium font-serif">Real learning, formally recorded.</p>
-          <p className="max-w-2xl text-muted text-base leading-relaxed">
-            Built for unschooling and wildschooling families: log the informal, unstructured, real
-            stuff your kids actually do, and FreeLoom turns it into a structured class entry with
-            its reasoning shown right alongside it — so you can see exactly why, not just trust that
-            it&apos;s right. A transcript is something you generate from that record when you need one,
-            not the thing you&apos;re stuck maintaining every day.
-          </p>
-          <div className="flex flex-wrap justify-center gap-4 mt-2">
-            <Link
-              href="/login"
-              className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink shadow-sm hover:bg-gold-hover hover:shadow-md transition-all"
-            >
-              Get Started
-            </Link>
-            <a
-              href="#how-it-works"
-              className="rounded-md border border-border bg-surface px-5 py-2.5 font-medium text-foreground shadow-sm hover:bg-surface-hover transition-colors"
-            >
-              See how it works
-            </a>
-          </div>
-          <p className="text-xs text-muted">No credit card required — just a parent account and two minutes.</p>
-        </section>
-
-        <section className="flex flex-col gap-6">
+      {/* Full-bleed opaque background: the parallax hero's image is fixed
+          behind the whole page, so everything below it needs to fully cover
+          it edge-to-edge, not just within the centered max-w-5xl column. */}
+      <div className="relative bg-background">
+        <main className="mx-auto w-full max-w-5xl px-4 sm:px-6 flex flex-col gap-24 py-16 sm:py-24">
+          <section className="flex flex-col gap-6">
           <div className="mx-auto w-full max-w-3xl rounded-xl border border-navy-line shadow-lg overflow-hidden flex flex-col sm:flex-row">
             <div className="p-6 bg-navy-soft sm:w-1/2">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-3 font-mono">What you typed</div>
@@ -201,7 +133,7 @@ export default function Home() {
           <p className="text-center text-xs text-muted">A real draft, from a real entry in FreeLoom&apos;s knowledge base.</p>
         </section>
 
-        <section id="how-it-works" className="flex flex-col gap-10">
+        <section id="how-it-works" className="scroll-mt-24 flex flex-col gap-10">
           <div className="text-center">
             <h2 className="font-serif text-2xl font-bold mb-2">How it works</h2>
             <p className="text-muted text-sm max-w-xl mx-auto">
@@ -231,7 +163,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="features" className="flex flex-col gap-8">
+        <section id="features" className="scroll-mt-24 flex flex-col gap-8">
           <div className="text-center">
             <h2 className="font-serif text-2xl font-bold mb-2">Built for families who want to see the work</h2>
             <p className="text-muted text-sm max-w-xl mx-auto">
@@ -277,14 +209,15 @@ export default function Home() {
             Get Started
           </Link>
         </section>
-      </main>
+        </main>
 
-      <footer className="border-t border-navy-line">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
-          <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
-          <span>A record-keeping platform for unschooling and wildschooling families.</span>
-        </div>
-      </footer>
+        <footer className="border-t border-navy-line">
+          <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
+            <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
+            <span>A record-keeping platform for unschooling and wildschooling families.</span>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
