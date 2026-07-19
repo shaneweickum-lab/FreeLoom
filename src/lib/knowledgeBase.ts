@@ -1,4 +1,4 @@
-import { matchesAnyKeyword } from "@/lib/keywordMatch";
+import { findKeywordMatch } from "@/lib/keywordMatch";
 
 export type KnowledgeBaseEntry = {
   keywords: string[];
@@ -135,11 +135,23 @@ export const KNOWLEDGE_BASE: KnowledgeBaseEntry[] = [
   },
 ];
 
-export function findKnowledgeBaseMatch(description: string): KnowledgeBaseEntry | null {
+export type KnowledgeBaseMatch = { entry: KnowledgeBaseEntry; matchedKeyword: string; matchIndex: number };
+
+/**
+ * Every knowledge-base entry whose keywords appear in the description, not
+ * just the first -- "redstone" and "minecraft" are separate entries with
+ * different subjects, and a word dump can genuinely mention both, which is
+ * exactly the multi-tag case (one activity, more than one real subject).
+ */
+export function findAllKnowledgeBaseMatches(description: string): KnowledgeBaseMatch[] {
+  const matches: KnowledgeBaseMatch[] = [];
   for (const entry of KNOWLEDGE_BASE) {
-    if (matchesAnyKeyword(description, entry.keywords)) {
-      return entry;
-    }
+    const match = findKeywordMatch(description, entry.keywords);
+    if (match) matches.push({ entry, matchedKeyword: match.keyword, matchIndex: match.index });
   }
-  return null;
+  return matches;
+}
+
+export function findKnowledgeBaseMatch(description: string): KnowledgeBaseEntry | null {
+  return findAllKnowledgeBaseMatches(description)[0]?.entry ?? null;
 }

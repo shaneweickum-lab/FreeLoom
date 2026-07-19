@@ -2,7 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/render
 import { GRADE_LEVELS, computeGpa, groupByGradeLevel, type GradableCourse } from "@/lib/gpa";
 import type { LayoutStyle } from "@/lib/types";
 
-const DEFAULT_ACCENT = "#b45309";
+const DEFAULT_ACCENT = "#c7a252";
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 10, fontFamily: "Helvetica", color: "#1a1a1a" },

@@ -6,15 +6,21 @@ describe("classifyWordDump", () => {
     const result = classifyWordDump({ rawWordDump: "Spent the afternoon building factories in Factorio" });
     expect(result.confident).toBe(true);
     if (!result.confident) throw new Error("expected a confident match");
-    expect(result.subjectArea).toBe("Computer Science / Engineering");
-    expect(result.courseTitle).toBe("Applied Logic & Systems Design");
+    expect(result.tags).toHaveLength(1);
+    expect(result.tags[0].subjectArea).toBe("Computer Science / Engineering");
+    expect(result.tags[0].courseTitle).toBe("Applied Logic & Systems Design");
+    expect(result.tags[0].confidence).toBe("high");
+    expect(result.tags[0].source).toBe("knowledge_base");
   });
 
   it("falls back to a broader keyword cluster when no specific game/platform matches", () => {
     const result = classifyWordDump({ rawWordDump: "Read three chapters of a novel before bed" });
     expect(result.confident).toBe(true);
     if (!result.confident) throw new Error("expected a confident match");
-    expect(result.subjectArea).toBe("Language Arts");
+    expect(result.tags).toHaveLength(1);
+    expect(result.tags[0].subjectArea).toBe("Language Arts");
+    expect(result.tags[0].confidence).toBe("medium");
+    expect(result.tags[0].source).toBe("heuristic_cluster");
   });
 
   it("flags for human review instead of guessing when nothing matches", () => {
@@ -29,14 +35,14 @@ describe("classifyWordDump", () => {
     const result = classifyWordDump({ rawWordDump: "Played Minecraft", timeSpentMinutes: 7800 });
     expect(result.confident).toBe(true);
     if (!result.confident) throw new Error("expected a confident match");
-    expect(result.creditValue).toBe(1);
+    expect(result.tags[0].creditValue).toBe(1);
   });
 
   it("uses a small default credit value when no duration is given", () => {
     const result = classifyWordDump({ rawWordDump: "Played chess with a sibling" });
     expect(result.confident).toBe(true);
     if (!result.confident) throw new Error("expected a confident match");
-    expect(result.creditValue).toBe(0.25);
+    expect(result.tags[0].creditValue).toBe(0.25);
   });
 
   it("carries activity_type/source_platform/time_spent_minutes through as extracted slots regardless of match outcome", () => {
@@ -50,6 +56,40 @@ describe("classifyWordDump", () => {
       activity_type: "game",
       source_platform: "Some Platform",
       time_spent_minutes: 45,
+    });
+  });
+
+  describe("multi-tag", () => {
+    it("produces one tag per genuinely distinct subject when a word dump names more than one", () => {
+      // "redstone" (Computer Science) and "Minecraft" (Engineering / Design)
+      // are separate knowledge-base entries with different subjects -- a
+      // real activity can legitimately span both.
+      const result = classifyWordDump({
+        rawWordDump: "Spent 2 hours building a redstone elevator in Minecraft",
+      });
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      const subjects = result.tags.map((t) => t.subjectArea).sort();
+      expect(subjects).toEqual(["Computer Science", "Engineering / Design"].sort());
+    });
+
+    it("deduplicates to one tag when two different matches share the same subject area", () => {
+      // Minecraft and Stationeers are both "Engineering / Design" -- should
+      // not double-credit the same subject from one word dump.
+      const result = classifyWordDump({
+        rawWordDump: "Played Minecraft and also Stationeers today",
+      });
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      const engineeringTags = result.tags.filter((t) => t.subjectArea === "Engineering / Design");
+      expect(engineeringTags).toHaveLength(1);
+    });
+
+    it("captures the exact matched phrase as quotedPhrase", () => {
+      const result = classifyWordDump({ rawWordDump: "Spent the afternoon building factories in Factorio" });
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      expect(result.tags[0].quotedPhrase).toContain("Factorio");
     });
   });
 });

@@ -12,8 +12,8 @@
  * need to change.
  */
 
-import { findKnowledgeBaseMatch } from "@/lib/knowledgeBase";
-import { matchesAnyKeyword } from "@/lib/keywordMatch";
+import { findAllKnowledgeBaseMatches } from "@/lib/knowledgeBase";
+import { extractQuotedPhrase, findKeywordMatch } from "@/lib/keywordMatch";
 
 export type WordDumpInput = {
   rawWordDump: string;
@@ -42,14 +42,36 @@ export type ExtractedSlots = {
  */
 export type DraftSource = "knowledge_base" | "heuristic_cluster" | "retrieval" | "fragment_composition";
 
-export type ConfidentDraft = {
-  confident: true;
+/**
+ * How sure the pipeline is about one subject tag, and why. "high"/"medium"
+ * map to a direct knowledge-base hit vs. a broader keyword-cluster guess;
+ * "low" is Stage 3's generic fragment fallback; "human" is a tag a parent
+ * added themselves via the reasoning panel, which isn't a system estimate
+ * at all and is labeled differently in the UI for exactly that reason.
+ */
+export type TagConfidence = "high" | "medium" | "low" | "human";
+
+/** One subject tag drafted for an entry -- an entry can carry more than one
+ * when the word dump genuinely names more than one distinct subject (e.g.
+ * "redstone" and "Minecraft" are separate knowledge-base entries with
+ * different subjects, and a word dump can mention both). */
+export type SubjectTagDraft = {
   subjectArea: string;
   courseTitle: string;
   creditValue: number;
   reasoning: string;
-  extractedSlots: ExtractedSlots;
+  confidence: TagConfidence;
+  /** The exact phrase in raw_word_dump that produced this tag, or null when
+   * there isn't one (e.g. a retrieval match against a *different* past
+   * entry's text, or Stage 3's generic fragment fallback). */
+  quotedPhrase: string | null;
   source: DraftSource;
+};
+
+export type ConfidentDraft = {
+  confident: true;
+  tags: SubjectTagDraft[];
+  extractedSlots: ExtractedSlots;
 };
 
 export type NeedsHumanReview = {
@@ -91,8 +113,33 @@ const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
   { keywords: ["volunteer", "community", "helped", "charity"], subjectArea: "Civics / Social Studies", courseTitle: "Community Engagement & Civics" },
 ];
 
-function findHeuristicCluster(description: string): HeuristicCluster | null {
-  return HEURISTIC_CLUSTERS.find((cluster) => matchesAnyKeyword(description, cluster.keywords)) ?? null;
+type HeuristicClusterMatch = { cluster: HeuristicCluster; matchedKeyword: string; matchIndex: number };
+
+function findAllHeuristicClusters(description: string): HeuristicClusterMatch[] {
+  const matches: HeuristicClusterMatch[] = [];
+  for (const cluster of HEURISTIC_CLUSTERS) {
+    const match = findKeywordMatch(description, cluster.keywords);
+    if (match) matches.push({ cluster, matchedKeyword: match.keyword, matchIndex: match.index });
+  }
+  return matches;
+}
+
+/**
+ * Keeps only the first match per subject area. Two different knowledge-base
+ * entries (or heuristic clusters) can share a subject -- Minecraft and
+ * Stationeers are both "Engineering / Design" -- and a word dump mentioning
+ * both shouldn't produce two tags double-crediting the same subject. Real
+ * multi-tag cases are distinct subjects (e.g. "redstone" -> Computer
+ * Science, "Minecraft" -> Engineering / Design in the same sentence).
+ */
+function dedupeBySubject<T>(matches: T[], getSubjectArea: (match: T) => string): T[] {
+  const seen = new Set<string>();
+  return matches.filter((match) => {
+    const subjectArea = getSubjectArea(match);
+    if (seen.has(subjectArea)) return false;
+    seen.add(subjectArea);
+    return true;
+  });
 }
 
 /**
@@ -123,29 +170,43 @@ export function classifyWordDump(input: WordDumpInput): ClassifyResult {
     time_spent_minutes: input.timeSpentMinutes ?? null,
   };
 
-  const kbMatch = findKnowledgeBaseMatch(input.rawWordDump);
-  if (kbMatch) {
+  const kbMatches = dedupeBySubject(
+    findAllKnowledgeBaseMatches(input.rawWordDump),
+    (m) => m.entry.subjectArea
+  );
+  if (kbMatches.length > 0) {
     return {
       confident: true,
-      subjectArea: kbMatch.subjectArea,
-      courseTitle: kbMatch.courseTitle,
-      creditValue: estimateCreditValue(input.timeSpentMinutes, kbMatch.baseCreditHours),
-      reasoning: kbMatch.rationale,
+      tags: kbMatches.map(({ entry, matchedKeyword, matchIndex }) => ({
+        subjectArea: entry.subjectArea,
+        courseTitle: entry.courseTitle,
+        creditValue: estimateCreditValue(input.timeSpentMinutes, entry.baseCreditHours),
+        reasoning: entry.rationale,
+        confidence: "high",
+        quotedPhrase: extractQuotedPhrase(input.rawWordDump, { keyword: matchedKeyword, index: matchIndex }),
+        source: "knowledge_base",
+      })),
       extractedSlots,
-      source: "knowledge_base",
     };
   }
 
-  const cluster = findHeuristicCluster(input.rawWordDump);
-  if (cluster) {
+  const clusterMatches = dedupeBySubject(
+    findAllHeuristicClusters(input.rawWordDump),
+    (m) => m.cluster.subjectArea
+  );
+  if (clusterMatches.length > 0) {
     return {
       confident: true,
-      subjectArea: cluster.subjectArea,
-      courseTitle: cluster.courseTitle,
-      creditValue: estimateCreditValue(input.timeSpentMinutes, 0.1),
-      reasoning: `Matched to ${cluster.subjectArea.toLowerCase()} based on keywords in the activity description.`,
+      tags: clusterMatches.map(({ cluster, matchedKeyword, matchIndex }) => ({
+        subjectArea: cluster.subjectArea,
+        courseTitle: cluster.courseTitle,
+        creditValue: estimateCreditValue(input.timeSpentMinutes, 0.1),
+        reasoning: `Matched to ${cluster.subjectArea.toLowerCase()} based on keywords in the activity description.`,
+        confidence: "medium",
+        quotedPhrase: extractQuotedPhrase(input.rawWordDump, { keyword: matchedKeyword, index: matchIndex }),
+        source: "heuristic_cluster",
+      })),
       extractedSlots,
-      source: "heuristic_cluster",
     };
   }
 

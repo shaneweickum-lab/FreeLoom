@@ -17,11 +17,13 @@ import { vectorizeWordDump } from "@/lib/pipeline/vectorize";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Supa = SupabaseClient<any>;
 
+/** One subject tag as it was actually accepted -- the shape a retrieval
+ * match hands back is exactly what a future similar word dump should draft
+ * again. Plural now: an accepted entry can carry more than one subject
+ * tag (see classify.ts), and a retrieval match reuses every one of them,
+ * not just the first. */
 export type AcceptedOutputSnapshot = {
-  subjectArea: string;
-  courseTitle: string;
-  creditValue: number;
-  reasoning: string;
+  tags: { subjectArea: string; courseTitle: string; creditValue: number; reasoning: string }[];
 };
 
 export type RetrievalMatch = {

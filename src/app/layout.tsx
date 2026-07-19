@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
-import NavBar from "@/components/NavBar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
+  weight: "variable",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  weight: "variable",
+  subsets: ["latin"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-plex-mono",
+  weight: ["400", "500", "600"],
   subsets: ["latin"],
 });
 
@@ -26,18 +33,17 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${fraunces.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <NavBar />
-        <main className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 py-8 sm:py-10">{children}</main>
-        <footer className="border-t border-border">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
-            <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
-            <span>A record-keeping platform for unschooling and wildschooling families.</span>
-          </div>
-        </footer>
-      </body>
+      {/*
+        No shared nav/footer here on purpose: the landing page and the
+        authenticated app have genuinely different chrome (a self-contained
+        marketing nav with anchor links vs. the app's own left rail), so
+        each route group supplies its own instead of one wrapper trying to
+        serve both. See src/app/(app)/layout.tsx (AppRail) and
+        src/app/page.tsx.
+      */}
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

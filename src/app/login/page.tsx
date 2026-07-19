@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -59,12 +60,15 @@ function LoginForm() {
   }
 
   return (
-    <div className="mx-auto max-w-sm flex flex-col gap-8 py-16">
+    <div className="mx-auto max-w-sm flex flex-col gap-8 py-16 px-4 sm:px-6">
       <div className="text-center">
-        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-white text-xl font-bold mb-4">
+        <Link
+          href="/"
+          className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-ink text-xl font-bold mb-4"
+        >
           F
-        </span>
-        <h1 className="text-2xl font-bold">{mode === "signin" ? "Sign in" : "Create your parent account"}</h1>
+        </Link>
+        <h1 className="text-2xl font-bold font-serif">{mode === "signin" ? "Sign in" : "Create your parent account"}</h1>
         <p className="text-muted text-sm mt-2">
           {mode === "signin"
             ? "One account for your whole family."

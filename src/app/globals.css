@@ -1,15 +1,38 @@
 @import "tailwindcss";
 
+/*
+ * Woven navy/gold/violet identity, ceremonial-but-clean. Two tiers of tokens
+ * on purpose:
+ *   - Semantic tokens (background/surface/foreground/muted/border) so every
+ *     existing component that already uses bg-background/bg-surface/
+ *     text-muted/border-border etc. re-themes automatically, no per-file edits.
+ *   - The brief's explicitly-named tokens (navy-deep/navy/navy-soft/navy-line,
+ *     parchment/parchment-line, ink/ink-soft, gold-bright, violet-soft) for new
+ *     components that need precise control -- most notably "formal record"
+ *     parchment cards, which are light-on-dark islands and need their own
+ *     ink-on-parchment text color regardless of the app's dark theme.
+ */
 :root {
-  --background: #f7f5f0;
-  --surface: #ffffff;
-  --surface-hover: #efeade;
-  --foreground: #211d17;
-  --muted: #6b6459;
-  --gold: #b45309;
-  --gold-hover: #92400e;
-  --violet: #6d28d9;
-  --border: #e6e1d5;
+  --navy-deep: #0a0d1c;
+  --navy: #141935;
+  --navy-soft: #1c2242;
+  --navy-line: #2b3260;
+  --gold: #c7a252;
+  --gold-bright: #e6c878;
+  --violet: #8968c9;
+  --violet-soft: #b09cdc;
+  --parchment: #f7f2e6;
+  --parchment-line: #e3d6b8;
+  --ink: #2c2620;
+  --ink-soft: #6b6153;
+
+  --background: var(--navy-deep);
+  --surface: var(--navy-soft);
+  --surface-hover: #242b52;
+  --foreground: #ece8de;
+  --muted: #9b96b3;
+  --gold-hover: var(--gold-bright);
+  --border: var(--navy-line);
 }
 
 @theme inline {
@@ -20,10 +43,21 @@
   --color-muted: var(--muted);
   --color-gold: var(--gold);
   --color-gold-hover: var(--gold-hover);
+  --color-gold-bright: var(--gold-bright);
   --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
   --color-border: var(--border);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-navy-deep: var(--navy-deep);
+  --color-navy: var(--navy);
+  --color-navy-soft: var(--navy-soft);
+  --color-navy-line: var(--navy-line);
+  --color-parchment: var(--parchment);
+  --color-parchment-line: var(--parchment-line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-fraunces);
+  --font-mono: var(--font-plex-mono);
 }
 
 body {
@@ -36,6 +70,19 @@ body {
   color: #fff;
 }
 
+/* Explicit focus-visible ring rather than removing the browser default --
+   the default blue outline still shows up if this fails to match a given
+   element, it's never silently stripped. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
 .input {
   @apply w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors;
 }
@@ -43,8 +90,12 @@ body {
   @apply border-gold ring-2 ring-gold/15;
 }
 
+/* text-ink, not text-white: the brief's gold (#c7a252) is light enough that
+   white text falls well short of WCAG AA contrast against it (~2.5:1) --
+   dark ink text clears it easily (~6.9:1) and matches the parchment-card
+   ink convention used elsewhere in this palette. */
 .btn-primary {
-  @apply rounded-md bg-gold px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors;
+  @apply rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink shadow-sm transition-colors;
 }
 .btn-primary:hover:not(:disabled) {
   @apply bg-gold-hover;
@@ -62,5 +113,21 @@ body {
   footer,
   .no-print {
     display: none !important;
+  }
+}
+
+/* Global reduced-motion switch: rather than adding motion-safe: to every
+   transition/animation utility across every component, neutralize all of
+   them here for anyone who's asked for reduced motion. Applies site-wide,
+   including hover transitions and the thread-connector/reasoning-panel
+   animations added in this redesign. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
