@@ -49,7 +49,7 @@ export default function AdminUsersPanel({ admins, currentUserId }: { admins: Adm
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border border-navy-line overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[480px] text-sm">
           <thead className="bg-navy-soft text-muted text-xs uppercase tracking-wide">
             <tr>
               <th className="text-left px-4 py-2 font-medium">Email</th>
