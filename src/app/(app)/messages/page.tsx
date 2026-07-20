@@ -1,4 +1,5 @@
-import MessageThread from "@/components/MessageThread";
+import { Suspense } from "react";
+import MessageThreads from "@/components/MessageThreads";
 
 export default function MessagesPage() {
   return (
@@ -7,7 +8,9 @@ export default function MessagesPage() {
         <h1 className="font-serif text-2xl font-bold">Messages</h1>
         <p className="text-muted text-sm mt-1">A direct line to the FreeLoom team if something&apos;s not working right.</p>
       </div>
-      <MessageThread />
+      <Suspense fallback={null}>
+        <MessageThreads />
+      </Suspense>
     </div>
   );
 }

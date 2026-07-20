@@ -40,6 +40,8 @@ function makeRequest(body: unknown): NextRequest {
 
 const PARENT = { id: "parent-1", email: "parent@example.com" };
 const ADMIN = { id: "admin-1", email: "shane@sowedandrooted.com" };
+const THREAD_ID = "thread-1";
+const PARENT_THREAD = { id: THREAD_ID, parent_user_id: PARENT.id };
 
 describe("POST /api/messages", () => {
   beforeEach(() => {
@@ -51,43 +53,54 @@ describe("POST /api/messages", () => {
 
   it("rejects when signed out", async () => {
     getUserResult = { data: { user: null } };
-    const res = await POST(makeRequest({ body: "hello" }));
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "hello" }));
     expect(res.status).toBe(401);
   });
 
-  it("rejects an empty message", async () => {
+  it("requires a threadId", async () => {
     fromQueue = [{ data: null }]; // requireAdmin's admin_users lookup: not an admin
-    const res = await POST(makeRequest({ body: "   " }));
+    const res = await POST(makeRequest({ body: "hello" }));
     expect(res.status).toBe(400);
   });
 
+  it("rejects an empty message", async () => {
+    fromQueue = [{ data: null }];
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "   " }));
+    expect(res.status).toBe(400);
+  });
+
+  it("404s when the thread doesn't exist", async () => {
+    fromQueue = [{ data: null }, { data: null }];
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "hello" }));
+    expect(res.status).toBe(404);
+  });
+
+  it("403s when a non-admin's threadId belongs to someone else", async () => {
+    fromQueue = [{ data: null }, { data: { id: THREAD_ID, parent_user_id: "someone-else" } }];
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "hello" }));
+    expect(res.status).toBe(403);
+  });
+
   it("lets a parent send into their own thread and fans out notifications to admins via service role", async () => {
-    fromQueue = [{ data: null }, { error: null }];
+    fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: null }];
     adminFromQueue = [
       { data: [{ user_id: "admin-1" }, { user_id: "admin-2" }], error: null },
       { error: null },
     ];
-    const res = await POST(makeRequest({ body: "Something's broken" }));
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "Something's broken" }));
     expect(res.status).toBe(200);
-  });
-
-  it("requires parentUserId when the sender is an admin", async () => {
-    getUserResult = { data: { user: ADMIN } };
-    fromQueue = [{ data: { user_id: ADMIN.id } }];
-    const res = await POST(makeRequest({ body: "reply" }));
-    expect(res.status).toBe(400);
   });
 
   it("lets an admin reply into a specific parent's thread", async () => {
     getUserResult = { data: { user: ADMIN } };
-    fromQueue = [{ data: { user_id: ADMIN.id } }, { error: null }, { error: null }];
-    const res = await POST(makeRequest({ body: "reply", parentUserId: PARENT.id }));
+    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: PARENT_THREAD }, { error: null }, { error: null }];
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "reply" }));
     expect(res.status).toBe(200);
   });
 
   it("500s on a real insert failure", async () => {
-    fromQueue = [{ data: null }, { error: { code: "XX000" } }];
-    const res = await POST(makeRequest({ body: "hello" }));
+    fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: { code: "XX000" } }];
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "hello" }));
     expect(res.status).toBe(500);
   });
 });
@@ -101,27 +114,38 @@ describe("PATCH /api/messages", () => {
 
   it("rejects when signed out", async () => {
     getUserResult = { data: { user: null } };
-    const res = await PATCH(makeRequest({}));
+    const res = await PATCH(makeRequest({ threadId: THREAD_ID }));
     expect(res.status).toBe(401);
   });
 
-  it("marks the admin team's messages read for a parent", async () => {
-    fromQueue = [{ data: null }, { error: null }];
-    const res = await PATCH(makeRequest({}));
-    expect(res.status).toBe(200);
-  });
-
-  it("requires parentUserId for an admin caller", async () => {
-    getUserResult = { data: { user: ADMIN } };
-    fromQueue = [{ data: { user_id: ADMIN.id } }];
+  it("requires a threadId", async () => {
+    fromQueue = [{ data: null }];
     const res = await PATCH(makeRequest({}));
     expect(res.status).toBe(400);
   });
 
+  it("404s when the thread doesn't exist", async () => {
+    fromQueue = [{ data: null }, { data: null }];
+    const res = await PATCH(makeRequest({ threadId: THREAD_ID }));
+    expect(res.status).toBe(404);
+  });
+
+  it("403s when a non-admin's threadId belongs to someone else", async () => {
+    fromQueue = [{ data: null }, { data: { id: THREAD_ID, parent_user_id: "someone-else" } }];
+    const res = await PATCH(makeRequest({ threadId: THREAD_ID }));
+    expect(res.status).toBe(403);
+  });
+
+  it("marks the admin team's messages read for a parent", async () => {
+    fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: null }];
+    const res = await PATCH(makeRequest({ threadId: THREAD_ID }));
+    expect(res.status).toBe(200);
+  });
+
   it("marks a parent's messages read for an admin caller", async () => {
     getUserResult = { data: { user: ADMIN } };
-    fromQueue = [{ data: { user_id: ADMIN.id } }, { error: null }];
-    const res = await PATCH(makeRequest({ parentUserId: PARENT.id }));
+    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: PARENT_THREAD }, { error: null }];
+    const res = await PATCH(makeRequest({ threadId: THREAD_ID }));
     expect(res.status).toBe(200);
   });
 });

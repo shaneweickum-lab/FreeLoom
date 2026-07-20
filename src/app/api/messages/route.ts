@@ -9,25 +9,35 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
+  const threadId = typeof body?.threadId === "string" ? body.threadId : "";
   const messageBody = typeof body?.body === "string" ? body.body.trim() : "";
+  if (!threadId) {
+    return NextResponse.json({ error: "Missing threadId." }, { status: 400 });
+  }
   if (!messageBody) {
     return NextResponse.json({ error: "Message can't be empty." }, { status: 400 });
   }
 
-  // A parent can only ever write into their own thread; only an admin can
-  // target someone else's (client-supplied parentUserId is ignored otherwise).
-  let parentUserId = user.id;
-  if (isAdmin) {
-    const requested = typeof body?.parentUserId === "string" ? body.parentUserId : "";
-    if (!requested) {
-      return NextResponse.json({ error: "Missing parentUserId." }, { status: 400 });
-    }
-    parentUserId = requested;
+  // The thread row is the one source of truth for who it belongs to -- RLS
+  // already means a parent can't even see a thread that isn't theirs, but
+  // this is checked explicitly too rather than trusting any client input.
+  const { data: thread, error: threadError } = await supabase
+    .from("support_threads")
+    .select("id, parent_user_id")
+    .eq("id", threadId)
+    .maybeSingle();
+  if (threadError || !thread) {
+    return NextResponse.json({ error: "Thread not found." }, { status: 404 });
+  }
+  if (!isAdmin && thread.parent_user_id !== user.id) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
 
   const senderRole = isAdmin ? "admin" : "parent";
+  const parentUserId = thread.parent_user_id;
 
   const { error: insertError } = await supabase.from("support_messages").insert({
+    thread_id: threadId,
     parent_user_id: parentUserId,
     sender_user_id: user.id,
     sender_role: senderRole,
@@ -47,7 +57,8 @@ export async function POST(req: NextRequest) {
       type: "message",
       title: "New message from FreeLoom support",
       body: messageBody.slice(0, 140),
-      link_path: "/messages",
+      link_path: `/messages?thread=${threadId}`,
+      related_id: threadId,
     });
     if (notifyError) console.error("notification insert error:", notifyError);
   } else {
@@ -63,16 +74,17 @@ export async function POST(req: NextRequest) {
       console.error("admin roster lookup error:", adminsError);
     } else if (admins && admins.length > 0) {
       // Include the sender's email so the notification itself is
-      // identifiable, and link straight to their per-account admin page --
-      // no lookup step needed since parentUserId (== the sender here) is
-      // already known.
+      // identifiable, and link straight to their per-account admin page and
+      // the specific thread -- no lookup step needed since parentUserId
+      // (== the sender here) is already known.
       const senderEmail = user.email ?? "";
       const rows = admins.map((a) => ({
         user_id: a.user_id,
         type: "message" as const,
         title: senderEmail ? `New message from ${senderEmail}` : "New message from a parent",
         body: messageBody.slice(0, 140),
-        link_path: `/admin/users/${parentUserId}`,
+        link_path: `/admin/users/${parentUserId}?thread=${threadId}`,
+        related_id: threadId,
       }));
       const { error: fanoutError } = await adminClient.from("notifications").insert(rows);
       if (fanoutError) console.error("notification fanout error:", fanoutError);
@@ -89,13 +101,21 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  let parentUserId = user.id;
-  if (isAdmin) {
-    const requested = typeof body?.parentUserId === "string" ? body.parentUserId : "";
-    if (!requested) {
-      return NextResponse.json({ error: "Missing parentUserId." }, { status: 400 });
-    }
-    parentUserId = requested;
+  const threadId = typeof body?.threadId === "string" ? body.threadId : "";
+  if (!threadId) {
+    return NextResponse.json({ error: "Missing threadId." }, { status: 400 });
+  }
+
+  const { data: thread, error: threadError } = await supabase
+    .from("support_threads")
+    .select("id, parent_user_id")
+    .eq("id", threadId)
+    .maybeSingle();
+  if (threadError || !thread) {
+    return NextResponse.json({ error: "Thread not found." }, { status: 404 });
+  }
+  if (!isAdmin && thread.parent_user_id !== user.id) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
 
   // A parent marks the admin team's messages read; an admin marks that
@@ -104,7 +124,7 @@ export async function PATCH(req: NextRequest) {
   const { error } = await supabase
     .from("support_messages")
     .update({ read_at: new Date().toISOString() })
-    .eq("parent_user_id", parentUserId)
+    .eq("thread_id", threadId)
     .eq("sender_role", counterpartRole)
     .is("read_at", null);
 
