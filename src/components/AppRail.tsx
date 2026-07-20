@@ -8,6 +8,7 @@ import { useStudents } from "@/lib/studentContext";
 import StudentSwitcher from "@/components/StudentSwitcher";
 import LogoMark from "@/components/LogoMark";
 import NotificationBell from "@/components/NotificationBell";
+import AdminAccessIndicator from "@/components/AdminAccessIndicator";
 import type { User } from "@supabase/supabase-js";
 
 const LINKS = [
@@ -105,6 +106,8 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
         {user && <NotificationBell />}
       </div>
 
+      {user && <AdminAccessIndicator />}
+
       <StudentSwitcher />
 
       <nav className="flex flex-col gap-1 text-sm">
@@ -179,7 +182,8 @@ export default function AppRail() {
           <LogoMark size={28} />
           <span className="font-serif text-sm">FREELOOM</span>
         </Link>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          <AdminAccessIndicator compact />
           <NotificationBell />
           <button
             onClick={() => setMobileOpen((v) => !v)}
