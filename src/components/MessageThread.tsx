@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SupportMessage } from "@/lib/types";
 
@@ -15,6 +15,10 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  // See useNotifications.ts for why this matters: supabase.channel() dedupes
+  // by topic, so two mounted threads for the same thread would otherwise
+  // silently share one channel and only one would actually receive events.
+  const instanceId = useId();
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -61,7 +65,7 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
       if (!ownerId || cancelled) return;
 
       channel = supabase
-        .channel(`support_messages:${ownerId}`)
+        .channel(`support_messages:${ownerId}:${instanceId}`)
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "support_messages", filter: `parent_user_id=eq.${ownerId}` },
@@ -79,7 +83,7 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [parentUserId]);
+  }, [parentUserId, instanceId]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();

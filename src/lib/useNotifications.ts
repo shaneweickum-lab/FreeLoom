@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AppNotification } from "@/lib/types";
 
@@ -11,6 +11,17 @@ import type { AppNotification } from "@/lib/types";
 export function useNotifications(limit: number) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  // AppRail mounts a bell in both the mobile top bar and the desktop rail at
+  // once (one is just visually hidden via CSS, not unmounted), so two hook
+  // instances can be alive simultaneously. supabase.channel() dedupes by
+  // topic name and hands back the SAME channel object for a repeated topic,
+  // and RealtimeChannel.subscribe() only actually joins/registers bindings
+  // the first time (it no-ops while already joined) -- so a second instance
+  // sharing the first's topic would push its "on" binding through .on() but
+  // never get it registered server-side, and its callback would silently
+  // never fire. A per-instance id keeps every hook instance on its own
+  // channel so this can't happen.
+  const instanceId = useId();
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -38,7 +49,7 @@ export function useNotifications(limit: number) {
       if (!userId || cancelled) return;
 
       channel = supabase
-        .channel(`notifications:${userId}`)
+        .channel(`notifications:${userId}:${instanceId}`)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
@@ -62,7 +73,7 @@ export function useNotifications(limit: number) {
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, []);
+  }, [instanceId]);
 
   const markRead = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
