@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import AdminAccountView, { type AdminAccountSnapshot } from "@/components/AdminAccountView";
+import LiveAccessGate from "@/components/LiveAccessGate";
 
 export default async function AdminViewAccountPage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params;
@@ -40,10 +41,25 @@ export default async function AdminViewAccountPage({ params }: { params: Promise
     );
   }
 
+  // The RPC above already required a live approved+unexpired row to have
+  // succeeded at all -- this just fetches that same row's id/expiry so
+  // LiveAccessGate can subscribe to it and close this page out immediately
+  // (no refresh) the moment it's revoked or runs out.
+  const { data: activeRequest } = await supabase
+    .from("account_access_requests")
+    .select("id, expires_at")
+    .eq("target_user_id", userId)
+    .eq("requested_by", user.id)
+    .eq("status", "approved")
+    .gt("expires_at", new Date().toISOString())
+    .order("responded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const snapshot = data as AdminAccountSnapshot;
 
-  return (
-    <div className="flex flex-col gap-6">
+  const content = (
+    <>
       <div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-violet/40 bg-violet/10 px-3 py-1 text-xs font-medium text-violet-soft font-mono">
           Viewing — read only
@@ -56,6 +72,16 @@ export default async function AdminViewAccountPage({ params }: { params: Promise
       </div>
 
       <AdminAccountView snapshot={snapshot} />
-    </div>
+    </>
+  );
+
+  if (!activeRequest) {
+    return <div className="flex flex-col gap-6">{content}</div>;
+  }
+
+  return (
+    <LiveAccessGate requestId={activeRequest.id} initialExpiresAt={activeRequest.expires_at}>
+      {content}
+    </LiveAccessGate>
   );
 }
