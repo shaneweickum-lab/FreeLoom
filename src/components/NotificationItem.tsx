@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useCountdown } from "@/lib/useCountdown";
 import type { AppNotification } from "@/lib/types";
 
 const TYPE_LABEL: Record<AppNotification["type"], string> = {
@@ -9,6 +11,101 @@ const TYPE_LABEL: Record<AppNotification["type"], string> = {
   announcement: "Announcement",
   access_request: "Access request",
 };
+
+type LiveRequest = { status: string; expires_at: string | null } | null;
+
+/** The live status of one account_access_requests row -- pending
+ * (Approve/Deny), approved (a countdown identical in spirit to the admin's
+ * own AccessRequestPanel), or a terminal state. Kept live via Realtime so
+ * an admin's "Close access now" or an auto-expiry shows up here without a
+ * refresh, same as the admin side sees the parent's approval instantly. */
+function AccessRequestStatus({ requestId, onResponded }: { requestId: string; onResponded?: () => void }) {
+  const [request, setRequest] = useState<LiveRequest>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const instanceId = useId();
+  const countdown = useCountdown(request?.status === "approved" ? request.expires_at : null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("account_access_requests")
+      .select("status, expires_at")
+      .eq("id", requestId)
+      .maybeSingle()
+      .then(({ data }) => {
+        setRequest(data);
+        setLoading(false);
+      });
+  }, [requestId]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`account_access_requests:${requestId}:${instanceId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "account_access_requests", filter: `id=eq.${requestId}` },
+        (payload) => {
+          const row = payload.new as { status: string; expires_at: string | null };
+          setRequest({ status: row.status, expires_at: row.expires_at });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [requestId, instanceId]);
+
+  async function respond(action: "approve" | "deny") {
+    setBusy(true);
+    const res = await fetch(`/api/access-requests/${requestId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    setBusy(false);
+    if (res.ok) onResponded?.();
+  }
+
+  if (loading || !request) return null;
+
+  if (request.status === "pending") {
+    return (
+      <div className="flex gap-2 mt-2">
+        <button onClick={() => respond("approve")} disabled={busy} className="btn-primary text-xs px-2 py-1">
+          Approve
+        </button>
+        <button onClick={() => respond("deny")} disabled={busy} className="btn-secondary text-xs px-2 py-1">
+          Deny
+        </button>
+      </div>
+    );
+  }
+
+  if (request.status === "approved") {
+    return (
+      <p className="text-xs mt-1 font-mono">
+        {countdown.expired ? (
+          <span className="text-muted italic">Access has expired.</span>
+        ) : (
+          <span className="text-gold">Admin has read-only access — {countdown.label} remaining</span>
+        )}
+      </p>
+    );
+  }
+
+  if (request.status === "denied") {
+    return <p className="text-xs text-muted mt-1 italic">You denied this request.</p>;
+  }
+
+  if (request.status === "revoked") {
+    return <p className="text-xs text-muted mt-1 italic">Access was closed.</p>;
+  }
+
+  return null;
+}
 
 /** One notification, shared between the bell dropdown and the full
  * /notifications inbox -- only the surrounding chrome differs between the
@@ -24,20 +121,6 @@ export default function NotificationItem({
   onOpenLink?: () => void;
   onDelete?: (id: string) => void;
 }) {
-  const [busy, setBusy] = useState(false);
-
-  async function respond(action: "approve" | "deny") {
-    if (!notification.related_id) return;
-    setBusy(true);
-    const res = await fetch(`/api/access-requests/${notification.related_id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    setBusy(false);
-    if (res.ok) onResponded?.();
-  }
-
   return (
     <div className={`rounded-md p-2 text-sm ${!notification.read_at ? "bg-surface-hover" : ""}`}>
       <div className="flex items-start justify-between gap-2">
@@ -58,18 +141,8 @@ export default function NotificationItem({
       {notification.body && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{notification.body}</p>}
       <p className="text-[10px] text-muted/70 mt-1">{new Date(notification.created_at).toLocaleString()}</p>
 
-      {notification.type === "access_request" && !notification.read_at && (
-        <div className="flex gap-2 mt-2">
-          <button onClick={() => respond("approve")} disabled={busy} className="btn-primary text-xs px-2 py-1">
-            Approve
-          </button>
-          <button onClick={() => respond("deny")} disabled={busy} className="btn-secondary text-xs px-2 py-1">
-            Deny
-          </button>
-        </div>
-      )}
-      {notification.type === "access_request" && notification.read_at && (
-        <p className="text-xs text-muted mt-1 italic">Responded</p>
+      {notification.type === "access_request" && notification.related_id && (
+        <AccessRequestStatus requestId={notification.related_id} onResponded={onResponded} />
       )}
       {notification.type !== "access_request" && notification.link_path && (
         <Link

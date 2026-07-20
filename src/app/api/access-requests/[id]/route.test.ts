@@ -30,6 +30,7 @@ function makeRequest(body: unknown): NextRequest {
 }
 
 const PARENT = { id: "parent-1", email: "parent@example.com" };
+const ADMIN = { id: "admin-1", email: "shane@sowedandrooted.com" };
 
 describe("PATCH /api/access-requests/[id]", () => {
   beforeEach(() => {
@@ -66,14 +67,38 @@ describe("PATCH /api/access-requests/[id]", () => {
   });
 
   it("approves the request and marks its notification read", async () => {
-    fromQueue = [{ data: { id: "req-1" }, error: null }, { error: null }];
+    fromQueue = [{ data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null }, { error: null }];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(200);
   });
 
-  it("supports deny and revoke actions too", async () => {
-    fromQueue = [{ data: { id: "req-1" }, error: null }, { error: null }];
+  it("supports deny too, without sending a close-access notification", async () => {
+    fromQueue = [{ data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null }, { error: null }];
     const res = await callWithId({ action: "deny" });
     expect(res.status).toBe(200);
+    // Only the mark-read update should have run -- no third queued call consumed.
+    expect(fromQueue).toHaveLength(0);
+  });
+
+  it("sends a close-access notification when the requesting admin revokes their own access", async () => {
+    getUserResult = { data: { user: ADMIN } };
+    fromQueue = [
+      { data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null },
+      { error: null }, // mark-read
+      { error: null }, // close-access notification insert
+    ];
+    const res = await callWithId({ action: "revoke" });
+    expect(res.status).toBe(200);
+    expect(fromQueue).toHaveLength(0);
+  });
+
+  it("does not send a close-access notification when a parent revokes their own approval", async () => {
+    fromQueue = [
+      { data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null },
+      { error: null }, // mark-read only -- requested_by !== caller (PARENT), so no extra insert
+    ];
+    const res = await callWithId({ action: "revoke" });
+    expect(res.status).toBe(200);
+    expect(fromQueue).toHaveLength(0);
   });
 });

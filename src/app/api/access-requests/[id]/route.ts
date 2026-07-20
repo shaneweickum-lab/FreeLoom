@@ -24,19 +24,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Invalid action." }, { status: 400 });
   }
 
-  // Real enforcement is RLS (target_user_id = auth.uid(), so only the parent
-  // this request is about can ever update it -- the requesting admin cannot
-  // self-approve) plus the enforce_access_request_transition trigger, which
-  // rejects any transition other than pending->approved/denied or
-  // approved->revoked and computes expires_at server-side regardless of
-  // what the client sends. This route just gives a clear error message
-  // instead of a silently-empty update.
+  // Real enforcement is RLS -- the target parent can approve/deny/revoke
+  // their own row (access_requests_target_update), and separately the
+  // requesting admin can revoke (only revoke -- never approve/deny) their
+  // own already-approved row (access_requests_admin_revoke). Neither policy
+  // lets an admin self-approve. The enforce_access_request_transition
+  // trigger rejects any transition other than pending->approved/denied or
+  // approved->revoked regardless of who's calling, and computes expires_at
+  // server-side. No `.eq("target_user_id", ...)` filter here on purpose --
+  // that would block the admin-revoke path; RLS is what actually decides
+  // who's allowed to touch this row.
   const { data, error } = await supabase
     .from("account_access_requests")
     .update({ status: newStatus })
     .eq("id", id)
-    .eq("target_user_id", user.id)
-    .select("id")
+    .select("id, requested_by, target_user_id")
     .maybeSingle();
 
   if (error) {
@@ -53,6 +55,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .eq("related_id", id)
     .eq("type", "access_request");
   if (notifyError) console.error("notification mark-read error:", notifyError);
+
+  // The admin closing out their own access early is a distinct, purely
+  // informational event -- type "announcement" rather than
+  // "access_request" on purpose, so it behaves like any other one-way
+  // notice (clears via "mark all read", no pending action attached) instead
+  // of being treated as a still-actionable approval request.
+  if (newStatus === "revoked" && data.requested_by === user.id) {
+    const { error: closeNotifyError } = await supabase.from("notifications").insert({
+      user_id: data.target_user_id,
+      type: "announcement",
+      title: "Admin closed out profile access",
+      body: "The admin ended their read-only access to your account early.",
+      link_path: "/dashboard",
+    });
+    if (closeNotifyError) console.error("close-access notification error:", closeNotifyError);
+  }
 
   return NextResponse.json({ ok: true });
 }

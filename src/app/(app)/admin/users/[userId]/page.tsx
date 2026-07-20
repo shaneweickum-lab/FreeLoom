@@ -28,17 +28,19 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
   if (!callerAdminRow) return <p className="text-sm text-muted">Not authorized.</p>;
 
   const adminClient = createAdminClient();
-  const [{ data: targetUserData }, { data: profile }, { data: existingRequest }] = await Promise.all([
+  const [{ data: targetUserData }, { data: profile }, { data: existingRequests }] = await Promise.all([
     adminClient.auth.admin.getUserById(userId),
     supabase.from("school_profiles").select("parent_name, schooling_type").eq("user_id", userId).maybeSingle(),
+    // Plural, and not filtered to this admin -- AccessRequestPanel narrows
+    // to "mine" itself once it knows its own user id, and needs every
+    // admin's requests visible in its realtime feed to stay accurate if
+    // more than one admin is working this account.
     supabase
       .from("account_access_requests")
-      .select("id, status, expires_at, requested_at")
-      .eq("requested_by", user.id)
+      .select("id, status, expires_at, requested_at, requested_by")
       .eq("target_user_id", userId)
       .order("requested_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(10),
   ]);
 
   const targetEmail = targetUserData?.user?.email ?? "Unknown account";
@@ -61,7 +63,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
 
       <div className="flex flex-col gap-2">
         <h2 className="font-serif text-xl font-bold">Account access</h2>
-        <AccessRequestPanel targetUserId={userId} initialRequest={existingRequest ?? null} />
+        <AccessRequestPanel targetUserId={userId} initialRequests={existingRequests ?? []} />
       </div>
 
       <div className="flex flex-col gap-2">
