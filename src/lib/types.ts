@@ -142,3 +142,54 @@ export type AdminUser = {
   approved_by: string | null;
   created_at: string;
 };
+
+/** One message in a parent's shared support thread with the admin team. */
+export type SupportMessage = {
+  id: string;
+  parent_user_id: string;
+  sender_user_id: string;
+  sender_role: "parent" | "admin";
+  body: string;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type AnnouncementPost = {
+  id: string;
+  title: string;
+  body: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type AccessRequestStatus = "pending" | "approved" | "denied" | "expired" | "revoked";
+
+/** A single admin's consent-gated, time-boxed request to view one parent's
+ * account read-only -- see admin_view_account() in the database, which only
+ * succeeds while status='approved' and expires_at is in the future. */
+export type AccountAccessRequest = {
+  id: string;
+  target_user_id: string;
+  requested_by: string;
+  status: AccessRequestStatus;
+  reason: string | null;
+  requested_at: string;
+  responded_at: string | null;
+  expires_at: string | null;
+  last_viewed_at: string | null;
+  created_at: string;
+};
+
+export type NotificationType = "message" | "announcement" | "access_request";
+
+export type AppNotification = {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  link_path: string | null;
+  related_id: string | null;
+  read_at: string | null;
+  created_at: string;
+};

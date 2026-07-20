@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import StudentSwitcher from "@/components/StudentSwitcher";
 import LogoMark from "@/components/LogoMark";
+import NotificationBell from "@/components/NotificationBell";
 import type { User } from "@supabase/supabase-js";
 
 const LINKS = [
@@ -15,6 +16,7 @@ const LINKS = [
   { href: "/log", label: "Learning Log" },
   { href: "/transcript", label: "Transcript" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/messages", label: "Messages" },
 ];
 
 function MenuIcon() {
@@ -93,10 +95,13 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col gap-6 p-4">
-      <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-2.5 font-semibold tracking-wide">
-        <LogoMark size={32} />
-        <span className="font-serif">FREELOOM</span>
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-2.5 font-semibold tracking-wide">
+          <LogoMark size={32} />
+          <span className="font-serif">FREELOOM</span>
+        </Link>
+        {user && <NotificationBell />}
+      </div>
 
       <StudentSwitcher />
 
@@ -168,14 +173,17 @@ export default function AppRail() {
           <LogoMark size={28} />
           <span className="font-serif text-sm">FREELOOM</span>
         </Link>
-        <button
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          aria-expanded={mobileOpen}
-          className="h-9 w-9 flex items-center justify-center rounded-md text-foreground hover:bg-surface-hover"
-        >
-          {mobileOpen ? <CloseIcon /> : <MenuIcon />}
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            className="h-9 w-9 flex items-center justify-center rounded-md text-foreground hover:bg-surface-hover"
+          >
+            {mobileOpen ? <CloseIcon /> : <MenuIcon />}
+          </button>
+        </div>
       </div>
 
       {mobileOpen && (
