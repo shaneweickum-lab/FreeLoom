@@ -126,9 +126,19 @@ export type PipelineEntrySubjectTag = {
 };
 
 /** A landing-page waitlist signup -- public, anonymous, insert-only from the
- * visitor's side; only readable by the admin account (see /admin). */
+ * visitor's side; only readable by an approved admin (see /admin). */
 export type WaitlistSignup = {
   id: string;
   email: string;
+  created_at: string;
+};
+
+/** One row in the admin roster. Any account in this table can read the
+ * waitlist and approve/remove other admins -- see is_admin() in the
+ * database, which every admin-gated RLS policy checks against. */
+export type AdminUser = {
+  user_id: string;
+  email: string;
+  approved_by: string | null;
   created_at: string;
 };
