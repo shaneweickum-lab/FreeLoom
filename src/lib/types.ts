@@ -21,6 +21,7 @@ export type SchoolProfile = {
   user_id: string;
   school_name: string | null;
   parent_name: string | null;
+  state: string | null;
   address: string | null;
   phone: string | null;
   email: string | null;
