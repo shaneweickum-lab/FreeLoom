@@ -1,27 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
+import { WAITLIST_CONFIRMATION_HTML } from "@/lib/email/waitlistConfirmation";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const CONFIRMATION_HTML = `
-<div style="background:#0a0d1c;padding:40px 24px;font-family:Georgia,'Times New Roman',serif;">
-  <div style="max-width:480px;margin:0 auto;background:#f7f2e6;border-radius:12px;padding:32px;color:#2c2620;">
-    <p style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#6b6153;margin:0 0 16px;font-family:'Courier New',monospace;">
-      Platform coming soon
-    </p>
-    <h1 style="font-size:24px;margin:0 0 16px;">You&rsquo;re on the FreeLoom waitlist</h1>
-    <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">
-      Thanks for signing up. FreeLoom is a transcript builder and record-keeper for
-      unschooling and wildschooling families — we&rsquo;ll email you the moment it&rsquo;s
-      ready to open up.
-    </p>
-    <p style="font-size:15px;line-height:1.6;margin:0;color:#6b6153;">
-      Real learning, formally recorded.
-    </p>
-  </div>
-</div>
-`;
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -53,7 +35,7 @@ export async function POST(req: NextRequest) {
         from: "FreeLoom <onboarding@resend.dev>",
         to: email,
         subject: "You're on the FreeLoom waitlist",
-        html: CONFIRMATION_HTML,
+        html: WAITLIST_CONFIRMATION_HTML,
       });
     } catch (err) {
       console.error("Failed to send waitlist confirmation email:", err);
