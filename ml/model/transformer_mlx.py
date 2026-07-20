@@ -1,5 +1,5 @@
 """
-The shared 60M-parameter base model: a standard decoder-only transformer
+The shared ~75M-parameter base model: a standard decoder-only transformer
 (nanoGPT-style) with every nn.Linear replaced by BitLinear (native BitNet
 b1.58 ternary weights, trained from scratch -- not post-hoc quantization).
 

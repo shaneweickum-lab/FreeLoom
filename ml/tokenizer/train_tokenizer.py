@@ -3,7 +3,7 @@ Trains a byte-level BPE tokenizer for FreeLoom's entry-drafting/knowledge-base
 SLM, on the synthetic corpus (ml/data/synthetic_corpus.jsonl) plus the real
 seed examples (ml/data/seed_examples.json).
 
-Small vocabulary on purpose: at 60M parameters, the embedding table
+Small vocabulary on purpose: at ~75M parameters, the embedding table
 (vocab_size * d_model) is a meaningful fraction of total capacity. TinyStories
 used a ~vocab 10K-class range for similar-scale models; this starts at 8K and
 is easy to re-tune once real training data volume is known.

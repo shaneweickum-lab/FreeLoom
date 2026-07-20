@@ -56,15 +56,18 @@ negative-transfer failure mode that a naive shared-head design would risk. The
 application code — which already knows which job it needs — swaps in the right adapter.
 No learned gate, no ambiguity to resolve at inference time.
 
-## 3. Size and architecture: 60M parameters, native BitNet b1.58
+## 3. Size and architecture: ~75M parameters, native BitNet b1.58
 
-- **60M ternary parameters**, trained natively at 1.58 bits (BitNet's `BitLinear` layer,
-  not post-hoc quantization of an existing model).
-- This size is unusually well-evidenced for BitNet specifically: published small-scale
-  BitNet research ("BitNet b1.58 Reloaded") tested ternary models in the 100K–48M
-  parameter range, right at the edge of 60M — much better precedent than the
-  unstudied gap between that research scale and Microsoft's only public checkpoint
-  (2B parameters).
+- **~75M ternary parameters** (876 d_model, 8 layers, 12 heads — see
+  `ml/model/config.py`), trained natively at 1.58 bits (BitNet's `BitLinear` layer, not
+  post-hoc quantization of an existing model). Bumped up from an initial 60M sizing for
+  the MVP; still squarely in the same small-model regime, so the precedent and
+  reasoning below still apply.
+- This size range is unusually well-evidenced for BitNet specifically: published
+  small-scale BitNet research ("BitNet b1.58 Reloaded") tested ternary models in the
+  100K–48M parameter range — the closest real precedent available, well short of
+  Microsoft's only public checkpoint (2B parameters) but the best-documented regime
+  below it.
 - Real-world coherent generation at small scale has separate, strong precedent too:
   the TinyStories research showed models under 50M parameters — even under 10M — produce
   coherent, grammatical text, *provided the training data is narrowed to match the task*
@@ -75,10 +78,17 @@ No learned gate, no ambiguity to resolve at inference time.
   understanding the standard dense-transformer training loop before layering ternary
   weights on top — reading and adapting working reference code is the standard way this
   is actually learned, not a shortcut around learning it.
+- **Training token budget**: 30 tokens/parameter (Chinchilla's ~20 compute-optimal ratio
+  plus a deliberate +10 overtraining margin, the same trade LLaMA made to get a
+  cheaper-to-run model at the cost of extra training compute) — **~2.25B tokens** at
+  75M params (`ml/model/config.py`'s `estimate_token_budget()`). Section 4's data plan
+  needs to actually reach that volume before a full pretraining run is worth
+  committing to; the current 60-example proof-of-concept corpus is several orders of
+  magnitude short of it.
 
 ## 4. Training data: synthetic, style-matched — not a slice of a general web corpus
 
-At 60M parameters, following TinyStories' validated method matters more than following
+At ~75M parameters, following TinyStories' validated method matters more than following
 the "grab a slice of FineWeb-Edu" approach that would make sense at 1B+ scale:
 
 - **Seed material**: the ~15 hand-authored `knowledgeBase.ts` entries and the fragment
@@ -100,7 +110,7 @@ the "grab a slice of FineWeb-Edu" approach that would make sense at 1B+ scale:
 
 ## 5. Training plan on the actual hardware (MacBook Pro, M5, 24GB unified memory)
 
-- Base M5 (not Pro/Max): 10-core GPU, 24GB unified memory, 153.6GB/s bandwidth. At 60M
+- Base M5 (not Pro/Max): 10-core GPU, 24GB unified memory, 153.6GB/s bandwidth. At ~75M
   parameters this is comfortably within budget for both LoRA and full/QAT training —
   meaningfully easier than the 1B-parameter case already sized as workable-but-tighter.
 - No confirmed M5-specific pretraining throughput benchmark exists publicly; Apple
@@ -110,8 +120,10 @@ the "grab a slice of FineWeb-Edu" approach that would make sense at 1B+ scale:
 - **Validate the pipeline at tiny scale first**: a ~10–25M parameter run on a small data
   slice (minutes to hours, not days) to confirm the tokenizer, data loading, BitLinear
   layer, and loss curve all behave correctly, before committing a multi-day run to the
-  full 60M attempt. Standard practice, not a shortcut — catches a pipeline bug in an
-  hour instead of after days of training.
+  full ~75M attempt. Standard practice, not a shortcut — catches a pipeline bug in an
+  hour instead of after days of training. That full run still needs the corpus to
+  actually reach the ~2.25B-token budget in Section 3 first — the tiny-scale check
+  validates the pipeline, not the data volume.
 
 ## 6. Where it plugs into the pipeline
 

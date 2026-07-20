@@ -1,5 +1,5 @@
 """
-Architecture sizing for the shared 60M-parameter BitNet base model.
+Architecture sizing for the shared ~75M-parameter BitNet base model.
 
 Pure-Python arithmetic, no MLX dependency -- verifiable in any environment,
 including this one. The MLX model (transformer_mlx.py) is built directly
@@ -16,7 +16,10 @@ class ModelConfig:
                             # tokenizer at a larger vocab (e.g. 8000) once the
                             # synthetic corpus scales into the thousands, and
                             # update this to match before training the base model.
-    d_model: int = 768
+    d_model: int = 876     # widened from 768 -> ~75M params at n_layers=8/n_heads=12
+                            # (see estimate_param_count below); head_dim=73 isn't a
+                            # power of 2, but MLX's attention only requires
+                            # d_model % n_heads == 0, which this satisfies exactly.
     n_layers: int = 8
     n_heads: int = 12
     mlp_ratio: int = 4
@@ -67,9 +70,31 @@ def estimate_lora_param_count(cfg: ModelConfig, rank: int = LORA_RANK) -> int:
     return cfg.n_layers * projections_per_layer * per_projection
 
 
+# Chinchilla (Hoffmann et al. 2022) found ~20 tokens/parameter compute-optimal.
+# Training past that ratio is well-precedented for small models meant to run
+# cheaply at inference (LLaMA trained well beyond compute-optimal for exactly
+# this reason) -- +10 tokens/parameter here is a deliberate, modest
+# overtraining budget on top of the Chinchilla baseline, not a guess.
+CHINCHILLA_TOKENS_PER_PARAM = 20
+TRAIN_TOKENS_PER_PARAM = CHINCHILLA_TOKENS_PER_PARAM + 10
+
+
+def estimate_token_budget(param_count: int, tokens_per_param: int = TRAIN_TOKENS_PER_PARAM) -> int:
+    """How many training tokens `param_count` calls for at the configured
+    tokens/parameter ratio -- the number a real corpus needs to reach before
+    a full (non-tiny) pretraining run is actually worth committing to."""
+    return param_count * tokens_per_param
+
+
 if __name__ == "__main__":
     params = estimate_param_count(BASE_CONFIG)
     lora_params = estimate_lora_param_count(BASE_CONFIG)
+    token_budget = estimate_token_budget(params)
     print(f"Base model: ~{params:,} parameters ({params / 1e6:.1f}M)")
     print(f"Per-adapter LoRA: ~{lora_params:,} parameters ({lora_params / 1e6:.2f}M)")
     print(f"Two adapters total: ~{2 * lora_params:,} parameters ({2 * lora_params / 1e6:.2f}M)")
+    print(
+        f"Training token budget at {TRAIN_TOKENS_PER_PARAM} tokens/param "
+        f"(Chinchilla's {CHINCHILLA_TOKENS_PER_PARAM} + 10): ~{token_budget:,} tokens "
+        f"({token_budget / 1e9:.2f}B)"
+    )

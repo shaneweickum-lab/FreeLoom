@@ -1,7 +1,7 @@
 # FreeLoom SLM — `ml/`
 
 Implementation of the architecture in [`docs/slm-strategy.md`](../docs/slm-strategy.md):
-one shared ~60M-parameter native BitNet b1.58 base model, trained from scratch, with two
+one shared ~75M-parameter native BitNet b1.58 base model, trained from scratch, with two
 LoRA adapters on top (entry-drafting, knowledge-base-authoring). This directory is a
 separate Python subproject from the Next.js app in `src/` — it has no shared test runner
 or build step with the TS app, and nothing here is imported by production code yet (see
@@ -32,15 +32,27 @@ MacBook Pro this was sized for (see `docs/slm-strategy.md` Section 5).
   examples (`data/synthetic_corpus.jsonl`) covering 12 subject areas. This is a
   proof-of-concept volume, not the "thousands of examples" `docs/slm-strategy.md`
   Section 4 calls for — enough to validate the whole pipeline end-to-end, not enough to
-  actually pretrain a useful 60M-parameter model on yet.
+  actually pretrain a useful 75M-parameter model on yet. Nowhere close, in fact: see the
+  token-budget math below.
 - **Tokenizer**: trained on that small corpus, landed at 1,477 tokens (byte-level BPE
   ran out of distinct merges to learn — expected at this corpus size). Retrain at a
   larger `--vocab-size` (e.g. 8000) once the corpus scales into the thousands, and
   update `model/config.py`'s `vocab_size` to match — the two are required to agree
   (`train_base.py` asserts this at startup).
-- **Model sizing**: `model/config.py` computes ~57.8M base params (768 d_model, 8
-  layers, 12 heads) against the *current* small vocab; this will shift slightly (still
-  ~60M) once the tokenizer is retrained at a realistic vocab size.
+- **Model sizing**: `model/config.py` computes ~75.0M base params (876 d_model, 8
+  layers, 12 heads, head_dim=73) against the *current* small vocab; this will shift
+  slightly once the tokenizer is retrained at a realistic vocab size.
+- **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 30
+  tokens/parameter — Chinchilla's ~20 compute-optimal ratio plus a deliberate +10
+  overtraining margin (same rationale as LLaMA training past compute-optimal for a
+  cheaper-to-run model). At ~75M params that's **~2.25 billion training tokens**. The
+  current 60-example corpus is on the order of a few thousand tokens — several orders
+  of magnitude short. This isn't a data-loading detail to fix later; it's the actual
+  blocker between "the architecture is sized" and "there's anything to train it on."
+  The corpus needs to scale into the hundreds of thousands to millions of examples
+  (synthetic generation per `docs/slm-strategy.md` Section 4, plus real usage data as it
+  accumulates) before a full (non-`--tiny`) pretraining run is worth committing days of
+  Mac time to.
 - **`entry_drafting` adapter**: has real (if small) training data via
   `train/prepare_dataset.py`.
 - **`kb_authoring` adapter**: structurally wired (its own independent LoRA params on the
