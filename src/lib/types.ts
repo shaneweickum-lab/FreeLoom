@@ -17,6 +17,8 @@ export type Student = {
 
 export type LayoutStyle = "formal" | "casual";
 
+export type SchoolingType = "homeschooling" | "unschooling" | "wildschooling";
+
 export type SchoolProfile = {
   user_id: string;
   school_name: string | null;
@@ -28,6 +30,7 @@ export type SchoolProfile = {
   logo_url: string | null;
   accent_color: string | null;
   layout_style: LayoutStyle;
+  schooling_type: SchoolingType | null;
   updated_at: string;
 };
 
@@ -155,11 +158,16 @@ export type SupportMessage = {
   created_at: string;
 };
 
+export type AnnouncementTargetType = "everyone" | "user" | "schooling_type";
+
 export type AnnouncementPost = {
   id: string;
   title: string;
   body: string;
   created_by: string | null;
+  target_type: AnnouncementTargetType;
+  target_user_id: string | null;
+  target_schooling_type: SchoolingType | null;
   created_at: string;
 };
 

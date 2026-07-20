@@ -81,4 +81,43 @@ describe("POST /api/admin/announcements", () => {
     const res = await POST(makeRequest({ title: "New feature", body: "It ships today." }));
     expect(res.status).toBe(200);
   });
+
+  it("rejects an unrecognized audience", async () => {
+    fromQueue = [{ data: { user_id: ADMIN.id } }];
+    const res = await POST(makeRequest({ title: "t", body: "b", targetType: "everyone-in-the-solar-system" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("requires targetUserId when targeting a single user", async () => {
+    fromQueue = [{ data: { user_id: ADMIN.id } }];
+    const res = await POST(makeRequest({ title: "t", body: "b", targetType: "user" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("sends to just the one target user without calling listUsers", async () => {
+    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: { id: "ann-1" }, error: null }, { error: null }];
+    const res = await POST(makeRequest({ title: "t", body: "b", targetType: "user", targetUserId: "parent-1" }));
+    expect(res.status).toBe(200);
+    expect(listUsersMock).not.toHaveBeenCalled();
+  });
+
+  it("requires a valid schooling type when targeting a group", async () => {
+    fromQueue = [{ data: { user_id: ADMIN.id } }];
+    const res = await POST(makeRequest({ title: "t", body: "b", targetType: "schooling_type", targetSchoolingType: "space camp" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("fans out to every account matching the targeted schooling type", async () => {
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: { id: "ann-1" }, error: null },
+      { data: [{ user_id: "u1" }, { user_id: "u2" }], error: null },
+      { error: null },
+    ];
+    const res = await POST(
+      makeRequest({ title: "t", body: "b", targetType: "schooling_type", targetSchoolingType: "unschooling" })
+    );
+    expect(res.status).toBe(200);
+    expect(listUsersMock).not.toHaveBeenCalled();
+  });
 });
