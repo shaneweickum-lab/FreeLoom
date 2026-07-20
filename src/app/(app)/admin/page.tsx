@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import AdminUsersPanel from "@/components/AdminUsersPanel";
 import AnnouncementComposer from "@/components/AnnouncementComposer";
 import FamiliesList, { type FamilyRow } from "@/components/FamiliesList";
+import AdminTabs from "@/components/AdminTabs";
 import type { SchoolingType } from "@/lib/types";
 
 export default async function AdminPage() {
@@ -51,68 +52,89 @@ export default async function AdminPage() {
     .sort((a, b) => a.email.localeCompare(b.email));
 
   return (
-    <div className="flex flex-col gap-10">
-      <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="font-serif text-2xl font-bold">Waitlist</h1>
-          <p className="text-muted text-sm mt-1">
-            {signupsError
-              ? "Couldn't load the waitlist."
-              : `${signups?.length ?? 0} ${signups?.length === 1 ? "person" : "people"} signed up so far.`}
-          </p>
-        </div>
-
-        {!signupsError && signups && signups.length > 0 && (
-          <div className="rounded-lg border border-navy-line overflow-hidden overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-navy-soft text-muted text-xs uppercase tracking-wide">
-                <tr>
-                  <th className="text-left px-4 py-2 font-medium">Email</th>
-                  <th className="text-left px-4 py-2 font-medium">Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {signups.map((s) => (
-                  <tr key={s.id} className="border-t border-navy-line">
-                    <td className="px-4 py-2 font-mono">{s.email}</td>
-                    <td className="px-4 py-2 text-muted">{new Date(s.created_at).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {!signupsError && signups && signups.length === 0 && (
-          <p className="text-sm text-muted">Nobody yet — the waitlist button just shipped.</p>
-        )}
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-serif text-2xl font-bold">Admin</h1>
+        <p className="text-muted text-sm mt-1">Manage the waitlist, admins, families, and announcements.</p>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div>
-          <h2 className="font-serif text-xl font-bold">Admins</h2>
-          <p className="text-muted text-sm mt-1">Anyone approved here can see the waitlist and manage other admins.</p>
-        </div>
-        <AdminUsersPanel admins={admins ?? []} currentUserId={user.id} />
-      </div>
+      <AdminTabs
+        tabs={[
+          {
+            id: "waitlist",
+            label: "Waitlist",
+            badge: signups?.length ?? 0,
+            content: (
+              <div className="flex flex-col gap-4">
+                <p className="text-muted text-sm">
+                  {signupsError
+                    ? "Couldn't load the waitlist."
+                    : `${signups?.length ?? 0} ${signups?.length === 1 ? "person" : "people"} signed up so far.`}
+                </p>
 
-      <div className="flex flex-col gap-2">
-        <div>
-          <h2 className="font-serif text-xl font-bold">Families</h2>
-          <p className="text-muted text-sm mt-1">
-            Click a family to message them, request read-only access, or send them a personal announcement.
-          </p>
-        </div>
-        <FamiliesList families={families} />
-      </div>
+                {!signupsError && signups && signups.length > 0 && (
+                  <div className="rounded-lg border border-navy-line overflow-hidden overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-navy-soft text-muted text-xs uppercase tracking-wide">
+                        <tr>
+                          <th className="text-left px-4 py-2 font-medium">Email</th>
+                          <th className="text-left px-4 py-2 font-medium">Joined</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {signups.map((s) => (
+                          <tr key={s.id} className="border-t border-navy-line">
+                            <td className="px-4 py-2 font-mono">{s.email}</td>
+                            <td className="px-4 py-2 text-muted">{new Date(s.created_at).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
-      <div className="flex flex-col gap-2">
-        <div>
-          <h2 className="font-serif text-xl font-bold">Announcements</h2>
-          <p className="text-muted text-sm mt-1">Send to everyone, or just families of a specific schooling type.</p>
-        </div>
-        <AnnouncementComposer />
-      </div>
+                {!signupsError && signups && signups.length === 0 && (
+                  <p className="text-sm text-muted">Nobody yet — the waitlist button just shipped.</p>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: "admins",
+            label: "Admins",
+            badge: admins?.length ?? 0,
+            content: (
+              <div className="flex flex-col gap-2">
+                <p className="text-muted text-sm">Anyone approved here can see the waitlist and manage other admins.</p>
+                <AdminUsersPanel admins={admins ?? []} currentUserId={user.id} />
+              </div>
+            ),
+          },
+          {
+            id: "families",
+            label: "Families",
+            badge: families.length,
+            content: (
+              <div className="flex flex-col gap-2">
+                <p className="text-muted text-sm">
+                  Click a family to message them, request read-only access, or send them a personal announcement.
+                </p>
+                <FamiliesList families={families} />
+              </div>
+            ),
+          },
+          {
+            id: "announcements",
+            label: "Announcements",
+            content: (
+              <div className="flex flex-col gap-2">
+                <p className="text-muted text-sm">Send to everyone, or just families of a specific schooling type.</p>
+                <AnnouncementComposer />
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
