@@ -106,7 +106,14 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-lg border border-navy-line bg-navy-soft shadow-lg z-40 p-2 flex flex-col gap-1">
+        // The rail is only ~288px wide (w-72), so a 320px dropdown anchored
+        // right-0 would overhang the rail's own left edge and run off the
+        // browser window entirely. Below md (the mobile top bar, where the
+        // bell sits near the *right* edge of a full-width screen) right-0
+        // is correct; at md+ (the desktop rail, where the bell sits near
+        // the right edge of a *narrow* sidebar) it needs to open from the
+        // left instead, extending rightward over the main content.
+        <div className="absolute right-0 md:left-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto rounded-lg border border-navy-line bg-navy-soft shadow-lg z-40 p-2 flex flex-col gap-1">
           {loading && <p className="text-xs text-muted p-2">Loading…</p>}
           {!loading && notifications.length === 0 && <p className="text-xs text-muted p-2">Nothing yet.</p>}
           {notifications.map((n) => (
