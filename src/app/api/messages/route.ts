@@ -62,12 +62,17 @@ export async function POST(req: NextRequest) {
     if (adminsError) {
       console.error("admin roster lookup error:", adminsError);
     } else if (admins && admins.length > 0) {
+      // Include the sender's email -- without it, an admin has no way to
+      // know which parent to look up in the Messages panel to actually
+      // find this thread. link_path carries it too so "View" can jump
+      // straight there instead of just landing on /admin generically.
+      const senderEmail = user.email ?? "";
       const rows = admins.map((a) => ({
         user_id: a.user_id,
         type: "message" as const,
-        title: "New message from a parent",
+        title: senderEmail ? `New message from ${senderEmail}` : "New message from a parent",
         body: messageBody.slice(0, 140),
-        link_path: "/admin",
+        link_path: `/admin?thread_email=${encodeURIComponent(senderEmail)}`,
       }));
       const { error: fanoutError } = await adminClient.from("notifications").insert(rows);
       if (fanoutError) console.error("notification fanout error:", fanoutError);
