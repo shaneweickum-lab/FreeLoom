@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 checkpoints/
 data/prepared/
+data/base_corpus/

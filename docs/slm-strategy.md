@@ -86,27 +86,54 @@ No learned gate, no ambiguity to resolve at inference time.
   committing to; the current 60-example proof-of-concept corpus is several orders of
   magnitude short of it.
 
-## 4. Training data: synthetic, style-matched — not a slice of a general web corpus
+## 4. Training data: two separate pools for two separate jobs
 
-At ~75M parameters, following TinyStories' validated method matters more than following
-the "grab a slice of FineWeb-Edu" approach that would make sense at 1B+ scale:
+At ~75M parameters, the base model's job (general English + broad academic register)
+and the adapters' job (FreeLoom's exact output format) call for genuinely different
+data — conflating them was the original open question here; the settled split:
 
-- **Seed material**: the ~15 hand-authored `knowledgeBase.ts` entries and the fragment
-  library (`fragments`/`composition_rules`) are already (description → structured
-  output) pairs in exactly FreeLoom's target voice and format — too few alone to train
-  on, but the style template for everything else.
-- **Synthetic corpus generation**: use a larger model, one time, offline, to generate a
-  large volume (thousands of examples) of synthetic (activity description → course
-  title + rationale) pairs covering many hobbies/games/subjects, in the same consistent
-  voice as the seed entries. This is knowledge distillation via synthetic data
-  generation — a one-time offline data-authoring aid, not a live production dependency,
-  and it's the specific technique that made TinyStories work at this scale.
+- **Base-pretraining pool — 2.25B tokens, from already-generated open datasets, not a
+  custom scrape**: `ml/data/prepare_base_corpus.py` streams **1.75B tokens from
+  TinyStories** (`roneneldan/TinyStories`, license `cdla-sharing-1.0` — GPT-3.5/4-generated
+  short stories in deliberately simple vocabulary, the direct precedent for "coherent
+  generation is achievable well under 75M params if the data is narrow enough") plus
+  **500M tokens from FineWeb-Edu** (`HuggingFaceFW/fineweb-edu`, `sample-10BT` config,
+  license `odc-by` — real web text filtered to the educational-quality tier by a trained
+  classifier, adding academic-register vocabulary TinyStories' toy-story register never
+  touches). Together these exactly match Section 3's 2.25B-token budget. TinyStories
+  gets the larger share deliberately — its own research finding is that narrow, simple
+  data is what makes small-model coherence achievable, so it should dominate, with
+  FineWeb-Edu mixed in for vocabulary breadth rather than given equal weight.
+  Deliberately **not** a custom scrape of "educational sites and documents" — most such
+  sites are copyrighted and not licensed for training use, and building a scraper would
+  just reinvent the deduplication/quality-filtering work these two datasets already did.
+  Neither dataset is FreeLoom-domain content; they teach the shared base "understands
+  English" competence from Section 2, not FreeLoom's own output format.
+- **Adapter fine-tuning pool — small, custom, FreeLoom-voice specific**: the ~15
+  hand-authored `knowledgeBase.ts` entries and fragment library
+  (`fragments`/`composition_rules`) are already (description → structured output) pairs
+  in exactly FreeLoom's target voice — too few alone to train on, but the style
+  template. `ml/data/generate_synthetic.py` uses a larger model, one time, offline, to
+  generate thousands of synthetic (activity description → course title + rationale)
+  pairs in that same voice — knowledge distillation via synthetic data generation, a
+  one-time offline data-authoring aid, not a live production dependency. This pool stays
+  orders of magnitude smaller than the base-pretraining pool on purpose: it only needs
+  to teach the last-mile task format, not general language competence.
 - **Real data, as it accumulates**: `entries.generated_description`/`generated_reasoning`
   vs. `final_description`/`final_reasoning` (the correction signal) and
   `human_resolutions` joined to `entries` where `source_stage = 'human'` (the highest-value
   cases — things the rule-based pipeline genuinely couldn't handle). Real usage is very
-  low right now, so this supplements the synthetic corpus rather than replacing it in
-  the near term.
+  low right now, so this supplements the adapter fine-tuning pool rather than replacing
+  it in the near term.
+- **Future scale-up, not yet committed to**: once real revenue funds a much larger
+  custom-generated corpus (on the order of tens of billions of tokens), that scale
+  overshoots this 75M-parameter model's Chinchilla+10 budget by roughly an order of
+  magnitude (~30 tokens/param target vs. ~400 tokens/param at 30B tokens) — spent on
+  Benny as currently sized, most of it would go to waste. The two honest paths at that
+  point are scaling the model up to match (Chinchilla+10 at that token count implies
+  something on the order of 1–1.5B params, a genuinely bigger model) or reusing that
+  corpus across several smaller specialized models instead of overtraining one. Decide
+  deliberately when the budget is real, not now.
 
 ## 5. Training plan on the actual hardware (MacBook Pro, M5, 24GB unified memory)
 

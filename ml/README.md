@@ -15,16 +15,21 @@ cleanly along what that container can and can't run:
 | Runs here (Linux, no GPU) | Mac-only (MLX / Apple Silicon) |
 |---|---|
 | `data/generate_synthetic.py` (needs a real `ANTHROPIC_API_KEY`) | `model/transformer_mlx.py` |
-| `tokenizer/train_tokenizer.py` | `model/lora.py` |
-| `model/bitlinear.py` + `model/test_bitlinear.py` | `train/train_base.py` |
-| `model/config.py` | `train/train_adapter.py` |
-| `train/prepare_dataset.py` | `eval/run_eval.py` |
+| `data/prepare_base_corpus.py` (needs real network access to `huggingface.co`) | `model/lora.py` |
+| `tokenizer/train_tokenizer.py` | `train/train_base.py` |
+| `model/bitlinear.py` + `model/test_bitlinear.py` | `train/train_adapter.py` |
+| `model/config.py` | `eval/run_eval.py` |
+| `train/prepare_dataset.py` | |
 | `eval/validate_output.py` + `test_validate_output.py` | |
 
 Confirmed, not assumed: `mlx` installs via pip on Linux x86_64 but its shared library
-(`libmlx.so`) is Apple/Metal-only and fails to import. Everything in the right-hand
-column is written and reviewed but has never actually executed — run it on the M5
-MacBook Pro this was sized for (see `docs/slm-strategy.md` Section 5).
+(`libmlx.so`) is Apple/Metal-only and fails to import. Also confirmed: this container's
+network policy blocks `huggingface.co` outright (`data/prepare_base_corpus.py` was
+written and dry-run verified here against a mocked dataset, but the real pull has never
+executed — no Apple Silicon needed for that one, just open network access). Everything
+in the right-hand column, plus `data/prepare_base_corpus.py`'s real pull, is written and
+reviewed but has never actually executed — run it on the M5 MacBook Pro this was sized
+for (see `docs/slm-strategy.md` Section 5).
 
 ## Current state, honestly
 
@@ -47,12 +52,20 @@ MacBook Pro this was sized for (see `docs/slm-strategy.md` Section 5).
   overtraining margin (same rationale as LLaMA training past compute-optimal for a
   cheaper-to-run model). At ~75M params that's **~2.25 billion training tokens**. The
   current 60-example corpus is on the order of a few thousand tokens — several orders
-  of magnitude short. This isn't a data-loading detail to fix later; it's the actual
-  blocker between "the architecture is sized" and "there's anything to train it on."
-  The corpus needs to scale into the hundreds of thousands to millions of examples
-  (synthetic generation per `docs/slm-strategy.md` Section 4, plus real usage data as it
-  accumulates) before a full (non-`--tiny`) pretraining run is worth committing days of
-  Mac time to.
+  of magnitude short, and it stays that way deliberately: it's the domain-specific
+  entry-drafting fine-tune data, not the base-pretrain corpus.
+- **Base-pretraining corpus plan (not yet pulled)**: `data/prepare_base_corpus.py`
+  streams two already-generated, openly-licensed datasets instead of the small domain
+  corpus for base pretraining — **1.75B tokens from TinyStories** (`roneneldan/TinyStories`,
+  `cdla-sharing-1.0`) + **500M tokens from FineWeb-Edu** (`HuggingFaceFW/fineweb-edu`,
+  `sample-10BT` config, `odc-by`), summing to exactly the 2.25B-token budget above.
+  TinyStories gets the larger share on purpose — its own research finding is that
+  narrow, simple data is what makes small-model coherence achievable, so it should
+  dominate training; FineWeb-Edu is mixed in for academic-register vocabulary breadth,
+  not given equal weight. Read both licenses before shipping a model trained on this
+  data (the script prints both URLs on completion). This has never actually been pulled
+  anywhere this was built — `huggingface.co` is blocked in this container's network
+  policy; run it somewhere with open network access.
 - **`entry_drafting` adapter**: has real (if small) training data via
   `train/prepare_dataset.py`.
 - **`kb_authoring` adapter**: structurally wired (its own independent LoRA params on the
@@ -72,10 +85,18 @@ pip install -r requirements.txt
 ## Run order
 
 ```bash
-# 1. (Already done, artifact committed) Retrain only if the corpus has grown:
+# 0. Pull the base-pretraining corpus (needs open network access to
+#    huggingface.co -- run this on the Mac, not in a network-restricted
+#    sandbox). Writes ~10-15GB of raw text to data/base_corpus/ -- make
+#    sure there's disk headroom before running:
+pip install datasets
+python3 data/prepare_base_corpus.py
+
+# 1. Retrain the tokenizer against the domain corpus + a sample of the
+#    base corpus pulled in step 0:
 python3 tokenizer/train_tokenizer.py --vocab-size 8000
 
-# 2. Tokenize + pack the corpus into training arrays:
+# 2. Tokenize + pack the full corpus (domain + base) into training arrays:
 python3 train/prepare_dataset.py
 
 # 3. Pipeline sanity check FIRST -- small model, same data, minutes not hours.
@@ -114,12 +135,22 @@ wiring is separate follow-up work from this scaffolding pass.
 
 ## Known gaps / next steps
 
+- Actually run `data/prepare_base_corpus.py` somewhere with open network access —
+  written and dry-run verified against a mocked dataset, never run against the real
+  `huggingface.co` datasets (blocked in this container's network policy).
 - Scale `data/synthetic_corpus.jsonl` into the thousands via `data/generate_synthetic.py`
   once a real `ANTHROPIC_API_KEY` is available (this script exists but has never been
   run end-to-end — the key was an empty placeholder in every environment available
-  during this pass).
+  during this pass). This is still the entry-drafting fine-tune data, separate from the
+  base-pretrain corpus above — scaling it further improves the adapter, not the base.
 - Retrain the tokenizer at a production vocab size against the scaled-up corpus, and
   update `model/config.py` to match.
+- Once real revenue funds a much larger custom-generated corpus (discussed but not
+  committed to yet): a 30B-token target is far past this 75M-parameter model's
+  Chinchilla+10 budget (~400 tokens/param vs. the 30 target) — that scale of spend is
+  better matched to a bigger model (~1-1.5B params at 20-30 tokens/param) than to
+  overtraining Benny as currently sized, or to reusing the corpus across several small
+  models rather than one.
 - Build the classical subject-area cross-check from `docs/slm-strategy.md` Section 7
   (this lives in `src/lib/pipeline/`, not `ml/` — it's the existing hashed-vector
   classifier idea, not new ml/ scaffolding).

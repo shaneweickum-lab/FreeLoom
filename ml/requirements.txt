@@ -12,3 +12,9 @@ mlx>=0.18
 # Anthropic API (requires a populated ANTHROPIC_API_KEY). Not needed for
 # anything else in this directory.
 anthropic>=0.40
+
+# Only needed to run ml/data/prepare_base_corpus.py, which streams the
+# TinyStories/FineWeb-Edu base-pretraining corpus from Hugging Face.
+# Requires real network access to huggingface.co -- not needed for
+# anything else in this directory.
+datasets>=2.19
