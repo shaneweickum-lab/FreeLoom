@@ -15,7 +15,11 @@ export default function AdminTabs({ tabs }: { tabs: AdminTab[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div role="tablist" className="flex gap-1 border-b border-navy-line overflow-x-auto">
+      <div
+        role="tablist"
+        className="flex gap-1 border-b border-navy-line overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      >
+
         {tabs.map((tab) => {
           const isActive = tab.id === active?.id;
           return (
