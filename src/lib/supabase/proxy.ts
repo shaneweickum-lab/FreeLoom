@@ -10,6 +10,8 @@ const PROTECTED_PREFIXES = [
   "/students",
   "/admin",
   "/messages",
+  "/notifications",
+  "/settings",
 ];
 
 export async function updateSession(request: NextRequest) {

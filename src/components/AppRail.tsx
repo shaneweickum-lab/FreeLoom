@@ -17,6 +17,8 @@ const LINKS = [
   { href: "/transcript", label: "Transcript" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/messages", label: "Messages" },
+  { href: "/notifications", label: "Notifications" },
+  { href: "/settings", label: "Settings" },
 ];
 
 function MenuIcon() {

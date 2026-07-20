@@ -47,6 +47,40 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
     }).catch(() => {});
   }, [parentUserId]);
 
+  useEffect(() => {
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    async function subscribe() {
+      let ownerId = parentUserId;
+      if (!ownerId) {
+        const { data } = await supabase.auth.getUser();
+        ownerId = data.user?.id;
+      }
+      if (!ownerId || cancelled) return;
+
+      channel = supabase
+        .channel(`support_messages:${ownerId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "support_messages", filter: `parent_user_id=eq.${ownerId}` },
+          (payload) => {
+            const row = payload.new as SupportMessage;
+            setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          }
+        )
+        .subscribe();
+    }
+
+    subscribe();
+
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [parentUserId]);
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!body.trim()) return;
