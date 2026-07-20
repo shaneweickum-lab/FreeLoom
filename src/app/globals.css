@@ -95,10 +95,12 @@ textarea:focus-visible,
    dark ink text clears it easily (~6.9:1) and matches the parchment-card
    ink convention used elsewhere in this palette. */
 .btn-primary {
-  @apply rounded-md bg-gold px-4 py-2 text-sm font-medium text-ink shadow-sm transition-colors;
+  @apply rounded-md px-4 py-2 text-sm font-medium text-ink shadow-sm transition-all;
+  background-image: linear-gradient(135deg, var(--gold), var(--gold-bright));
 }
 .btn-primary:hover:not(:disabled) {
-  @apply bg-gold-hover;
+  @apply shadow-md -translate-y-px;
+  background-image: linear-gradient(135deg, var(--gold-bright), var(--gold));
 }
 .btn-primary:disabled {
   @apply opacity-40 cursor-not-allowed;

@@ -69,6 +69,33 @@ function IconTrendingUp(props: { className?: string }) {
   );
 }
 
+function IconMessage(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+      <path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8l-4 4V6a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+
+function IconBell(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function IconTarget(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="0.75" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const FEATURES = [
   {
     title: "Show-your-work reasoning",
@@ -94,6 +121,21 @@ const FEATURES = [
     title: "Grows with real use",
     body: "Every entry a parent accepts, edits, or writes from scratch feeds back into the system — the drafts get better the more a family actually uses it.",
     icon: IconTrendingUp,
+  },
+  {
+    title: "A direct line to the team",
+    body: "Message us straight from your account, organized into named conversations — not one long, messy thread.",
+    icon: IconMessage,
+  },
+  {
+    title: "Nothing waits for a refresh",
+    body: "Replies and updates show up the instant they happen — no reloading the page to see if someone answered.",
+    icon: IconBell,
+  },
+  {
+    title: "Updates that match how you learn",
+    body: "Tell us if your family homeschools, unschools, or wildschools, and we'll only send you the announcements that are actually relevant.",
+    icon: IconTarget,
   },
 ];
 

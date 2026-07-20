@@ -115,8 +115,10 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
               key={link.href}
               href={link.href}
               onClick={onNavigate}
-              className={`px-3 py-2 rounded-md transition-colors ${
-                active ? "bg-surface-hover text-gold" : "text-muted hover:text-foreground hover:bg-surface-hover"
+              className={`border-l-2 px-3 py-2 transition-colors ${
+                active
+                  ? "border-gold bg-surface-hover text-gold"
+                  : "border-transparent text-muted hover:text-foreground hover:bg-surface-hover"
               }`}
             >
               {link.label}
@@ -127,8 +129,10 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
           <Link
             href="/admin"
             onClick={onNavigate}
-            className={`px-3 py-2 rounded-md transition-colors ${
-              pathname === "/admin" ? "bg-surface-hover text-violet-soft" : "text-muted hover:text-foreground hover:bg-surface-hover"
+            className={`border-l-2 px-3 py-2 transition-colors ${
+              pathname === "/admin"
+                ? "border-violet-soft bg-surface-hover text-violet-soft"
+                : "border-transparent text-muted hover:text-foreground hover:bg-surface-hover"
             }`}
           >
             Admin
