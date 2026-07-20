@@ -20,6 +20,7 @@ const EMPTY_FORM = {
   phone: "",
   email: "",
   schoolingType: "" as "" | "homeschooling" | "unschooling" | "wildschooling",
+  hideStudentNames: false,
 };
 
 const SCHOOLING_TYPE_OPTIONS = [
@@ -53,6 +54,7 @@ export default function SettingsPage() {
         phone: profile?.phone ?? "",
         email: profile?.email ?? "",
         schoolingType: profile?.schooling_type ?? "",
+        hideStudentNames: profile?.hide_student_names ?? false,
       });
       setLoading(false);
     }
@@ -84,6 +86,7 @@ export default function SettingsPage() {
       phone: form.phone || null,
       email: form.email || null,
       schooling_type: form.schoolingType || null,
+      hide_student_names: form.hideStudentNames,
       updated_at: new Date().toISOString(),
     });
 
@@ -148,6 +151,26 @@ export default function SettingsPage() {
             Lets FreeLoom send announcements just to families like yours, instead of everyone.
           </span>
         </label>
+
+        <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-1">
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
+              checked={form.hideStudentNames}
+              onChange={(e) => {
+                setForm({ ...form, hideStudentNames: e.target.checked });
+                setSaved(false);
+              }}
+            />
+            <span>Hide my children&apos;s names from admin</span>
+          </label>
+          <span className="text-muted/70 text-[11px] pl-6">
+            If an admin ever gets approved read-only access to help with an issue, they&apos;ll see everything else on
+            the account as usual, but each student shows up as &quot;Student 1&quot;, &quot;Student 2&quot;, etc. instead
+            of their real name.
+          </span>
+        </div>
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted text-xs">Address</span>
