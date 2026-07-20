@@ -99,7 +99,7 @@ function IconTarget(props: { className?: string }) {
 const FEATURES = [
   {
     title: "Show-your-work reasoning",
-    body: "Every class entry comes with a plain-language explanation of why that activity counts — nothing is a black box you're asked to take on faith.",
+    body: "Every class entry comes with a plain-language explanation of why that activity counts.",
     icon: IconReasoning,
   },
   {
@@ -269,7 +269,7 @@ export default function Home() {
         <footer className="border-t border-navy-line">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
             <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
-            <span>A record-keeping platform for unschooling and wildschooling families.</span>
+            <span>A record-keeping platform for Alternative schooling families.</span>
           </div>
         </footer>
       </div>
