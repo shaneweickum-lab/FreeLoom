@@ -147,9 +147,21 @@ export type AdminUser = {
   created_at: string;
 };
 
-/** One message in a parent's shared support thread with the admin team. */
+/** One named conversation with the admin team -- a parent can have several
+ * (e.g. "Billing", "Transcript question"), each with its own messages. */
+export type SupportThread = {
+  id: string;
+  parent_user_id: string;
+  subject: string;
+  created_by: string;
+  created_at: string;
+  last_message_at: string;
+};
+
+/** One message within a support thread. */
 export type SupportMessage = {
   id: string;
+  thread_id: string;
   parent_user_id: string;
   sender_user_id: string;
   sender_role: "parent" | "admin";

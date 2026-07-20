@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import MessageThread from "@/components/MessageThread";
+import MessageThreads from "@/components/MessageThreads";
 import UserAnnouncementForm from "@/components/UserAnnouncementForm";
 import AccessRequestPanel from "@/components/AccessRequestPanel";
 
@@ -65,7 +66,9 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
 
       <div className="flex flex-col gap-2">
         <h2 className="font-serif text-xl font-bold">Messages</h2>
-        <MessageThread parentUserId={userId} />
+        <Suspense fallback={null}>
+          <MessageThreads parentUserId={userId} />
+        </Suspense>
       </div>
 
       <div className="flex flex-col gap-2">

@@ -4,16 +4,16 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SupportMessage } from "@/lib/types";
 
-/** The shared support thread UI. Omit `parentUserId` for a parent viewing
- * their own thread; admins pass the target parent's user id. Messages align
- * by sender_role (parent left, admin right) rather than "did the current
- * viewer send this" -- any admin can reply in the shared inbox, so aligning
- * by role reads more sensibly than aligning by exact sender identity. */
-export default function MessageThread({ parentUserId }: { parentUserId?: string }) {
+/** Messages within a single thread. Aligns by sender_role (parent left,
+ * admin right) rather than "did the current viewer send this" -- any admin
+ * can reply in the shared inbox, so aligning by role reads more sensibly
+ * than aligning by exact sender identity. */
+export default function MessageThread({ threadId, onCleared }: { threadId: string; onCleared?: () => void }) {
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [error, setError] = useState("");
   // See useNotifications.ts for why this matters: supabase.channel() dedupes
   // by topic, so two mounted threads for the same thread would otherwise
@@ -22,21 +22,14 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setLoading(false);
-      return;
-    }
     const { data } = await supabase
       .from("support_messages")
       .select("*")
-      .eq("parent_user_id", parentUserId ?? user.id)
+      .eq("thread_id", threadId)
       .order("created_at", { ascending: true });
     setMessages(data ?? []);
     setLoading(false);
-  }, [parentUserId]);
+  }, [threadId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -47,43 +40,28 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
     fetch("/api/messages", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parentUserId ? { parentUserId } : {}),
+      body: JSON.stringify({ threadId }),
     }).catch(() => {});
-  }, [parentUserId]);
+  }, [threadId]);
 
   useEffect(() => {
     const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    let cancelled = false;
-
-    async function subscribe() {
-      let ownerId = parentUserId;
-      if (!ownerId) {
-        const { data } = await supabase.auth.getUser();
-        ownerId = data.user?.id;
-      }
-      if (!ownerId || cancelled) return;
-
-      channel = supabase
-        .channel(`support_messages:${ownerId}:${instanceId}`)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "support_messages", filter: `parent_user_id=eq.${ownerId}` },
-          (payload) => {
-            const row = payload.new as SupportMessage;
-            setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
-          }
-        )
-        .subscribe();
-    }
-
-    subscribe();
+    const channel = supabase
+      .channel(`support_messages:${threadId}:${instanceId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "support_messages", filter: `thread_id=eq.${threadId}` },
+        (payload) => {
+          const row = payload.new as SupportMessage;
+          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+        }
+      )
+      .subscribe();
 
     return () => {
-      cancelled = true;
-      if (channel) supabase.removeChannel(channel);
+      supabase.removeChannel(channel);
     };
-  }, [parentUserId, instanceId]);
+  }, [threadId, instanceId]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -93,7 +71,7 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
     const res = await fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parentUserId ? { parentUserId, body } : { body }),
+      body: JSON.stringify({ threadId, body }),
     });
     const data = await res.json();
     setSending(false);
@@ -105,12 +83,35 @@ export default function MessageThread({ parentUserId }: { parentUserId?: string 
     load();
   }
 
+  async function handleClear() {
+    if (!confirm("Clear every message in this conversation? This can't be undone.")) return;
+    setClearing(true);
+    const supabase = createClient();
+    const { error: deleteError } = await supabase.from("support_messages").delete().eq("thread_id", threadId);
+    setClearing(false);
+    if (deleteError) {
+      setError("Couldn't clear this conversation.");
+      return;
+    }
+    setMessages([]);
+    onCleared?.();
+  }
+
   if (loading) {
     return <p className="text-sm text-muted">Loading messages…</p>;
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <button
+          onClick={handleClear}
+          disabled={clearing || messages.length === 0}
+          className="text-xs text-muted hover:text-red-400 transition-colors disabled:opacity-40 disabled:hover:text-muted"
+        >
+          {clearing ? "Clearing…" : "Clear conversation"}
+        </button>
+      </div>
       <div className="flex flex-col gap-2 max-h-96 overflow-y-auto rounded-lg border border-navy-line bg-navy-soft p-4">
         {messages.length === 0 && (
           <p className="text-sm text-muted">
