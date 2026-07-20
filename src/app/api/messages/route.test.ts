@@ -82,7 +82,7 @@ describe("POST /api/messages", () => {
   });
 
   it("lets a parent send into their own thread and fans out notifications to admins via service role", async () => {
-    fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: null }];
+    fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: null }, { data: { parent_name: "Jane Doe" } }];
     adminFromQueue = [
       { data: [{ user_id: "admin-1" }, { user_id: "admin-2" }], error: null },
       { error: null },
