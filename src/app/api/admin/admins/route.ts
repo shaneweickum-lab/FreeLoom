@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/adminAuth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { supabase, user: null, isAdmin: false };
-
-  const { data } = await supabase.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle();
-  return { supabase, user, isAdmin: !!data };
-}
 
 export async function POST(req: NextRequest) {
   const { supabase, user, isAdmin } = await requireAdmin();
