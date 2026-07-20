@@ -73,15 +73,21 @@ export async function POST(req: NextRequest) {
     if (adminsError) {
       console.error("admin roster lookup error:", adminsError);
     } else if (admins && admins.length > 0) {
-      // Include the sender's email so the notification itself is
-      // identifiable, and link straight to their per-account admin page and
-      // the specific thread -- no lookup step needed since parentUserId
-      // (== the sender here) is already known.
-      const senderEmail = user.email ?? "";
+      // Identify the sender by the name they set in their profile, not their
+      // email -- falls back to email, then a generic label, if they haven't
+      // set one. Link straight to their per-account admin page and the
+      // specific thread -- no lookup step needed since parentUserId (== the
+      // sender here) is already known.
+      const { data: senderProfile } = await supabase
+        .from("school_profiles")
+        .select("parent_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const senderLabel = senderProfile?.parent_name || user.email || "";
       const rows = admins.map((a) => ({
         user_id: a.user_id,
         type: "message" as const,
-        title: senderEmail ? `New message from ${senderEmail}` : "New message from a parent",
+        title: senderLabel ? `New message from ${senderLabel}` : "New message from a parent",
         body: messageBody.slice(0, 140),
         link_path: `/admin/users/${parentUserId}?thread=${threadId}`,
         related_id: threadId,
