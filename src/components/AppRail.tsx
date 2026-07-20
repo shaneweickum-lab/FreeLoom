@@ -68,10 +68,20 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
   const { subjectLedger } = useStudents();
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+      if (!data.user) return;
+      supabase
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", data.user.id)
+        .maybeSingle()
+        .then(({ data: adminRow }) => setIsAdmin(!!adminRow));
+    });
   }, []);
 
   async function signOut() {
@@ -106,6 +116,17 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
             </Link>
           );
         })}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            onClick={onNavigate}
+            className={`px-3 py-2 rounded-md transition-colors ${
+              pathname === "/admin" ? "bg-surface-hover text-violet-soft" : "text-muted hover:text-foreground hover:bg-surface-hover"
+            }`}
+          >
+            Admin
+          </Link>
+        )}
       </nav>
 
       {subjectLedger.length > 0 && (
