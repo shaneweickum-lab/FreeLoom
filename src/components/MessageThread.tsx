@@ -1,8 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SupportMessage } from "@/lib/types";
+
+type SenderRole = "parent" | "admin";
+
+const STOP_TYPING_AFTER_MS = 2500;
+const REMOTE_TYPING_EXPIRES_MS = 4000;
+
+function TypingDots({ fromAdmin }: { fromAdmin: boolean }) {
+  return (
+    <div className={`flex ${fromAdmin ? "justify-end" : "justify-start"}`}>
+      <div className={`flex items-center gap-1 rounded-lg px-3 py-2.5 ${fromAdmin ? "bg-violet/15" : "bg-gold/15"}`}>
+        <span className="h-1.5 w-1.5 rounded-full bg-foreground/50 animate-bounce [animation-delay:-0.3s]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-foreground/50 animate-bounce [animation-delay:-0.15s]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-foreground/50 animate-bounce" />
+      </div>
+    </div>
+  );
+}
 
 /** Messages within a single thread. Aligns by sender_role (parent left,
  * admin right) rather than "did the current viewer send this" -- any admin
@@ -15,10 +32,23 @@ export default function MessageThread({ threadId, onCleared }: { threadId: strin
   const [sending, setSending] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [error, setError] = useState("");
+  const [myRole, setMyRole] = useState<SenderRole | null>(null);
+  const [typingRole, setTypingRole] = useState<SenderRole | null>(null);
   // See useNotifications.ts for why this matters: supabase.channel() dedupes
   // by topic, so two mounted threads for the same thread would otherwise
   // silently share one channel and only one would actually receive events.
   const instanceId = useId();
+  // The typing channel is intentionally shared (no instanceId) -- it needs
+  // the SAME topic across the two different people's browsers so their
+  // broadcasts actually reach each other. That's safe here because only one
+  // MessageThread is ever mounted per browser tab at a time (MessageThreads
+  // remounts on selection via `key`), unlike the bell's always-duplicated
+  // mount that caused the postgres_changes bug this fix pattern guards
+  // against elsewhere.
+  const typingChannelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -35,6 +65,15 @@ export default function MessageThread({ threadId, onCleared }: { threadId: strin
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: adminRow } = await supabase.from("admin_users").select("user_id").eq("user_id", data.user.id).maybeSingle();
+      setMyRole(adminRow ? "admin" : "parent");
+    });
+  }, []);
 
   useEffect(() => {
     fetch("/api/messages", {
@@ -63,9 +102,59 @@ export default function MessageThread({ threadId, onCleared }: { threadId: strin
     };
   }, [threadId, instanceId]);
 
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`typing:${threadId}`)
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        const { role, isTyping } = payload as { role: SenderRole; isTyping: boolean };
+        if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+        if (!isTyping) {
+          setTypingRole(null);
+          return;
+        }
+        setTypingRole(role);
+        // Self-expires in case the "stopped typing" broadcast never arrives
+        // (e.g. the other tab was closed mid-keystroke).
+        remoteTypingTimeoutRef.current = setTimeout(() => setTypingRole(null), REMOTE_TYPING_EXPIRES_MS);
+      })
+      .subscribe();
+    typingChannelRef.current = channel;
+
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (remoteTypingTimeoutRef.current) clearTimeout(remoteTypingTimeoutRef.current);
+      supabase.removeChannel(channel);
+      typingChannelRef.current = null;
+    };
+  }, [threadId]);
+
+  const sendTypingSignal = useCallback(
+    (isTyping: boolean) => {
+      if (!myRole || !typingChannelRef.current) return;
+      isTypingRef.current = isTyping;
+      typingChannelRef.current.send({ type: "broadcast", event: "typing", payload: { role: myRole, isTyping } });
+    },
+    [myRole]
+  );
+
+  function handleBodyChange(value: string) {
+    setBody(value);
+    if (value.trim()) {
+      if (!isTypingRef.current) sendTypingSignal(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => sendTypingSignal(false), STOP_TYPING_AFTER_MS);
+    } else if (isTypingRef.current) {
+      sendTypingSignal(false);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    }
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!body.trim()) return;
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    sendTypingSignal(false);
     setSending(true);
     setError("");
     const res = await fetch("/api/messages", {
@@ -113,7 +202,7 @@ export default function MessageThread({ threadId, onCleared }: { threadId: strin
         </button>
       </div>
       <div className="flex flex-col gap-2 max-h-96 overflow-y-auto rounded-lg border border-navy-line bg-navy-soft p-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !typingRole && (
           <p className="text-sm text-muted">
             No messages yet — write something below and the admin team will see it.
           </p>
@@ -133,11 +222,12 @@ export default function MessageThread({ threadId, onCleared }: { threadId: strin
             </div>
           );
         })}
+        {typingRole && <TypingDots fromAdmin={typingRole === "admin"} />}
       </div>
       <form onSubmit={handleSend} className="flex flex-col sm:flex-row gap-2">
         <textarea
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => handleBodyChange(e.target.value)}
           placeholder="Write a message…"
           rows={2}
           disabled={sending}
