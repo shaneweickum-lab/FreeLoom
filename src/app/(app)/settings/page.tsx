@@ -9,7 +9,15 @@ const EMPTY_FORM = {
   address: "",
   phone: "",
   email: "",
+  schoolingType: "" as "" | "homeschooling" | "unschooling" | "wildschooling",
 };
+
+const SCHOOLING_TYPE_OPTIONS = [
+  { value: "", label: "Not set" },
+  { value: "homeschooling", label: "Homeschooling" },
+  { value: "unschooling", label: "Unschooling" },
+  { value: "wildschooling", label: "Wildschooling" },
+] as const;
 
 export default function SettingsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -34,6 +42,7 @@ export default function SettingsPage() {
         address: profile?.address ?? "",
         phone: profile?.phone ?? "",
         email: profile?.email ?? "",
+        schoolingType: profile?.schooling_type ?? "",
       });
       setLoading(false);
     }
@@ -64,6 +73,7 @@ export default function SettingsPage() {
       address: form.address || null,
       phone: form.phone || null,
       email: form.email || null,
+      schooling_type: form.schoolingType || null,
       updated_at: new Date().toISOString(),
     });
 
@@ -106,6 +116,27 @@ export default function SettingsPage() {
               setSaved(false);
             }}
           />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-muted text-xs">How your family learns</span>
+          <select
+            className="input"
+            value={form.schoolingType}
+            onChange={(e) => {
+              setForm({ ...form, schoolingType: e.target.value as typeof form.schoolingType });
+              setSaved(false);
+            }}
+          >
+            {SCHOOLING_TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-muted/70 text-[11px]">
+            Lets FreeLoom send announcements just to families like yours, instead of everyone.
+          </span>
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
