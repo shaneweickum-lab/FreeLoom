@@ -31,6 +31,10 @@ export type SchoolProfile = {
   accent_color: string | null;
   layout_style: LayoutStyle;
   schooling_type: SchoolingType | null;
+  /** When true, admin_view_account() replaces every student's real name
+   * with a placeholder ("Student 1", "Student 2", ...) before it ever
+   * leaves the database -- everything else stays visible. */
+  hide_student_names: boolean;
   updated_at: string;
 };
 
