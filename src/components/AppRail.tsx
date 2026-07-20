@@ -157,7 +157,7 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
             Sign out
           </button>
         )}
-        <span className="text-muted/70">FreeLoom &middot; record-keeping, not grading</span>
+        <span className="text-muted/70">FreeLoom &middot; record-keeping made easy</span>
       </div>
     </div>
   );
