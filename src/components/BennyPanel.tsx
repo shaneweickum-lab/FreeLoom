@@ -37,13 +37,13 @@ export default function BennyPanel() {
   return (
     <>
       <div aria-hidden onClick={close} className="fixed inset-0 z-40 bg-navy-deep/70" />
-      <aside className="fixed inset-y-0 right-0 z-50 w-full sm:w-96 max-w-full border-l border-border bg-surface flex flex-col p-4 gap-3">
-        <div className="flex items-center justify-between gap-2">
+      <aside className="fixed inset-y-0 right-0 z-50 w-full sm:w-[36rem] max-w-full border-l border-border bg-surface flex flex-col p-4 gap-3 shadow-2xl">
+        <div className="flex items-center justify-between gap-2 border-b border-border pb-3">
           <h2 className="font-serif text-lg">Benny</h2>
           <button
             onClick={close}
             aria-label="Close Benny"
-            className="h-8 w-8 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-surface-hover"
+            className="h-8 w-8 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
           >
             <CloseIcon />
           </button>
