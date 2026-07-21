@@ -155,13 +155,16 @@ wiring is separate follow-up work from this scaffolding pass.
   `docs/slm-strategy.md` Section 4.
 - Done: `data/synthetic_corpus.jsonl` scaled from 60 to 2,060 examples via
   `data/generate_synthetic.py` (real `claude-sonnet-5` run, 2,000/2,000 succeeded,
-  ~$15.86). `train/prepare_dataset.py` needs to be re-run to regenerate
-  `entry_drafting_{train,val}.npz` from this bigger corpus, then
-  `train/train_adapter.py --task entry_drafting` re-run against the new arrays — the
-  first real adapter fine-tune (on the old 66-example split) scored 4/7 (57.1%) on
-  `eval/run_eval.py`, with 2 of the 3 failures being fully unparseable generations, not
-  just borderline content — a data-volume problem this directly targets, not yet
-  confirmed fixed.
+  ~$15.86), confirmed to fix the data-volume problem it targeted:
+  `entry_drafting_{train,val}.npz` regenerated at 1,866 train / 207 val examples (up
+  from 66/7), and a re-run of `train/train_adapter.py --task entry_drafting` produced a
+  smooth, near-monotonic val_loss curve (2.2611 → 1.9584 across epochs 1-9, only a
+  trivial uptick at epoch 10) instead of the old run's sharp overfitting spike. Scored
+  on the full 207-example held-out set via `eval/run_eval.py`: **206/207 (99.5%)
+  format-valid** — the one remaining failure is the same category as before (an
+  unparseable generation), just far rarer at this data volume. A real, statistically
+  meaningful result now (n=207 vs. the old n=7, where a single example flipping swung
+  the score by ~14 points).
 - Done: tokenizer retrained at a real 8,000-token production vocab against the base
   corpus sample, `model/config.py` updated to match.
 - Once real revenue funds a much larger custom-generated corpus (discussed but not
