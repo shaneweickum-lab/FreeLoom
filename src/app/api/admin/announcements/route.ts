@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/adminAuth";
+import { stripMarkdown } from "@/lib/markdown";
 
 const SCHOOLING_TYPES = ["homeschooling", "unschooling", "wildschooling"];
 const TARGET_TYPES = ["everyone", "user", "schooling_type"];
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
       user_id: id,
       type: "announcement" as const,
       title,
-      body: announcementBody.slice(0, 140),
+      body: stripMarkdown(announcementBody).slice(0, 140),
       link_path: "/dashboard",
       related_id: announcement.id,
     }));

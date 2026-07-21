@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import MarkdownEditor from "@/components/MarkdownEditor";
 
 /** A one-off "email" to a single account -- distinct from AnnouncementComposer
  * (everyone / a schooling-type group) since this always targets exactly the
@@ -48,14 +49,7 @@ export default function UserAnnouncementForm({ targetUserId, targetLabel }: { ta
         disabled={busy}
         className="input font-medium"
       />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Write a personal note…"
-        rows={4}
-        disabled={busy}
-        className="input resize-none"
-      />
+      <MarkdownEditor value={body} onChange={setBody} placeholder="Write a personal note…" rows={4} disabled={busy} />
       <button type="submit" disabled={busy || !title.trim() || !body.trim()} className="btn-primary w-fit">
         {busy ? "Sending…" : "Send"}
       </button>

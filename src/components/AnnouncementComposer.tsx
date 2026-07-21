@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import MarkdownEditor from "@/components/MarkdownEditor";
 
 const AUDIENCE_OPTIONS = [
   { value: "everyone", label: "Everyone on FreeLoom" },
@@ -70,14 +71,7 @@ export default function AnnouncementComposer() {
         disabled={busy}
         className="input font-medium"
       />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Write your update…"
-        rows={6}
-        disabled={busy}
-        className="input resize-none"
-      />
+      <MarkdownEditor value={body} onChange={setBody} placeholder="Write your update…" rows={6} disabled={busy} />
       <button type="submit" disabled={busy || !title.trim() || !body.trim()} className="btn-primary w-fit">
         {busy ? "Sending…" : `Send to ${audience === "everyone" ? "everyone" : audienceLabel.toLowerCase()}`}
       </button>
