@@ -2,14 +2,17 @@
 
 import { useState, type ReactNode } from "react";
 
-type AdminTab = {
+type Tab = {
   id: string;
   label: string;
   badge?: number;
   content: ReactNode;
 };
 
-export default function AdminTabs({ tabs }: { tabs: AdminTab[] }) {
+/** A fully-controlled, content-embedding tab bar -- not admin-specific
+ * despite its original home, so it's shared between /admin and the
+ * redesigned /settings page. */
+export default function Tabs({ tabs }: { tabs: Tab[] }) {
   const [activeId, setActiveId] = useState(tabs[0]?.id);
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
 

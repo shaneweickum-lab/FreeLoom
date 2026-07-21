@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import AdminUsersPanel from "@/components/AdminUsersPanel";
 import AnnouncementComposer from "@/components/AnnouncementComposer";
 import FamiliesList, { type FamilyRow } from "@/components/FamiliesList";
-import AdminTabs from "@/components/AdminTabs";
+import Tabs from "@/components/Tabs";
 import UsageDashboard from "@/components/UsageDashboard";
 import type { SchoolingType } from "@/lib/types";
 
@@ -73,7 +73,7 @@ export default async function AdminPage() {
         <p className="text-muted text-sm mt-1">Manage the waitlist, admins, families, and announcements.</p>
       </div>
 
-      <AdminTabs
+      <Tabs
         tabs={[
           {
             id: "waitlist",
