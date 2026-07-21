@@ -1,11 +1,11 @@
 # FreeLoom SLM — `ml/`
 
 Implementation of the architecture in [`docs/slm-strategy.md`](../docs/slm-strategy.md):
-one shared ~13.7M-parameter native BitNet b1.58 base model, trained from scratch, with two
-LoRA adapters on top (entry-drafting, knowledge-base-authoring). This directory is a
-separate Python subproject from the Next.js app in `src/` — it has no shared test runner
-or build step with the TS app, and nothing here is imported by production code yet (see
-"Where this plugs in" below).
+one shared ~13.7M-parameter native BitNet b1.58 base model, trained from scratch, with
+three LoRA adapters on top (entry-drafting, knowledge-base-authoring, platform-help).
+This directory is a separate Python subproject from the Next.js app in `src/` — it has
+no shared test runner or build step with the TS app, and nothing here is imported by
+production code yet (see "Where this plugs in" below).
 
 ## Two execution environments, on purpose
 
@@ -15,12 +15,15 @@ cleanly along what that container can and can't run:
 | Runs here (Linux, no GPU) | Mac-only (MLX / Apple Silicon) |
 |---|---|
 | `data/generate_synthetic.py` (needs a real `ANTHROPIC_API_KEY`) | `model/transformer_mlx.py` |
-| `data/prepare_base_corpus.py` (needs real network access to `huggingface.co`) | `model/lora.py` |
-| `tokenizer/train_tokenizer.py` | `train/train_base.py` |
-| `model/bitlinear.py` + `model/test_bitlinear.py` | `train/train_adapter.py` |
-| `model/config.py` | `eval/run_eval.py` |
+| `data/generate_kb_authoring_synthetic.py` (needs a real `ANTHROPIC_API_KEY`) | `model/lora.py` |
+| `data/generate_platform_help_synthetic.py` (needs a real `ANTHROPIC_API_KEY`) | `train/train_base.py` |
+| `data/prepare_base_corpus.py` (needs real network access to `huggingface.co`) | `train/train_adapter.py` |
+| `tokenizer/train_tokenizer.py` | `eval/run_eval.py` |
+| `model/bitlinear.py` + `model/test_bitlinear.py` | `eval/run_eval_kb_authoring.py` |
+| `model/config.py` | `eval/run_eval_platform_help.py` |
 | `train/prepare_dataset.py` | |
 | `eval/validate_output.py` + `test_validate_output.py` | |
+| `eval/validate_kb_entry.py` + `test_validate_kb_entry.py` | |
 
 Confirmed, not assumed: `mlx` installs via pip on Linux x86_64 but its shared library
 (`libmlx.so`) is Apple/Metal-only and fails to import. Also confirmed: this container's
@@ -79,13 +82,35 @@ for (see `docs/slm-strategy.md` Section 5).
   packed 4.3M sequences) rather than assuming the two always match — see
   `docs/slm-strategy.md` Section 4 for the full reasoning. Read both licenses before
   shipping a model trained on this data (the script prints both URLs on completion).
-- **`entry_drafting` adapter**: has real (if small) training data via
-  `train/prepare_dataset.py`.
-- **`kb_authoring` adapter**: structurally wired (its own independent LoRA params on the
-  same frozen base), but has **no training data yet** — that job needs a meaningful
-  volume of accumulated `human_resolutions` rows, which doesn't exist yet per
-  `docs/slm-strategy.md` Section 4. `train_adapter.py --task kb_authoring` fails loudly
-  at the missing dataset file rather than guessing at a shape untested by real usage.
+- **`entry_drafting` adapter**: real training data via `train/prepare_dataset.py`,
+  confirmed working (see the Known gaps entry below).
+- **`kb_authoring` adapter**: now has a synthetic *bootstrap* dataset via
+  `data/generate_kb_authoring_synthetic.py` — a deliberate deviation from this
+  project's original plan (kb_authoring's real input is clusters of accumulated
+  `human_resolutions` cases, which don't exist in meaningful volume yet per
+  `docs/slm-strategy.md` Section 4; synthetic data for this task was originally held
+  off as "guessing at a shape real usage data hasn't validated"). Each synthetic
+  example is a cluster of 3 informal word dumps about the same niche activity
+  deliberately absent from `src/lib/knowledgeBase.ts`'s real keyword list, paired with
+  one drafted new entry (`keywords`/`skills` lists included, matching that file's real
+  `KnowledgeBaseEntry` shape) generalizing across them. Scored via
+  `eval/run_eval_kb_authoring.py` against `eval/validate_kb_entry.py` — deliberately
+  has **no** known-subject-area cross-check (unlike entry_drafting's), since this
+  adapter's whole job is drafting entries for topics not already known. Retrain on real
+  `human_resolutions` clusters once meaningful volume accumulates — this bootstrap is a
+  stand-in, not a permanent substitute.
+- **`platform_help` adapter**: answers a parent's informal question about how the
+  FreeLoom platform itself works (not an entry-drafting or kb-authoring task) — the
+  first step toward Benny answering real questions in the assistant-mode chat panel
+  (`src/lib/benny/chat.ts`, gated behind `SLM_CHAT_URL`). Training data is
+  hand-authored ground truth (`data/platform_help_seed.json`, ~24 accurate
+  question/answer pairs about real FreeLoom features) plus paraphrased variants from
+  `data/generate_platform_help_synthetic.py`, anchored per-seed so the model learns to
+  vary phrasing without ever inventing a platform behavior that isn't real — accuracy
+  matters more here than for the other two adapters, since a wrong chat answer is read
+  directly by a parent rather than passing through Stage 5 human review first. Scored
+  qualitatively via `eval/run_eval_platform_help.py` (no rigid schema to
+  regex-validate for free-form prose, unlike the other two adapters).
 
 ## Setup on the M5 MacBook
 
@@ -131,22 +156,53 @@ python3 train/train_adapter.py --task entry_drafting \
 python3 eval/run_eval.py \
     --base-checkpoint checkpoints/base.safetensors \
     --adapter checkpoints/entry_drafting_adapter.safetensors
+
+# 7. (Optional) Generate the kb_authoring bootstrap + platform_help synthetic
+#    data (needs a real ANTHROPIC_API_KEY -- run these two anywhere with
+#    network access, not necessarily the Mac), then re-run step 2 to pack them:
+python3 data/generate_kb_authoring_synthetic.py --count 500 --max-cost 15.00
+python3 data/generate_platform_help_synthetic.py --per-seed 30 --max-cost 10.00
+python3 train/prepare_dataset.py
+
+# 8. Fine-tune + score the two new adapters, same pattern as steps 5-6:
+python3 train/train_adapter.py --task kb_authoring \
+    --base-checkpoint checkpoints/base.safetensors
+python3 eval/run_eval_kb_authoring.py \
+    --base-checkpoint checkpoints/base.safetensors \
+    --adapter checkpoints/kb_authoring_adapter.safetensors
+
+python3 train/train_adapter.py --task platform_help \
+    --base-checkpoint checkpoints/base.safetensors
+python3 eval/run_eval_platform_help.py \
+    --base-checkpoint checkpoints/base.safetensors \
+    --adapter checkpoints/platform_help_adapter.safetensors
 ```
 
 ## Tests (run anywhere, including this container)
 
 ```bash
 pip install -r requirements.txt   # tokenizers, numpy, pytest -- skip the mlx/anthropic lines
-python3 -m pytest model/test_bitlinear.py eval/test_validate_output.py -v
+python3 -m pytest model/test_bitlinear.py eval/test_validate_output.py eval/test_validate_kb_entry.py -v
 ```
 
-## Where this plugs in (not built yet)
+## Where this plugs in
 
-Per `docs/slm-strategy.md` Section 6/8: nothing in `src/` calls into `ml/` yet. The
-integration point, once there's a trained checkpoint with an eval that beats "leave it
-blank," is a Stage 4 fallback call in `src/lib/pipeline/` — feature-flagged, never
-overriding a confident Stage 1–3 result, and never bypassing Stage 5 human review. That
-wiring is separate follow-up work from this scaffolding pass.
+Nothing in `src/` calls into `ml/` yet (no serving endpoint exists -- MLX only runs on
+Apple Silicon, and this app is deployed to Vercel/Node). Two integration points are
+already fully wired on the TS side, feature-flagged and inert until a real endpoint
+exists to point at:
+
+- **`entry_drafting`** → Stage 4 fallback in `src/lib/pipeline/slmDraft.ts`, gated
+  behind `SLM_ENTRY_DRAFTING_URL` — never overrides a confident Stage 1-3 result, never
+  bypasses Stage 5 human review.
+- **`platform_help`** (and eventually a general chat adapter) → Benny assistant-mode
+  chat panel in `src/lib/benny/chat.ts`, gated behind `SLM_CHAT_URL` — replies with an
+  honest placeholder until something real is listening.
+
+`kb_authoring` has no TS-side integration point yet — per `docs/slm-strategy.md`
+Section 6, it's meant to run on a periodic schedule (not per-request) reviewing
+accumulated cases and handing off drafted entries for human approval, not something a
+single request calls synchronously. That scheduling/approval-queue piece is unbuilt.
 
 ## Known gaps / next steps
 
@@ -176,5 +232,15 @@ wiring is separate follow-up work from this scaffolding pass.
 - Build the classical subject-area cross-check from `docs/slm-strategy.md` Section 7
   (this lives in `src/lib/pipeline/`, not `ml/` — it's the existing hashed-vector
   classifier idea, not new ml/ scaffolding).
-- Once `human_resolutions` accumulates real volume, build a `kb_authoring` dataset and
-  extend `train/prepare_dataset.py` to produce it.
+- Done (bootstrap, not final): `kb_authoring` now has a synthetic dataset via
+  `data/generate_kb_authoring_synthetic.py`. Retrain on real `human_resolutions`
+  clusters once meaningful volume accumulates — see the Current state entry above for
+  the full reasoning on why synthetic data was used now despite the original plan.
+- Done (adapter + eval built, generation run pending a fresh API key): `platform_help`
+  adapter for Benny answering FreeLoom platform questions — `data/platform_help_seed.json`
+  (~24 hand-authored ground-truth Q&A pairs) is real and usable on its own;
+  `data/generate_platform_help_synthetic.py` scales it with paraphrased variants once
+  run. No production serving decided yet (see "Where this plugs in").
+- Build the actual model-serving mechanism (how a Vercel-deployed Next.js app calls an
+  MLX-only model) — explicitly not decided yet, needed before `SLM_ENTRY_DRAFTING_URL`
+  or `SLM_CHAT_URL` do anything in production.

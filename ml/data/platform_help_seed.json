@@ -1,0 +1,100 @@
+{
+  "platform_qa": [
+    {
+      "question": "What is FreeLoom?",
+      "answer": "FreeLoom is a record-keeping app for homeschooling, unschooling, and wildschooling families. You describe what your kid did in plain, informal language, and FreeLoom turns that into a class entry with a subject, a title, a credit value, and a reasoning that connects the activity to the educational claim."
+    },
+    {
+      "question": "How do I log something my kid did today?",
+      "answer": "Go to the Learning Log page and describe the activity in your own words -- however informal or rambling. FreeLoom tries a few automatic ways to turn that into a class entry; if none of them are confident, it asks you to fill in the subject, title, credit value, and reasoning yourself."
+    },
+    {
+      "question": "What happens if FreeLoom can't figure out how to classify something I logged?",
+      "answer": "It shows a \"needs your input\" form instead of guessing. You fill in the subject area, course title, credit value, and a short reasoning yourself, and that becomes the entry. Every one of these you resolve also helps FreeLoom get better at similar cases in the future."
+    },
+    {
+      "question": "What does credit value mean on an entry?",
+      "answer": "It's a fraction of a full course credit -- for example 0.25 means a quarter credit. Credits from entries in the same subject add up over time, and you can see the running total per subject in the credit ledger on the left side of the app."
+    },
+    {
+      "question": "How do I hide my child's name from an admin who's helping with my account?",
+      "answer": "In Settings under the Account tab, there's a toggle to hide your children's names from admin. If it's on and an admin ever gets approved read-only access to help with an issue, each student shows up as \"Student 1\", \"Student 2\", and so on instead of their real name -- everything else on the account still shows normally."
+    },
+    {
+      "question": "Can I hide my kid's birthdate too, not just their name?",
+      "answer": "Yes -- Settings > Account has a separate toggle for that. With it on, any admin who gets approved read-only access sees a fixed placeholder instead of the real birthdate."
+    },
+    {
+      "question": "How do I switch FreeLoom to dark mode or light mode?",
+      "answer": "Settings > Appearance has a light/dark toggle. It saves to your account, so it follows you across devices instead of just remembering it on one browser."
+    },
+    {
+      "question": "How do I stop getting so many emails from FreeLoom?",
+      "answer": "Settings > Notifications has toggles for email delivery -- one for new messages, one for announcements. Turning either off stops that category of email without affecting the other."
+    },
+    {
+      "question": "Can I stop something from showing up in my notifications inbox without turning off the email for it?",
+      "answer": "Yes -- Settings > Notifications has separate toggles for what shows up in your in-app notifications inbox, independent of the email toggles. You can mute one without muting the other."
+    },
+    {
+      "question": "Do old message threads stick around forever?",
+      "answer": "Only if you want them to. Settings > Notifications lets you choose an auto-delete window from 7 to 30 days, or \"Never.\" If you set a window, any of your message threads with no new activity for that long get permanently deleted -- thread and all, not just hidden -- checked once a day."
+    },
+    {
+      "question": "How do I contact the FreeLoom team if I have a question?",
+      "answer": "Go to the Messages page and start a new conversation. You can have more than one conversation going at once, each with its own subject."
+    },
+    {
+      "question": "What's the Transcript page for?",
+      "answer": "It generates an official-style transcript from all the entries and credits accumulated for a student, formatted the way you'd hand it to a school, program, or college."
+    },
+    {
+      "question": "What's the Portfolio page for?",
+      "answer": "It's a showcase of a student's work and projects, separate from the transcript's credit-focused format."
+    },
+    {
+      "question": "What's the difference between homeschooling, unschooling, and wildschooling in FreeLoom?",
+      "answer": "It's a self-described setting you choose in Settings under the Account tab, describing how your family learns. It's mainly used so FreeLoom can send announcements relevant to families like yours instead of everyone -- it isn't a strict grading distinction."
+    },
+    {
+      "question": "Can FreeLoom admins just look at my account whenever they want?",
+      "answer": "No. Admin read-only access requires your approval first, is time-boxed with an expiration, and a persistent indicator shows you live whenever an admin is actually looking, not just approved to look. Access can also be extended or revoked."
+    },
+    {
+      "question": "Who is Benny?",
+      "answer": "Benny is FreeLoom's in-progress AI assistant. It's still early, so for now it mostly replies with a placeholder message rather than a real answer. You can opt in to the chat panel from Settings > Account with the \"Benny (AI Assistant)\" toggle."
+    },
+    {
+      "question": "Does FreeLoom cost money?",
+      "answer": "The Billing tab in Settings is a placeholder right now -- there's no paid plan set up yet, so you're on the free/waitlist tier."
+    },
+    {
+      "question": "Can I track more than one kid on the same account?",
+      "answer": "Yes -- use the student switcher in the app rail to add and switch between multiple students on the same account."
+    },
+    {
+      "question": "What are subject tags on an entry?",
+      "answer": "A single logged activity can map to more than one subject area at once -- each tag has its own subject area, course title, credit value, and reasoning, since one activity can genuinely count toward more than one subject."
+    },
+    {
+      "question": "Where can I see my credits by subject at a glance?",
+      "answer": "The left-hand app rail shows a running credit ledger broken down by subject, so you can see progress without opening the full transcript."
+    },
+    {
+      "question": "What if I disagree with how FreeLoom classified an activity?",
+      "answer": "You can resolve it yourself the same way as a \"needs your input\" case -- write the subject, title, credit value, and reasoning you think is right. That resolution is also logged and helps improve future automatic classification for similar cases."
+    },
+    {
+      "question": "Do I need to understand FreeLoom's internal classification stages as a parent?",
+      "answer": "No -- that's internal architecture. All you need to know is FreeLoom tries a few automatic ways to classify what you logged, and if none of them are confident, it asks you directly to fill it in yourself."
+    },
+    {
+      "question": "Can I edit an entry's title or description after it's created?",
+      "answer": "Yes -- entries can be reviewed and adjusted after they're created, not just accepted as-is the moment they're generated."
+    },
+    {
+      "question": "How do I get an announcement from FreeLoom instead of missing it?",
+      "answer": "Announcements show up in your in-app notifications inbox and, if enabled, by email -- both controlled from Settings > Notifications. Which announcements you receive can also depend on your schooling type, set in Settings > Account."
+    }
+  ]
+}

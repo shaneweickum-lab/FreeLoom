@@ -17,12 +17,20 @@ Turns the raw corpus into two kinds of tokenized, fixed-length numpy arrays:
    corpus -- TinyStories/FineWeb-Edu teach general competence, not
    FreeLoom's own output format.
 
-No knowledge-base-authoring adapter dataset yet: that task needs clusters
-of accumulated `human_resolutions`, which doesn't exist in meaningful
-volume yet per slm-strategy.md Section 4 ("Real data, as it accumulates").
-Building synthetic data for that job now would just be guessing at a shape
-real usage data hasn't validated -- revisit once real `human_resolutions`
-volume exists.
+3. kb_authoring adapter fine-tuning examples -- a cluster of word dumps ->
+   one drafted knowledge-base-style entry (keywords/skills lists included),
+   from data/generate_kb_authoring_synthetic.py's synthetic bootstrap.
+   Skipped gracefully (no files written) if that script hasn't been run yet.
+   This is a deliberate bootstrap: kb_authoring's real input is clusters of
+   accumulated `human_resolutions`, which doesn't exist in meaningful volume
+   yet (slm-strategy.md Section 4) -- see that generation script's docstring
+   for the full reasoning on why synthetic data is being used anyway now.
+
+4. platform_help adapter fine-tuning examples -- a parent's informal
+   platform question -> Benny's answer, from the hand-authored
+   data/platform_help_seed.json ground truth plus
+   data/generate_platform_help_synthetic.py's paraphrased variants. Skipped
+   gracefully if neither file exists.
 
 Pure Python + tokenizers + numpy -- runs and is verifiable in this
 environment (no MLX dependency). Run this before either MLX training loop.
@@ -207,6 +215,113 @@ def build_entry_drafting_arrays(tokenizer: Tokenizer, examples: list[dict], max_
     return input_ids[keep], loss_mask[keep]
 
 
+def load_kb_authoring_examples() -> list[dict]:
+    """Reads data/kb_authoring_synthetic.jsonl (written by
+    generate_kb_authoring_synthetic.py) if it exists; returns [] otherwise so
+    main() can skip this task gracefully rather than erroring."""
+    path = DATA_DIR / "kb_authoring_synthetic.jsonl"
+    if not path.exists():
+        return []
+    examples = []
+    with path.open() as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                examples.append(json.loads(line))
+    return examples
+
+
+def build_kb_authoring_arrays(tokenizer: Tokenizer, examples: list[dict], max_len: int):
+    """Same masked (prompt, completion) shape as build_entry_drafting_arrays,
+    but the prompt is a cluster of word dumps (not a single activity) and the
+    completion includes keywords/skills lists, matching
+    src/lib/knowledgeBase.ts's real KnowledgeBaseEntry shape."""
+    bos_id = tokenizer.token_to_id("<bos>")
+    eos_id = tokenizer.token_to_id("<eos>")
+    pad_id = tokenizer.token_to_id("<pad>")
+
+    input_ids = np.full((len(examples), max_len), pad_id, dtype=np.int32)
+    loss_mask = np.zeros((len(examples), max_len), dtype=np.int32)
+
+    dropped = 0
+    for i, example in enumerate(examples):
+        word_dump_lines = "\n".join(f"- {w}" for w in example["word_dumps"])
+        prompt_text = f"activities not yet in the knowledge base:\n{word_dump_lines}\ndraft a new knowledge base entry:\n"
+        completion_text = (
+            f"keywords: {', '.join(example['keywords'])}\n"
+            f"course_title: {example['course_title']}\n"
+            f"subject_area: {example['subject_area']}\n"
+            f"skills: {', '.join(example['skills'])}\n"
+            f"base_credit_hours: {example['base_credit_hours']}\n"
+            f"rationale: {example['rationale']}"
+        )
+        prompt_ids = [bos_id] + tokenizer.encode(prompt_text).ids
+        completion_ids = tokenizer.encode(completion_text).ids + [eos_id]
+        full = prompt_ids + completion_ids
+
+        if len(full) > max_len:
+            dropped += 1
+            continue
+
+        input_ids[i, : len(full)] = full
+        loss_mask[i, len(prompt_ids): len(full)] = 1
+
+    if dropped:
+        print(f"  dropped {dropped}/{len(examples)} examples exceeding max_len={max_len}")
+
+    keep = loss_mask.sum(axis=1) > 0
+    return input_ids[keep], loss_mask[keep]
+
+
+def load_platform_help_examples() -> list[dict]:
+    """Hand-authored ground truth (data/platform_help_seed.json) plus
+    paraphrased variants (data/generate_platform_help_synthetic.py) if that
+    file exists yet -- the seed alone is enough to run this task, unlike
+    kb_authoring/entry_drafting which need their generation script run
+    first."""
+    examples = []
+    seed = json.loads((DATA_DIR / "platform_help_seed.json").read_text())
+    examples.extend(seed["platform_qa"])
+    synth_path = DATA_DIR / "platform_help_synthetic.jsonl"
+    if synth_path.exists():
+        with synth_path.open() as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    examples.append(json.loads(line))
+    return examples
+
+
+def build_platform_help_arrays(tokenizer: Tokenizer, examples: list[dict], max_len: int):
+    bos_id = tokenizer.token_to_id("<bos>")
+    eos_id = tokenizer.token_to_id("<eos>")
+    pad_id = tokenizer.token_to_id("<pad>")
+
+    input_ids = np.full((len(examples), max_len), pad_id, dtype=np.int32)
+    loss_mask = np.zeros((len(examples), max_len), dtype=np.int32)
+
+    dropped = 0
+    for i, example in enumerate(examples):
+        prompt_text = f"question: {example['question']}\n"
+        completion_text = f"answer: {example['answer']}"
+        prompt_ids = [bos_id] + tokenizer.encode(prompt_text).ids
+        completion_ids = tokenizer.encode(completion_text).ids + [eos_id]
+        full = prompt_ids + completion_ids
+
+        if len(full) > max_len:
+            dropped += 1
+            continue
+
+        input_ids[i, : len(full)] = full
+        loss_mask[i, len(prompt_ids): len(full)] = 1
+
+    if dropped:
+        print(f"  dropped {dropped}/{len(examples)} examples exceeding max_len={max_len}")
+
+    keep = loss_mask.sum(axis=1) > 0
+    return input_ids[keep], loss_mask[keep]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seq-len", type=int, default=512)
@@ -246,8 +361,38 @@ def main():
     np.savez(OUT_DIR / "entry_drafting_val.npz",
               input_ids=input_ids[val_slice], loss_mask=loss_mask[val_slice])
     print(f"Entry-drafting: {len(input_ids[train_slice])} train / {len(input_ids[val_slice])} val examples")
+
+    # 3. kb_authoring adapter fine-tuning examples (synthetic bootstrap --
+    # see generate_kb_authoring_synthetic.py's docstring). Skips gracefully
+    # if that script hasn't been run yet.
+    kb_examples = load_kb_authoring_examples()
+    if kb_examples:
+        rng.shuffle(kb_examples)
+        kb_input_ids, kb_loss_mask = build_kb_authoring_arrays(tokenizer, kb_examples, args.seq_len)
+        n_val = max(1, int(len(kb_input_ids) * args.val_fraction))
+        np.savez(OUT_DIR / "kb_authoring_train.npz",
+                  input_ids=kb_input_ids[n_val:], loss_mask=kb_loss_mask[n_val:])
+        np.savez(OUT_DIR / "kb_authoring_val.npz",
+                  input_ids=kb_input_ids[:n_val], loss_mask=kb_loss_mask[:n_val])
+        print(f"kb_authoring: {len(kb_input_ids) - n_val} train / {n_val} val examples")
+    else:
+        print("kb_authoring: no synthetic data yet -- run generate_kb_authoring_synthetic.py first, skipped")
+
+    # 4. platform_help adapter fine-tuning examples.
+    platform_examples = load_platform_help_examples()
+    if platform_examples:
+        rng.shuffle(platform_examples)
+        ph_input_ids, ph_loss_mask = build_platform_help_arrays(tokenizer, platform_examples, args.seq_len)
+        n_val = max(1, int(len(ph_input_ids) * args.val_fraction))
+        np.savez(OUT_DIR / "platform_help_train.npz",
+                  input_ids=ph_input_ids[n_val:], loss_mask=ph_loss_mask[n_val:])
+        np.savez(OUT_DIR / "platform_help_val.npz",
+                  input_ids=ph_input_ids[:n_val], loss_mask=ph_loss_mask[:n_val])
+        print(f"platform_help: {len(ph_input_ids) - n_val} train / {n_val} val examples")
+    else:
+        print("platform_help: no data yet -- skipped")
+
     print(f"\nSaved to {OUT_DIR}/")
-    print("No knowledge-base-authoring dataset yet -- needs real human_resolutions volume first.")
 
 
 if __name__ == "__main__":

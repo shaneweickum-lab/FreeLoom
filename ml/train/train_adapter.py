@@ -4,14 +4,18 @@ Fine-tunes one LoRA adapter on top of the frozen, pretrained base model.
 MLX-only -- write/review here, run on the M5 MacBook (see train_base.py's
 module docstring for why this can't run in this Linux container).
 
-Only entry_drafting has real training data right now (from
-prepare_dataset.py's entry_drafting_train.npz/entry_drafting_val.npz).
-kb_authoring is wired up structurally -- attach_lora_adapters gives it its
-own independent LoRA params on the same frozen base -- but has no dataset
-yet; see prepare_dataset.py's docstring for why (needs accumulated
-human_resolutions volume first). Running `--task kb_authoring` before that
-data exists will fail loudly at the missing .npz file, not silently train
-on the wrong thing.
+Three tasks share this same script and the same frozen base --
+attach_lora_adapters gives each its own independent LoRA params:
+- entry_drafting: real synthetic training data (data/generate_synthetic.py).
+- kb_authoring: synthetic bootstrap data (data/generate_kb_authoring_synthetic.py)
+  -- a deliberate stand-in for real accumulated human_resolutions clusters,
+  which don't exist in meaningful volume yet; see that script's docstring.
+- platform_help: hand-authored ground truth + paraphrased variants
+  (data/platform_help_seed.json, data/generate_platform_help_synthetic.py).
+
+Running `--task X` before prepare_dataset.py has produced that task's
+.npz files will fail loudly at the missing file, not silently train on the
+wrong thing.
 
 Usage (on the Mac, after train_base.py has produced a base checkpoint):
     python3 train_adapter.py --task entry_drafting --base-checkpoint ../checkpoints/base.safetensors
@@ -35,7 +39,7 @@ from transformer_mlx import BitNetTransformer  # noqa: E402
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
 
-TASKS = ("entry_drafting", "kb_authoring")
+TASKS = ("entry_drafting", "kb_authoring", "platform_help")
 
 
 def masked_loss_fn(model: BitNetTransformer, inputs: mx.array, targets: mx.array, mask: mx.array) -> mx.array:
