@@ -89,6 +89,14 @@ def save_adapter(model: BitNetTransformer, path: str) -> None:
     mx.save_safetensors(path, trainable_lora_params(model))
 
 
+def save_adapter_params(params: dict, path: str) -> None:
+    """Same on-disk format as save_adapter, but for a params dict captured
+    earlier (e.g. train_adapter.py's best-val-loss snapshot) rather than the
+    model's current live weights -- lets the caller save a checkpoint from
+    an epoch other than whichever one training happened to stop on."""
+    mx.save_safetensors(path, params)
+
+
 def load_adapter(model: BitNetTransformer, path: str) -> None:
     """Loads a saved adapter's params back onto a model whose LoRA layers
     were already attached via attach_lora_adapters with matching rank."""
