@@ -11,11 +11,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ModelConfig:
-    vocab_size: int = 1477  # matches ml/tokenizer/tokenizer.json as trained on the
-                            # 76-example proof-of-concept corpus; retrain the
-                            # tokenizer at a larger vocab (e.g. 8000) once the
-                            # synthetic corpus scales into the thousands, and
-                            # update this to match before training the base model.
+    vocab_size: int = 8000  # matches ml/tokenizer/tokenizer.json as retrained against
+                            # the TinyStories/FineWeb-Edu base corpus sample (was 1477,
+                            # sized for the original 76-example proof-of-concept corpus
+                            # -- train_base.py asserts these stay in sync, since a
+                            # mismatch here means a real token id the tokenizer can
+                            # produce falls outside the model's embedding table).
     d_model: int = 876     # widened from 768 -> ~75M params at n_layers=8/n_heads=12
                             # (see estimate_param_count below); head_dim=73 isn't a
                             # power of 2, but MLX's attention only requires

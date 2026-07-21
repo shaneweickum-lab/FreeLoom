@@ -56,13 +56,16 @@ negative-transfer failure mode that a naive shared-head design would risk. The
 application code — which already knows which job it needs — swaps in the right adapter.
 No learned gate, no ambiguity to resolve at inference time.
 
-## 3. Size and architecture: ~75M parameters, native BitNet b1.58
+## 3. Size and architecture: ~81M parameters, native BitNet b1.58
 
-- **~75M ternary parameters** (876 d_model, 8 layers, 12 heads — see
+- **~81M ternary parameters** (876 d_model, 8 layers, 12 heads, vocab_size=8000 — see
   `ml/model/config.py`), trained natively at 1.58 bits (BitNet's `BitLinear` layer, not
   post-hoc quantization of an existing model). Bumped up from an initial 60M sizing for
-  the MVP; still squarely in the same small-model regime, so the precedent and
-  reasoning below still apply.
+  the MVP, then again from ~75M once the tokenizer was retrained at a real 8,000-token
+  vocab (it was 1,477, sized for the original 76-example proof-of-concept corpus) — the
+  embedding table's own size scales with vocab_size, so a bigger vocab means more
+  params even with everything else unchanged. Still squarely in the same small-model
+  regime, so the precedent and reasoning below still apply.
 - This size range is unusually well-evidenced for BitNet specifically: published
   small-scale BitNet research ("BitNet b1.58 Reloaded") tested ternary models in the
   100K–48M parameter range — the closest real precedent available, well short of
@@ -80,15 +83,14 @@ No learned gate, no ambiguity to resolve at inference time.
   is actually learned, not a shortcut around learning it.
 - **Training token budget**: 30 tokens/parameter (Chinchilla's ~20 compute-optimal ratio
   plus a deliberate +10 overtraining margin, the same trade LLaMA made to get a
-  cheaper-to-run model at the cost of extra training compute) — **~2.25B tokens** at
-  75M params (`ml/model/config.py`'s `estimate_token_budget()`). Section 4's data plan
-  needs to actually reach that volume before a full pretraining run is worth
-  committing to; the current 60-example proof-of-concept corpus is several orders of
-  magnitude short of it.
+  cheaper-to-run model at the cost of extra training compute) — **~2.42B tokens** at
+  ~81M params (`ml/model/config.py`'s `estimate_token_budget()`). Section 4's
+  TinyStories/FineWeb-Edu pull actually packed ~2.46B tokens on its first real run,
+  comfortably covering this budget.
 
 ## 4. Training data: two separate pools for two separate jobs
 
-At ~75M parameters, the base model's job (general English + broad academic register)
+At ~81M parameters, the base model's job (general English + broad academic register)
 and the adapters' job (FreeLoom's exact output format) call for genuinely different
 data — conflating them was the original open question here; the settled split:
 
@@ -108,8 +110,9 @@ data — conflating them was the original open question here; the settled split:
   original target while keeping it the dominant source — both this project's own design
   intent below and the original TinyStories paper's own precedent (it trained small
   models over several epochs of this same small corpus). FineWeb-Edu hit its 500M target
-  in a single pass and isn't repeated. Total: ~2.4B tokens, close to Section 3's 2.25B
-  budget (slightly over is harmless). TinyStories still gets the larger effective share
+  in a single pass and isn't repeated. `train/prepare_dataset.py`'s first real run
+  packed ~2.46B tokens total, comfortably covering Section 3's ~2.42B budget. TinyStories
+  still gets the larger effective share
   deliberately — its own research finding is that narrow, simple data is what makes
   small-model coherence achievable, so it should dominate, with FineWeb-Edu mixed in for
   vocabulary breadth rather than given equal weight. Deliberately **not** a custom scrape
