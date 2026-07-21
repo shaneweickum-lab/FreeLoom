@@ -250,7 +250,14 @@ export default function AppRail() {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-72 border-r border-border bg-surface transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0 md:transition-none ${
+        // z-30 stays in effect at every breakpoint (not just mobile) --
+        // <aside> and <main> are siblings with <main> later in the DOM, so
+        // without an explicit z-index here, <main>'s content paints above
+        // this entire subtree at desktop width once <aside> switches from
+        // fixed to sticky, regardless of any z-index set deeper inside it
+        // (e.g. NotificationBell's own z-40 dropdown, meant to overlay onto
+        // main content, was rendering underneath it instead).
+        className={`fixed inset-y-0 left-0 z-30 w-72 border-r border-border bg-surface transition-transform md:sticky md:top-0 md:h-screen md:translate-x-0 md:transition-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
