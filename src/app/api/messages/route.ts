@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/adminAuth";
+import { buildMessageNotificationEmail } from "@/lib/email/messageNotification";
+
+const APP_URL = "https://freeloom-bice.vercel.app";
+
+async function sendMessageEmail(to: string, title: string, excerpt: string, linkPath: string) {
+  if (!process.env.RESEND_API_KEY) return;
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "FreeLoom <onboarding@resend.dev>",
+      to,
+      subject: title,
+      html: buildMessageNotificationEmail({ title, excerpt, appUrl: `${APP_URL}${linkPath}` }),
+    });
+  } catch (err) {
+    console.error("Failed to send message notification email:", err);
+  }
+}
 
 export async function POST(req: NextRequest) {
   const { supabase, user, isAdmin } = await requireAdmin();
@@ -50,16 +69,36 @@ export async function POST(req: NextRequest) {
   }
 
   if (senderRole === "admin") {
+    // Look up the parent's own notification preferences before notifying
+    // them -- a missing row (shouldn't normally happen for a parent, but
+    // treat it the same as everywhere else in this feature) falls back to
+    // "not muted, no email on file."
+    const { data: recipientProfile } = await supabase
+      .from("school_profiles")
+      .select("email, email_notify_messages, mute_in_app_messages")
+      .eq("user_id", parentUserId)
+      .maybeSingle();
+
+    const linkPath = `/messages?thread=${threadId}`;
+    const notificationTitle = "New message from FreeLoom support";
+    const excerpt = messageBody.slice(0, 140);
+
     // Admin replying -- admin-initiated, satisfies the notifications RLS
     // policy directly through the normal session client.
-    const { error: notifyError } = await supabase.from("notifications").insert({
-      user_id: parentUserId,
-      type: "message",
-      title: "New message from FreeLoom support",
-      body: messageBody.slice(0, 140),
-      link_path: `/messages?thread=${threadId}`,
-      related_id: threadId,
-    });
+    const { error: notifyError } = recipientProfile?.mute_in_app_messages
+      ? { error: null }
+      : await supabase.from("notifications").insert({
+          user_id: parentUserId,
+          type: "message",
+          title: notificationTitle,
+          body: excerpt,
+          link_path: linkPath,
+          related_id: threadId,
+        });
+
+    if (recipientProfile?.email && (recipientProfile.email_notify_messages ?? true)) {
+      await sendMessageEmail(recipientProfile.email, notificationTitle, excerpt, linkPath);
+    }
     if (notifyError) console.error("notification insert error:", notifyError);
   } else {
     // Parent messaging -- needs to notify every admin, but a non-admin

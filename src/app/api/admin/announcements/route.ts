@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/adminAuth";
 import { stripMarkdown } from "@/lib/markdown";
+import { buildAnnouncementNotificationEmail } from "@/lib/email/announcementNotification";
+
+const APP_URL = "https://freeloom-bice.vercel.app";
+
+async function sendAnnouncementEmail(to: string, title: string, excerpt: string) {
+  if (!process.env.RESEND_API_KEY) return;
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "FreeLoom <onboarding@resend.dev>",
+      to,
+      subject: title,
+      html: buildAnnouncementNotificationEmail({ title, excerpt, appUrl: `${APP_URL}/dashboard` }),
+    });
+  } catch (err) {
+    console.error("Failed to send announcement notification email:", err);
+  }
+}
 
 const SCHOOLING_TYPES = ["homeschooling", "unschooling", "wildschooling"];
 const TARGET_TYPES = ["everyone", "user", "schooling_type"];
@@ -80,18 +99,45 @@ export async function POST(req: NextRequest) {
   }
 
   if (recipientIds.length > 0) {
-    // The announcement itself is already posted; notification fanout is
-    // best-effort, same resilience pattern as the waitlist confirmation email.
-    const rows = recipientIds.map((id) => ({
-      user_id: id,
-      type: "announcement" as const,
-      title,
-      body: stripMarkdown(announcementBody).slice(0, 140),
-      link_path: "/dashboard",
-      related_id: announcement.id,
-    }));
-    const { error: fanoutError } = await supabase.from("notifications").insert(rows);
-    if (fanoutError) console.error("announcement notification fanout error:", fanoutError);
+    const excerpt = stripMarkdown(announcementBody).slice(0, 140);
+
+    // One lookup for everyone's own notification preferences -- a missing
+    // row (e.g. an admin with no school_profiles row) falls back to "not
+    // muted, no email on file," same convention as the messages route.
+    const { data: recipientProfiles } = await supabase
+      .from("school_profiles")
+      .select("user_id, email, email_notify_announcements, mute_in_app_announcements")
+      .in("user_id", recipientIds);
+    const prefsByUserId = new Map((recipientProfiles ?? []).map((p) => [p.user_id, p]));
+
+    const rows = recipientIds
+      .filter((id) => !prefsByUserId.get(id)?.mute_in_app_announcements)
+      .map((id) => ({
+        user_id: id,
+        type: "announcement" as const,
+        title,
+        body: excerpt,
+        link_path: "/dashboard",
+        related_id: announcement.id,
+      }));
+
+    if (rows.length > 0) {
+      // The announcement itself is already posted; notification fanout is
+      // best-effort, same resilience pattern as the waitlist confirmation email.
+      const { error: fanoutError } = await supabase.from("notifications").insert(rows);
+      if (fanoutError) console.error("announcement notification fanout error:", fanoutError);
+    }
+
+    // Best-effort per recipient, same as the waitlist confirmation email --
+    // one failed send never blocks the rest. Looping synchronous sends here
+    // is a known, accepted scaling limit for a large "everyone" audience;
+    // fine at this project's current scale.
+    for (const id of recipientIds) {
+      const profile = prefsByUserId.get(id);
+      if (profile?.email && (profile.email_notify_announcements ?? true)) {
+        await sendAnnouncementEmail(profile.email, title, excerpt);
+      }
+    }
   }
 
   return NextResponse.json({ ok: true });

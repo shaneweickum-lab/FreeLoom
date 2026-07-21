@@ -93,7 +93,13 @@ describe("POST /api/messages", () => {
 
   it("lets an admin reply into a specific parent's thread", async () => {
     getUserResult = { data: { user: ADMIN } };
-    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: PARENT_THREAD }, { error: null }, { error: null }];
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: PARENT_THREAD },
+      { error: null },
+      { data: null }, // recipient's notification-preference lookup -- no row, defaults apply
+      { error: null },
+    ];
     const res = await POST(makeRequest({ threadId: THREAD_ID, body: "reply" }));
     expect(res.status).toBe(200);
   });
