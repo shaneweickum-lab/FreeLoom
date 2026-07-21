@@ -57,6 +57,21 @@ def iterate_batches(sequences: np.ndarray, batch_size: int, rng: np.random.Gener
         yield batch[:, :-1], batch[:, 1:]
 
 
+def format_duration(seconds: float) -> str:
+    """Human-readable duration for ETAs -- "45s", "12m 3s", "2h 14m", "3d 5h"."""
+    seconds = int(max(0, seconds))
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
 def evaluate(model: BitNetTransformer, sequences: np.ndarray, batch_size: int) -> float:
     if len(sequences) == 0:
         return float("nan")
@@ -134,6 +149,15 @@ def main():
     # to print "N/total" in the heartbeat below, not for anything functional.
     batches_per_epoch = max(0, (len(train_sequences) - args.batch_size) // args.batch_size + 1) \
         if len(train_sequences) >= args.batch_size else 0
+    total_batches_planned = batches_per_epoch * args.epochs
+    # Target-side tokens per batch (inputs/targets are each seq_len-1 long,
+    # since one position is shifted off for next-token prediction) -- the
+    # standard "tokens/sec" convention for LM training throughput.
+    seq_len = train_sequences.shape[1] if len(train_sequences) else 0
+    tokens_per_batch = args.batch_size * max(0, seq_len - 1)
+
+    run_start = time.time()
+    total_batches_done = 0
 
     for epoch in range(args.epochs):
         start = time.time()
@@ -146,6 +170,7 @@ def main():
             mx.eval(model.parameters(), optimizer.state)
             epoch_losses.append(float(loss))
             batches_done += 1
+            total_batches_done += 1
 
             # A full run can spend many minutes-to-hours per epoch (hundreds
             # of thousands of batches at the base config) with the loop above
@@ -155,12 +180,26 @@ def main():
             now = time.time()
             if now - last_heartbeat >= args.heartbeat_seconds:
                 running_loss = sum(epoch_losses) / len(epoch_losses)
+                # Throughput/ETA use the run-wide average rather than just
+                # this epoch's, since MLX's lazy compilation makes the very
+                # first few batches of the whole run slower than steady state
+                # -- a run-wide average is more stable than re-measuring from
+                # zero every epoch.
+                elapsed_total = now - run_start
+                tok_per_sec = (total_batches_done * tokens_per_batch) / elapsed_total if elapsed_total > 0 else 0
+                remaining_batches = max(0, total_batches_planned - total_batches_done)
+                sec_per_batch = elapsed_total / total_batches_done if total_batches_done > 0 else 0
+                eta = format_duration(remaining_batches * sec_per_batch)
                 print(f"  ...epoch {epoch + 1}/{args.epochs}: batch {batches_done}/{batches_per_epoch or '?'}, "
-                      f"running loss={running_loss:.4f} ({now - start:.0f}s elapsed this epoch)")
+                      f"running loss={running_loss:.4f}, {tok_per_sec:,.0f} tok/s, ETA {eta} "
+                      f"({now - start:.0f}s elapsed this epoch)")
                 last_heartbeat = now
 
+        elapsed_total = time.time() - run_start
+        tok_per_sec = (total_batches_done * tokens_per_batch) / elapsed_total if elapsed_total > 0 else 0
         train_loss = sum(epoch_losses) / max(len(epoch_losses), 1)
-        msg = f"epoch {epoch + 1}/{args.epochs}  train_loss={train_loss:.4f}  ({time.time() - start:.1f}s)"
+        msg = (f"epoch {epoch + 1}/{args.epochs}  train_loss={train_loss:.4f}  "
+               f"({time.time() - start:.1f}s, {tok_per_sec:,.0f} tok/s avg)")
         if (epoch + 1) % args.eval_every == 0:
             val_loss = evaluate(model, val_sequences, args.batch_size)
             msg += f"  val_loss={val_loss:.4f}"
