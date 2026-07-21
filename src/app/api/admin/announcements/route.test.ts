@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 function chain(result: unknown) {
   const builder: Record<string, unknown> = {};
-  for (const method of ["select", "eq", "insert", "delete", "update", "is"]) {
+  for (const method of ["select", "eq", "in", "insert", "delete", "update", "is"]) {
     builder[method] = vi.fn(() => builder);
   }
   builder.maybeSingle = vi.fn(async () => result);
@@ -66,7 +66,12 @@ describe("POST /api/admin/announcements", () => {
   });
 
   it("posts the announcement and fans out a notification to every user", async () => {
-    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: { id: "ann-1" }, error: null }, { error: null }];
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: { id: "ann-1" }, error: null },
+      { data: [], error: null }, // per-recipient notification-preference lookup
+      { error: null },
+    ];
     listUsersMock.mockResolvedValue({
       data: { users: [{ id: "u1" }, { id: "u2" }] },
       error: null,
@@ -95,7 +100,12 @@ describe("POST /api/admin/announcements", () => {
   });
 
   it("sends to just the one target user without calling listUsers", async () => {
-    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: { id: "ann-1" }, error: null }, { error: null }];
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: { id: "ann-1" }, error: null },
+      { data: [], error: null }, // per-recipient notification-preference lookup
+      { error: null },
+    ];
     const res = await POST(makeRequest({ title: "t", body: "b", targetType: "user", targetUserId: "parent-1" }));
     expect(res.status).toBe(200);
     expect(listUsersMock).not.toHaveBeenCalled();
@@ -112,6 +122,7 @@ describe("POST /api/admin/announcements", () => {
       { data: { user_id: ADMIN.id } },
       { data: { id: "ann-1" }, error: null },
       { data: [{ user_id: "u1" }, { user_id: "u2" }], error: null },
+      { data: [], error: null }, // per-recipient notification-preference lookup
       { error: null },
     ];
     const res = await POST(

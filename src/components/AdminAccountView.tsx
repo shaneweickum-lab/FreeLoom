@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
-import AdminTabs from "@/components/AdminTabs";
+import Tabs from "@/components/Tabs";
 import type {
   ProfileNote,
   PipelineClass,
@@ -43,7 +43,15 @@ function Field({ label, value }: { label: string; value: string | number | null 
   );
 }
 
-function DashboardTab({ students, entries }: { students: Student[]; entries: PipelineEntry[] }) {
+function DashboardTab({
+  students,
+  entries,
+  schoolProfile,
+}: {
+  students: Student[];
+  entries: PipelineEntry[];
+  schoolProfile: SchoolProfile | null;
+}) {
   if (students.length === 0) return <p className="text-sm text-muted">No students on this account yet.</p>;
   return (
     <div className="flex flex-col gap-6">
@@ -61,7 +69,7 @@ function DashboardTab({ students, entries }: { students: Student[]; entries: Pip
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="State" value={s.state} />
-              <Field label="Birth date" value={s.birth_date} />
+              <Field label="Birth date" value={schoolProfile?.hide_student_birthdates ? "**/**/**" : s.birth_date} />
               <Field label="Expected grad year" value={s.expected_graduation_year} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -505,9 +513,13 @@ export default function AdminAccountView({ snapshot }: { snapshot: AdminAccountS
         </div>
       )}
 
-      <AdminTabs
+      <Tabs
         tabs={[
-          { id: "dashboard", label: "Dashboard", content: <DashboardTab students={students} entries={entries} /> },
+          {
+            id: "dashboard",
+            label: "Dashboard",
+            content: <DashboardTab students={students} entries={entries} schoolProfile={school_profile} />,
+          },
           { id: "profile", label: "Profile", content: <ProfileTab student={currentStudent} note={noteForCurrent} /> },
           {
             id: "log",

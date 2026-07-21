@@ -35,6 +35,26 @@ export type SchoolProfile = {
    * with a placeholder ("Student 1", "Student 2", ...) before it ever
    * leaves the database -- everything else stays visible. */
   hide_student_names: boolean;
+  /** When true, AdminAccountView masks every student's birth_date with a
+   * fixed placeholder instead of the real date, in the same admin
+   * read-only context hide_student_names already covers. */
+  hide_student_birthdates: boolean;
+  /** Saved to the account (not just the browser) so it follows the user
+   * across devices -- read server-side by (app)/layout.tsx and applied via
+   * a [data-theme] CSS override, see globals.css. */
+  theme_preference: "light" | "dark";
+  email_notify_messages: boolean;
+  email_notify_announcements: boolean;
+  /** Mutes a notification type from ever being inserted for this account --
+   * distinct from the email toggles above, which only control whether an
+   * email also goes out. */
+  mute_in_app_messages: boolean;
+  mute_in_app_announcements: boolean;
+  /** Days of inactivity after which one of this account's support_threads
+   * (and its messages) gets deleted by the daily cleanup-threads cron. Null
+   * means never auto-delete -- the column default, so no existing account
+   * is affected until a parent opts in. Constrained 7-30 by a DB check. */
+  thread_retention_days: number | null;
   updated_at: string;
 };
 
