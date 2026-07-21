@@ -92,23 +92,32 @@ At ~75M parameters, the base model's job (general English + broad academic regis
 and the adapters' job (FreeLoom's exact output format) call for genuinely different
 data — conflating them was the original open question here; the settled split:
 
-- **Base-pretraining pool — 2.25B tokens, from already-generated open datasets, not a
-  custom scrape**: `ml/data/prepare_base_corpus.py` streams **1.75B tokens from
-  TinyStories** (`roneneldan/TinyStories`, license `cdla-sharing-1.0` — GPT-3.5/4-generated
-  short stories in deliberately simple vocabulary, the direct precedent for "coherent
+- **Base-pretraining pool — ~2.4B tokens, from already-generated open datasets, not a
+  custom scrape**: `ml/data/prepare_base_corpus.py` streams **TinyStories**
+  (`roneneldan/TinyStories`, license `cdla-sharing-1.0` — GPT-3.5/4-generated short
+  stories in deliberately simple vocabulary, the direct precedent for "coherent
   generation is achievable well under 75M params if the data is narrow enough") plus
-  **500M tokens from FineWeb-Edu** (`HuggingFaceFW/fineweb-edu`, `sample-10BT` config,
-  license `odc-by` — real web text filtered to the educational-quality tier by a trained
-  classifier, adding academic-register vocabulary TinyStories' toy-story register never
-  touches). Together these exactly match Section 3's 2.25B-token budget. TinyStories
-  gets the larger share deliberately — its own research finding is that narrow, simple
-  data is what makes small-model coherence achievable, so it should dominate, with
-  FineWeb-Edu mixed in for vocabulary breadth rather than given equal weight.
-  Deliberately **not** a custom scrape of "educational sites and documents" — most such
-  sites are copyrighted and not licensed for training use, and building a scraper would
-  just reinvent the deduplication/quality-filtering work these two datasets already did.
-  Neither dataset is FreeLoom-domain content; they teach the shared base "understands
-  English" competence from Section 2, not FreeLoom's own output format.
+  **FineWeb-Edu** (`HuggingFaceFW/fineweb-edu`, `sample-10BT` config, license `odc-by` —
+  real web text filtered to the educational-quality tier by a trained classifier, adding
+  academic-register vocabulary TinyStories' toy-story register never touches).
+  TinyStories was originally sized at 1.75B tokens, but its actual `train` split turned
+  out to hold only **~475M unique tokens** (2.1M stories) — a real ceiling on the
+  dataset's own size, discovered on the first real pull (this container's network
+  policy blocks `huggingface.co`, so it had never actually run before). `ml/train/
+  prepare_dataset.py` repeats TinyStories 4 epochs (~1.9B tokens) to approximate the
+  original target while keeping it the dominant source — both this project's own design
+  intent below and the original TinyStories paper's own precedent (it trained small
+  models over several epochs of this same small corpus). FineWeb-Edu hit its 500M target
+  in a single pass and isn't repeated. Total: ~2.4B tokens, close to Section 3's 2.25B
+  budget (slightly over is harmless). TinyStories still gets the larger effective share
+  deliberately — its own research finding is that narrow, simple data is what makes
+  small-model coherence achievable, so it should dominate, with FineWeb-Edu mixed in for
+  vocabulary breadth rather than given equal weight. Deliberately **not** a custom scrape
+  of "educational sites and documents" — most such sites are copyrighted and not
+  licensed for training use, and building a scraper would just reinvent the
+  deduplication/quality-filtering work these two datasets already did. Neither dataset is
+  FreeLoom-domain content; they teach the shared base "understands English" competence
+  from Section 2, not FreeLoom's own output format.
 - **Adapter fine-tuning pool — small, custom, FreeLoom-voice specific**: the ~15
   hand-authored `knowledgeBase.ts` entries and fragment library
   (`fragments`/`composition_rules`) are already (description → structured output) pairs

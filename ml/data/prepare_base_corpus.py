@@ -134,6 +134,18 @@ def pull_corpus(
     print(f"  wrote {example_count:,} examples, {total_chars:,} chars "
           f"(~{estimated_tokens:,} estimated tokens) to {out_path} in {elapsed:.0f}s")
 
+    # stream_texts() only stops early on its own target check -- if the
+    # underlying dataset's train split is simply smaller than that target,
+    # it runs out and the generator just ends with no error. That's a real,
+    # silent shortfall worth calling out loudly rather than only in a
+    # buried token count.
+    if estimated_tokens < target_tokens * 0.95:
+        shortfall_pct = 100 * (1 - estimated_tokens / target_tokens)
+        print(f"  WARNING: {label}'s dataset ran out before reaching the "
+              f"{target_tokens:,}-token target -- only {estimated_tokens:,} "
+              f"tokens exist ({shortfall_pct:.0f}% short). This is the "
+              f"dataset's real size, not a network/streaming issue.")
+
     return {
         "label": label,
         "dataset": dataset_name,

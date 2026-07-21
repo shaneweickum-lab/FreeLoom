@@ -55,6 +55,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "tokenizer"))
 from train_tokenizer import format_example, iter_training_texts  # noqa: E402
 
 
+# TinyStories' actual train split turned out to hold only ~475M tokens
+# (2.1M stories) -- well short of the 1.75B it was originally sized for, a
+# real ceiling on the dataset itself, not a bug in the pull script. Repeating
+# it BASE_CORPUS_REPEATS times (~1.9B tokens total) approximates the original
+# target while keeping it the dominant source, matching both this project's
+# own design intent (docs/slm-strategy.md Section 4: narrow/simple data
+# should dominate) and the original TinyStories paper's own precedent
+# (training small models over several epochs of this same small corpus).
+# FineWeb-Edu hit its 500M target in one pass and isn't repeated.
+BASE_CORPUS_REPEATS = {"tinystories.jsonl": 4, "fineweb_edu.jsonl": 1}
+
+
 def iter_base_corpus_texts():
     """Yields every text in the TinyStories/FineWeb-Edu base corpus written
     by ml/data/prepare_base_corpus.py, if it's been generated yet -- yields
@@ -62,15 +74,16 @@ def iter_base_corpus_texts():
     domain corpus like it always has. Unlike train_tokenizer.py's sample
     (bounded, for vocab statistics only), this reads the full corpus: base
     pretraining needs the real token volume, not a representative slice."""
-    for name in ("tinystories.jsonl", "fineweb_edu.jsonl"):
+    for name, repeats in BASE_CORPUS_REPEATS.items():
         path = BASE_CORPUS_DIR / name
         if not path.exists():
             continue
-        with path.open() as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    yield json.loads(line)["text"]
+        for _ in range(repeats):
+            with path.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        yield json.loads(line)["text"]
 
 
 def load_entry_examples() -> list[dict]:
