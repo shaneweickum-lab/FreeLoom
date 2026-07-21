@@ -29,7 +29,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 from config import BASE_CONFIG  # noqa: E402
-from lora import attach_lora_adapters, save_adapter  # noqa: E402
+from lora import attach_lora_adapters, save_adapter_params, trainable_lora_params  # noqa: E402
 from transformer_mlx import BitNetTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
@@ -108,6 +108,15 @@ def main():
     print(f"Fine-tuning '{args.task}' adapter: {len(train_data['input_ids'])} train / "
           f"{len(val_data['input_ids'])} val examples")
 
+    # With datasets this small (tens of examples), a handful of epochs is
+    # enough to fully fit the train set and start memorizing it -- val_loss
+    # reliably turns upward well before args.epochs runs out. Track whichever
+    # epoch's params minimized val_loss and save that snapshot instead of
+    # just whatever the model looks like after the last epoch.
+    best_val_loss = float("inf")
+    best_epoch = None
+    best_params = None
+
     for epoch in range(args.epochs):
         start = time.time()
         epoch_losses = []
@@ -124,9 +133,22 @@ def main():
         print(f"epoch {epoch + 1}/{args.epochs}  train_loss={train_loss:.4f}  "
               f"val_loss={val_loss:.4f}  ({time.time() - start:.1f}s)")
 
+        if val_loss == val_loss and val_loss < best_val_loss:  # val_loss == val_loss excludes nan (empty val set)
+            best_val_loss = val_loss
+            best_epoch = epoch + 1
+            best_params = dict(trainable_lora_params(model))
+
     save_path = CKPT_DIR / f"{args.task}_adapter.safetensors"
-    save_adapter(model, str(save_path))
-    print(f"Saved '{args.task}' adapter to {save_path}")
+    if best_params is not None:
+        save_adapter_params(best_params, str(save_path))
+        print(f"Saved '{args.task}' adapter to {save_path} "
+              f"(epoch {best_epoch}/{args.epochs}, best val_loss={best_val_loss:.4f} -- "
+              "later epochs overfit and were discarded)")
+    else:
+        # No val set to compare against (val_loss was nan every epoch) --
+        # nothing to select by, so fall back to the final epoch's params.
+        save_adapter_params(dict(trainable_lora_params(model)), str(save_path))
+        print(f"Saved '{args.task}' adapter to {save_path} (final epoch -- no val set to select a best epoch from)")
 
 
 if __name__ == "__main__":
