@@ -75,8 +75,8 @@ export default function BennyConversations() {
 
   return (
     <div className="flex flex-col sm:flex-row gap-4 h-full min-h-0">
-      <div className="sm:w-40 shrink-0 flex flex-col gap-2">
-        <button onClick={handleCreate} disabled={creating} className="text-xs font-medium text-gold hover:underline text-left disabled:opacity-50">
+      <div className="sm:w-44 shrink-0 flex flex-col gap-2 sm:border-r sm:border-border sm:pr-4">
+        <button onClick={handleCreate} disabled={creating} className="btn-secondary text-xs py-1.5 disabled:opacity-50">
           + New chat
         </button>
         <div className="flex flex-col gap-1 overflow-y-auto">
@@ -108,7 +108,9 @@ export default function BennyConversations() {
         {selectedId ? (
           <BennyChat key={selectedId} conversationId={selectedId} />
         ) : (
-          <p className="text-sm text-muted">Start a new chat to ask Benny something.</p>
+          <div className="h-full flex items-center justify-center">
+            <p className="text-sm text-muted">Start a new chat to ask Benny something.</p>
+          </div>
         )}
       </div>
     </div>

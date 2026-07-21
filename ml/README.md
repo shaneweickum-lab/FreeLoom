@@ -93,24 +93,33 @@ for (see `docs/slm-strategy.md` Section 5).
   example is a cluster of 3 informal word dumps about the same niche activity
   deliberately absent from `src/lib/knowledgeBase.ts`'s real keyword list, paired with
   one drafted new entry (`keywords`/`skills` lists included, matching that file's real
-  `KnowledgeBaseEntry` shape) generalizing across them. Scored via
-  `eval/run_eval_kb_authoring.py` against `eval/validate_kb_entry.py` — deliberately
-  has **no** known-subject-area cross-check (unlike entry_drafting's), since this
-  adapter's whole job is drafting entries for topics not already known. Retrain on real
-  `human_resolutions` clusters once meaningful volume accumulates — this bootstrap is a
-  stand-in, not a permanent substitute.
+  `KnowledgeBaseEntry` shape) generalizing across them. **660 clusters** generated
+  across two real `claude-sonnet-5` runs (~$7.21 total — the first run stopped early at
+  160/500 on an exhausted API credit balance, not a cost-cap or bug; a second run after
+  adding credits finished clean at 500/500). Scored via `eval/run_eval_kb_authoring.py`
+  against `eval/validate_kb_entry.py` — deliberately has **no** known-subject-area
+  cross-check (unlike entry_drafting's), since this adapter's whole job is drafting
+  entries for topics not already known. `subject_area` values came out highly
+  fragmented across clusters (e.g. "Engineering / Physics" vs. "Physics / Engineering"
+  vs. "Engineering / Applied Physics") since there's no fixed topic→subject mapping
+  the way entry_drafting's `TOPIC_POOL` has — expected, not a bug, and not penalized by
+  the validator. Retrain on real `human_resolutions` clusters once meaningful volume
+  accumulates — this bootstrap is a stand-in, not a permanent substitute.
 - **`platform_help` adapter**: answers a parent's informal question about how the
   FreeLoom platform itself works (not an entry-drafting or kb-authoring task) — the
   first step toward Benny answering real questions in the assistant-mode chat panel
   (`src/lib/benny/chat.ts`, gated behind `SLM_CHAT_URL`). Training data is
-  hand-authored ground truth (`data/platform_help_seed.json`, ~24 accurate
+  hand-authored ground truth (`data/platform_help_seed.json`, 24 accurate
   question/answer pairs about real FreeLoom features) plus paraphrased variants from
   `data/generate_platform_help_synthetic.py`, anchored per-seed so the model learns to
   vary phrasing without ever inventing a platform behavior that isn't real — accuracy
   matters more here than for the other two adapters, since a wrong chat answer is read
-  directly by a parent rather than passing through Stage 5 human review first. Scored
-  qualitatively via `eval/run_eval_platform_help.py` (no rigid schema to
-  regex-validate for free-form prose, unlike the other two adapters).
+  directly by a parent rather than passing through Stage 5 human review first.
+  **1,360 paraphrased variants** generated across two real `claude-sonnet-5` runs
+  (~$5.10 total, same credit-exhaustion-then-top-up pattern as kb_authoring) + the 24
+  seed examples = **1,384 total**. Scored qualitatively via
+  `eval/run_eval_platform_help.py` (no rigid schema to regex-validate for free-form
+  prose, unlike the other two adapters).
 
 ## Setup on the M5 MacBook
 
@@ -233,14 +242,15 @@ single request calls synchronously. That scheduling/approval-queue piece is unbu
   (this lives in `src/lib/pipeline/`, not `ml/` — it's the existing hashed-vector
   classifier idea, not new ml/ scaffolding).
 - Done (bootstrap, not final): `kb_authoring` now has a synthetic dataset via
-  `data/generate_kb_authoring_synthetic.py`. Retrain on real `human_resolutions`
-  clusters once meaningful volume accumulates — see the Current state entry above for
-  the full reasoning on why synthetic data was used now despite the original plan.
-- Done (adapter + eval built, generation run pending a fresh API key): `platform_help`
-  adapter for Benny answering FreeLoom platform questions — `data/platform_help_seed.json`
-  (~24 hand-authored ground-truth Q&A pairs) is real and usable on its own;
-  `data/generate_platform_help_synthetic.py` scales it with paraphrased variants once
-  run. No production serving decided yet (see "Where this plugs in").
+  `data/generate_kb_authoring_synthetic.py` (660 clusters, ~$7.21). Retrain on real
+  `human_resolutions` clusters once meaningful volume accumulates — see the Current
+  state entry above for the full reasoning on why synthetic data was used now despite
+  the original plan. Training + eval on this dataset not yet run.
+- Done: `platform_help` adapter for Benny answering FreeLoom platform questions —
+  `data/platform_help_seed.json` (24 hand-authored ground-truth Q&A pairs) +
+  `data/generate_platform_help_synthetic.py`'s paraphrased variants (1,360 generated,
+  ~$5.10) = 1,384 total examples. Training + eval on this dataset not yet run. No
+  production serving decided yet (see "Where this plugs in").
 - Build the actual model-serving mechanism (how a Vercel-deployed Next.js app calls an
   MLX-only model) — explicitly not decided yet, needed before `SLM_ENTRY_DRAFTING_URL`
   or `SLM_CHAT_URL` do anything in production.

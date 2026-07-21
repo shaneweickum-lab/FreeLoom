@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { BennyMessage } from "@/lib/types";
 
@@ -29,6 +29,12 @@ export default function BennyChat({ conversationId }: { conversationId: string }
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, sending]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,9 +80,9 @@ export default function BennyChat({ conversationId }: { conversationId: string }
 
   return (
     <div className="flex flex-col gap-3 h-full">
-      <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto rounded-lg border border-navy-line bg-navy-soft p-3">
+      <div ref={scrollRef} className="flex-1 min-h-0 flex flex-col justify-end gap-2 overflow-y-auto rounded-lg border border-navy-line bg-navy-soft p-3">
         {messages.length === 0 && !sending && (
-          <p className="text-sm text-muted">Ask Benny anything to get started.</p>
+          <p className="text-sm text-muted text-center">Ask Benny anything to get started.</p>
         )}
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
