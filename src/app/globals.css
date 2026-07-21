@@ -60,6 +60,36 @@
   --font-mono: var(--font-plex-mono);
 }
 
+/*
+ * Light theme override, scoped to a wrapper div in (app)/layout.tsx (not
+ * :root) via [data-theme="light"] -- CSS custom properties cascade from any
+ * ancestor element, not just :root, so this re-themes every bg-navy-soft/
+ * border-navy-line/etc. utility beneath that div with zero per-component
+ * edits, since Tailwind resolves the variable at paint time. The public
+ * marketing page never renders inside that div, so it structurally can't
+ * inherit a logged-in user's theme -- it stays dark-only by construction.
+ * --parchment/--parchment-line/--ink/--ink-soft are deliberately NOT
+ * overridden here: those are the "always-light island" tokens (e.g.
+ * LogEntryCard's parchment panel) and need to stay visually distinct even
+ * inside light mode, per this file's own header comment above.
+ */
+[data-theme="light"] {
+  --navy-deep: #f7f2e6;
+  --navy: #f2ebd9;
+  --navy-soft: #ffffff;
+  --navy-line: #e3d6b8;
+  --surface-hover: #ede4cc;
+  --foreground: #2c2620;
+  --muted: #6b6153;
+  --background: var(--navy-deep);
+  --surface: var(--navy-soft);
+  --border: var(--navy-line);
+}
+
+/* Known limitation: body's own background sits outside the [data-theme]
+   div's scope, so a rare rubber-band overscroll bounce (mobile Safari) can
+   flash the dark background behind a light-themed app. Not worth solving
+   for that one edge case. */
 body {
   background: var(--background);
   color: var(--foreground);

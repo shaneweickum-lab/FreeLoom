@@ -1,25 +1,26 @@
-"use client";
+import { createClient } from "@/lib/supabase/server";
+import AppShell from "@/components/AppShell";
+import type { Theme } from "@/lib/themeContext";
 
-import { StudentProvider } from "@/lib/studentContext";
-import AppRail from "@/components/AppRail";
+// Reads the saved theme preference server-side so there's no flash of the
+// wrong theme on load -- defaults to "dark" (today's only theme) when
+// logged out or before a preference has ever been saved, matching
+// theme_preference's own DB default.
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-// The persistent left rail from the app redesign brief: brand mark, the
-// student switcher, nav links, and the per-subject credit ledger, all in
-// one column that stays put while the main content area changes. Stacks
-// above the content on mobile instead of a sidebar (AppRail renders its own
-// compact top bar + off-canvas drawer below md).
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <StudentProvider>
-      <div className="flex flex-col md:flex-row min-h-screen">
-        <AppRail />
-        <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
-          {/* Every page here was built assuming the old root layout's
-              max-w-5xl wrapper; without a cap here they'd stretch
-              edge-to-edge next to the rail on a wide screen. */}
-          <div className="max-w-4xl">{children}</div>
-        </main>
-      </div>
-    </StudentProvider>
-  );
+  let initialTheme: Theme = "dark";
+  if (user) {
+    const { data: profile } = await supabase
+      .from("school_profiles")
+      .select("theme_preference")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (profile?.theme_preference === "light") initialTheme = "light";
+  }
+
+  return <AppShell initialTheme={initialTheme}>{children}</AppShell>;
 }
