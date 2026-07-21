@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useCountdown } from "@/lib/useCountdown";
+import AnnouncementModal from "@/components/AnnouncementModal";
 import type { AppNotification } from "@/lib/types";
 
 const TYPE_LABEL: Record<AppNotification["type"], string> = {
@@ -121,8 +122,36 @@ export default function NotificationItem({
   onOpenLink?: () => void;
   onDelete?: (id: string) => void;
 }) {
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
+  const isAnnouncement = notification.type === "announcement" && !!notification.related_id;
+
+  function openAnnouncement() {
+    setAnnouncementOpen(true);
+    if (!notification.read_at) {
+      const supabase = createClient();
+      supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", notification.id);
+    }
+  }
+
   return (
-    <div className={`rounded-md p-2 text-sm ${!notification.read_at ? "bg-surface-hover" : ""}`}>
+    <div
+      role={isAnnouncement ? "button" : undefined}
+      tabIndex={isAnnouncement ? 0 : undefined}
+      onClick={isAnnouncement ? openAnnouncement : undefined}
+      onKeyDown={
+        isAnnouncement
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openAnnouncement();
+              }
+            }
+          : undefined
+      }
+      className={`rounded-md p-2 text-sm ${!notification.read_at ? "bg-surface-hover" : ""} ${
+        isAnnouncement ? "cursor-pointer hover:bg-surface-hover" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <span className="text-[10px] font-mono uppercase tracking-wide text-muted">{TYPE_LABEL[notification.type]}</span>
@@ -130,7 +159,10 @@ export default function NotificationItem({
         </div>
         {onDelete && (
           <button
-            onClick={() => onDelete(notification.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(notification.id);
+            }}
             aria-label="Delete notification"
             className="shrink-0 text-muted hover:text-red-400 transition-colors text-xs"
           >
@@ -138,13 +170,18 @@ export default function NotificationItem({
           </button>
         )}
       </div>
-      {notification.body && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{notification.body}</p>}
+      {notification.body && (
+        <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">
+          {notification.body}
+          {isAnnouncement && <span className="text-gold"> Read more…</span>}
+        </p>
+      )}
       <p className="text-[10px] text-muted/70 mt-1">{new Date(notification.created_at).toLocaleString()}</p>
 
       {notification.type === "access_request" && notification.related_id && (
         <AccessRequestStatus requestId={notification.related_id} onResponded={onResponded} />
       )}
-      {notification.type !== "access_request" && notification.link_path && (
+      {notification.type === "message" && notification.link_path && (
         <Link
           href={notification.link_path}
           onClick={onOpenLink}
@@ -152,6 +189,15 @@ export default function NotificationItem({
         >
           View
         </Link>
+      )}
+
+      {announcementOpen && notification.related_id && (
+        // Stops the modal's own clicks (backdrop, close button, content)
+        // from bubbling up to this card's own onClick, which would
+        // otherwise immediately reopen the modal right after closing it.
+        <div onClick={(e) => e.stopPropagation()}>
+          <AnnouncementModal announcementId={notification.related_id} onClose={() => setAnnouncementOpen(false)} />
+        </div>
       )}
     </div>
   );
