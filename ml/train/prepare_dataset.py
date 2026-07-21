@@ -40,6 +40,7 @@ import argparse
 import itertools
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -109,7 +110,7 @@ def load_entry_examples() -> list[dict]:
 
 
 def pack_base_sequences(tokenizer: Tokenizer, seq_len: int, texts: Iterable[str],
-                         batch_size: int = 2000) -> np.ndarray:
+                         batch_size: int = 2000, progress_every_seconds: float = 15.0) -> np.ndarray:
     """Tokenizes `texts` and packs them into fixed-length seq_len chunks.
 
     Batch-tokenizes in groups of `batch_size` and flushes every completed
@@ -120,6 +121,12 @@ def pack_base_sequences(tokenizer: Tokenizer, seq_len: int, texts: Iterable[str]
     overhead each, i.e. tens of GB before the token data itself is
     counted. A list of packed seq_len-sized numpy arrays holds close to
     just the actual payload instead.
+
+    Prints a heartbeat every `progress_every_seconds` -- at real corpus
+    scale (millions of texts across TinyStories's repeated epochs +
+    FineWeb-Edu) this loop runs long enough that silence looks identical to
+    a hang; a time-based interval keeps the cadence steady regardless of
+    how fast a given machine tokenizes.
     """
     bos_id = tokenizer.token_to_id("<bos>")
     eos_id = tokenizer.token_to_id("<eos>")
@@ -128,6 +135,9 @@ def pack_base_sequences(tokenizer: Tokenizer, seq_len: int, texts: Iterable[str]
     sequences: list[np.ndarray] = []
     carry: list[int] = []
     batch: list[str] = []
+    texts_seen = 0
+    start = time.monotonic()
+    last_report = start
 
     def flush_batch():
         nonlocal carry
@@ -144,9 +154,17 @@ def pack_base_sequences(tokenizer: Tokenizer, seq_len: int, texts: Iterable[str]
 
     for text in texts:
         batch.append(text)
+        texts_seen += 1
         if len(batch) >= batch_size:
             flush_batch()
+            now = time.monotonic()
+            if now - last_report >= progress_every_seconds:
+                tokens_so_far = len(sequences) * seq_len
+                print(f"  ...{texts_seen:,} texts tokenized, ~{tokens_so_far:,} tokens packed so far "
+                      f"({now - start:.0f}s elapsed)")
+                last_report = now
     flush_batch()
+    print(f"  done: {texts_seen:,} texts tokenized in {time.monotonic() - start:.0f}s")
 
     if not sequences:
         padded = carry + [pad_id] * (seq_len - len(carry))
@@ -205,6 +223,8 @@ def main():
 
     # 1. Base pretraining sequences: domain corpus + (if generated) the full
     # TinyStories/FineWeb-Edu base corpus.
+    print("Packing base pretraining sequences -- millions of texts at real corpus "
+          "scale, this can take a while (progress prints below)...")
     base_texts = itertools.chain(iter_training_texts(), iter_base_corpus_texts())
     base_sequences = pack_base_sequences(tokenizer, args.seq_len, base_texts)
     rng.shuffle(base_sequences)
