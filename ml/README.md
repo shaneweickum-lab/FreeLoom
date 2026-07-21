@@ -39,21 +39,21 @@ for (see `docs/slm-strategy.md` Section 5).
   Section 4 calls for — enough to validate the whole pipeline end-to-end, not enough to
   actually pretrain a useful 75M-parameter model on yet. Nowhere close, in fact: see the
   token-budget math below.
-- **Tokenizer**: trained on that small corpus, landed at 1,477 tokens (byte-level BPE
-  ran out of distinct merges to learn — expected at this corpus size). Retrain at a
-  larger `--vocab-size` (e.g. 8000) once the corpus scales into the thousands, and
-  update `model/config.py`'s `vocab_size` to match — the two are required to agree
-  (`train_base.py` asserts this at startup).
-- **Model sizing**: `model/config.py` computes ~75.0M base params (876 d_model, 8
-  layers, 12 heads, head_dim=73) against the *current* small vocab; this will shift
-  slightly once the tokenizer is retrained at a realistic vocab size.
+- **Tokenizer**: retrained against a sample of the real base corpus (see below), now at
+  a real 8,000-token vocab (was 1,477, sized for the original 76-example
+  proof-of-concept corpus — byte-level BPE ran out of distinct merges to learn at that
+  size). `model/config.py`'s `vocab_size` must match this exactly (`train_base.py`
+  asserts it at startup) — already updated.
+- **Model sizing**: `model/config.py` computes ~80.7M base params (876 d_model, 8
+  layers, 12 heads, head_dim=73, vocab_size=8000) — bumped from the earlier ~75.0M
+  estimate now that it's against the real vocab size instead of the tiny proof-of-concept
+  one.
 - **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 30
   tokens/parameter — Chinchilla's ~20 compute-optimal ratio plus a deliberate +10
   overtraining margin (same rationale as LLaMA training past compute-optimal for a
-  cheaper-to-run model). At ~75M params that's **~2.25 billion training tokens**. The
-  current 60-example corpus is on the order of a few thousand tokens — several orders
-  of magnitude short, and it stays that way deliberately: it's the domain-specific
-  entry-drafting fine-tune data, not the base-pretrain corpus.
+  cheaper-to-run model). At ~80.7M params that's **~2.42 billion training tokens**.
+  The domain-specific `synthetic_corpus.jsonl` (a few thousand tokens) is separately
+  the entry-drafting fine-tune data, not the base-pretrain corpus below.
 - **Base-pretraining corpus (pulled, on the Mac)**: `data/prepare_base_corpus.py`
   streams two already-generated, openly-licensed datasets instead of the small domain
   corpus for base pretraining — TinyStories (`roneneldan/TinyStories`, `cdla-sharing-1.0`)
@@ -64,8 +64,9 @@ for (see `docs/slm-strategy.md` Section 5).
   target exactly. `train/prepare_dataset.py` repeats TinyStories 4 epochs (~1.9B tokens,
   matching the original TinyStories paper's own precedent of training over several
   epochs of this same small corpus) to keep it the dominant source and land close to the
-  2.25B-token budget above (~2.4B total, slightly over is harmless) — see
-  `docs/slm-strategy.md` Section 4 for the full reasoning. Read both licenses before
+  2.42B-token budget above (~2.46B total actually packed, per `train/prepare_dataset.py`'s
+  first real run — slightly over is harmless) — see `docs/slm-strategy.md` Section 4 for
+  the full reasoning. Read both licenses before
   shipping a model trained on this data (the script prints both URLs on completion).
 - **`entry_drafting` adapter**: has real (if small) training data via
   `train/prepare_dataset.py`.
