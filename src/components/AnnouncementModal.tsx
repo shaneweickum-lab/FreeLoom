@@ -8,8 +8,10 @@ import type { AnnouncementPost } from "@/lib/types";
  * only carries a 140-char excerpt (see the fanout in
  * api/admin/announcements/route.ts), so this fetches the full announcement
  * by id and renders it like an opened email: full title, full body, posted
- * date. `announcements` RLS is select-to-all-authenticated, so this is a
- * plain client-side read, no API route needed. */
+ * date. Reads `announcements` directly with the session client, gated by
+ * that table's own audience-targeted RLS select policy (everyone / a single
+ * user / a schooling-type group) -- no API route needed, and no need to
+ * duplicate the targeting logic here. */
 export default function AnnouncementModal({
   announcementId,
   onClose,
@@ -28,8 +30,13 @@ export default function AnnouncementModal({
       .select("*")
       .eq("id", announcementId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (cancelled) return;
+        // A null row here without a thrown error almost always means RLS
+        // filtered it out (zero rows matched the policy), not that the row
+        // was deleted -- log it so a permissions regression is visible in
+        // the console instead of silently looking identical to "deleted."
+        if (error) console.error("announcement fetch error:", error);
         setAnnouncement(data);
         setLoading(false);
       });
