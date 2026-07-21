@@ -1,7 +1,7 @@
 # FreeLoom SLM — `ml/`
 
 Implementation of the architecture in [`docs/slm-strategy.md`](../docs/slm-strategy.md):
-one shared ~75M-parameter native BitNet b1.58 base model, trained from scratch, with two
+one shared ~13.7M-parameter native BitNet b1.58 base model, trained from scratch, with two
 LoRA adapters on top (entry-drafting, knowledge-base-authoring). This directory is a
 separate Python subproject from the Next.js app in `src/` — it has no shared test runner
 or build step with the TS app, and nothing here is imported by production code yet (see
@@ -37,21 +37,28 @@ for (see `docs/slm-strategy.md` Section 5).
   examples (`data/synthetic_corpus.jsonl`) covering 12 subject areas. This is a
   proof-of-concept volume, not the "thousands of examples" `docs/slm-strategy.md`
   Section 4 calls for — enough to validate the whole pipeline end-to-end, not enough to
-  actually pretrain a useful 75M-parameter model on yet. Nowhere close, in fact: see the
+  actually pretrain a useful 13.7M-parameter model on yet. Nowhere close, in fact: see the
   token-budget math below.
 - **Tokenizer**: retrained against a sample of the real base corpus (see below), now at
   a real 8,000-token vocab (was 1,477, sized for the original 76-example
   proof-of-concept corpus — byte-level BPE ran out of distinct merges to learn at that
   size). `model/config.py`'s `vocab_size` must match this exactly (`train_base.py`
   asserts it at startup) — already updated.
-- **Model sizing**: `model/config.py` computes ~80.7M base params (876 d_model, 8
-  layers, 12 heads, head_dim=73, vocab_size=8000) — bumped from the earlier ~75.0M
-  estimate now that it's against the real vocab size instead of the tiny proof-of-concept
-  one.
+- **Model sizing**: `model/config.py` computes ~13.7M base params (384 d_model, 6
+  layers, 6 heads, head_dim=64, vocab_size=8000) — shrunk from an earlier ~80.7M
+  (876/8/12) after the first real training run on the M5 measured native BitNet QAT
+  training as compute-heavier per step than a plain dense model the same size (every
+  `BitLinear` forward re-quantizes its full-precision shadow weights via the
+  straight-through estimator, on top of an otherwise-ordinary matmul -- the BitNet
+  speed/memory win only exists at inference time with truly packed low-bit weights, not
+  during training). At ~80.7M params, the measured ~305 tok/s projected to ~84 days for
+  one epoch -- untenable. See `docs/slm-strategy.md` Section 5 for the full story.
 - **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 30
   tokens/parameter — Chinchilla's ~20 compute-optimal ratio plus a deliberate +10
   overtraining margin (same rationale as LLaMA training past compute-optimal for a
-  cheaper-to-run model). At ~80.7M params that's **~2.42 billion training tokens**.
+  cheaper-to-run model). At ~13.7M params that's **~410.7 million training tokens**
+  (down from ~2.42B at the old size -- the budget scales with param count too, so
+  shrinking the model compounds: less compute per token *and* fewer tokens needed).
   The domain-specific `synthetic_corpus.jsonl` (a few thousand tokens) is separately
   the entry-drafting fine-tune data, not the base-pretrain corpus below.
 - **Base-pretraining corpus (pulled, on the Mac)**: `data/prepare_base_corpus.py`
@@ -63,10 +70,12 @@ for (see `docs/slm-strategy.md` Section 5).
   in this container and this had never actually run before. FineWeb-Edu hit its 500M
   target exactly. `train/prepare_dataset.py` repeats TinyStories 4 epochs (~1.9B tokens,
   matching the original TinyStories paper's own precedent of training over several
-  epochs of this same small corpus) to keep it the dominant source and land close to the
-  2.42B-token budget above (~2.46B total actually packed, per `train/prepare_dataset.py`'s
-  first real run — slightly over is harmless) — see `docs/slm-strategy.md` Section 4 for
-  the full reasoning. Read both licenses before
+  epochs of this same small corpus) to keep it the dominant source, packing ~2.46B
+  tokens total on its first real run -- sized for the ~80.7M config in place at the
+  time. `train/train_base.py`'s full run now subsamples that packed corpus down to
+  whatever the *current* config's own budget calls for (~410.7M tokens, ~802K of the
+  packed 4.3M sequences) rather than assuming the two always match — see
+  `docs/slm-strategy.md` Section 4 for the full reasoning. Read both licenses before
   shipping a model trained on this data (the script prints both URLs on completion).
 - **`entry_drafting` adapter**: has real (if small) training data via
   `train/prepare_dataset.py`.
@@ -106,8 +115,10 @@ python3 train/prepare_dataset.py
 #    committing to a long run (docs/slm-strategy.md Section 5):
 python3 train/train_base.py --tiny
 
-# 4. Full base pretrain (once the tiny run's loss curve looks sane, and
-#    ideally once the corpus has scaled well beyond today's 73 examples):
+# 4. Full base pretrain (once the tiny run's loss curve looks sane).
+#    Automatically subsamples the packed corpus down to this config's own
+#    ~410.7M-token Chinchilla+10 budget rather than training on the whole
+#    packed corpus (which was sized for an earlier, larger config):
 python3 train/train_base.py
 
 # 5. Fine-tune the entry-drafting adapter on the frozen base:
@@ -145,14 +156,14 @@ wiring is separate follow-up work from this scaffolding pass.
   run end-to-end — the key was an empty placeholder in every environment available
   during this pass). This is still the entry-drafting fine-tune data, separate from the
   base-pretrain corpus above — scaling it further improves the adapter, not the base.
-- Retrain the tokenizer at a production vocab size against the scaled-up corpus, and
-  update `model/config.py` to match.
+- Done: tokenizer retrained at a real 8,000-token production vocab against the base
+  corpus sample, `model/config.py` updated to match.
 - Once real revenue funds a much larger custom-generated corpus (discussed but not
-  committed to yet): a 30B-token target is far past this 75M-parameter model's
-  Chinchilla+10 budget (~400 tokens/param vs. the 30 target) — that scale of spend is
-  better matched to a bigger model (~1-1.5B params at 20-30 tokens/param) than to
-  overtraining Benny as currently sized, or to reusing the corpus across several small
-  models rather than one.
+  committed to yet): a 30B-token target is even further past this 13.7M-parameter
+  model's Chinchilla+10 budget now (~2,190 tokens/param vs. the 30 target) than it was
+  at the old ~80.7M size (~400 tokens/param) — that scale of spend is better matched to
+  a genuinely bigger model than to overtraining Benny as currently sized, or to reusing
+  the corpus across several small models rather than one.
 - Build the classical subject-area cross-check from `docs/slm-strategy.md` Section 7
   (this lives in `src/lib/pipeline/`, not `ml/` — it's the existing hashed-vector
   classifier idea, not new ml/ scaffolding).

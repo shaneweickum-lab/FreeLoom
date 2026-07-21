@@ -33,7 +33,7 @@ import mlx.optimizers as optim
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
-from config import BASE_CONFIG, ModelConfig  # noqa: E402
+from config import BASE_CONFIG, ModelConfig, estimate_param_count, estimate_token_budget  # noqa: E402
 from transformer_mlx import BitNetTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
@@ -108,6 +108,19 @@ def main():
                               "epoch over millions of real sequences takes hours even at TINY_CONFIG's "
                               "tiny model size, defeating the point of a fast sanity check")
     parser.add_argument("--tiny-val-samples", type=int, default=200)
+    parser.add_argument("--target-tokens", type=int, default=None,
+                         help="full run only -- caps train_sequences to roughly this many tokens "
+                              "(defaults to cfg's own Chinchilla+10 estimate_token_budget()). "
+                              "base_train.npy holds however many tokens the corpus pipeline packed, "
+                              "which can be far more than a given model's budget calls for -- training "
+                              "an extra 5-6x more tokens than needed doesn't improve on Chinchilla+10, "
+                              "just wastes the same multiple in wall-clock time.")
+    parser.add_argument("--max-val-sequences", type=int, default=2000,
+                         help="full run only -- val is just a generalization sanity check, doesn't "
+                              "need every held-out sequence to be useful")
+    parser.add_argument("--full-corpus", action="store_true",
+                         help="skip the --target-tokens cap and train on every packed sequence "
+                              "regardless of cfg's token budget")
     args = parser.parse_args()
     if args.epochs is None:
         args.epochs = 20 if args.tiny else 1
@@ -123,6 +136,27 @@ def main():
             train_sequences = train_sequences[idx]
         if len(val_sequences) > args.tiny_val_samples:
             idx = tiny_rng.choice(len(val_sequences), size=args.tiny_val_samples, replace=False)
+            val_sequences = val_sequences[idx]
+    elif not args.full_corpus and len(train_sequences) > 0:
+        # The packed corpus can hold far more tokens than this cfg's own
+        # Chinchilla+10 budget calls for (it was sized for whatever model was
+        # configured at packing time, not necessarily this one) -- training
+        # every extra token doesn't add anything Chinchilla+10 says is worth
+        # having, it just spends the same multiple in wall-clock time for no
+        # benefit.
+        target_tokens = args.target_tokens or estimate_token_budget(estimate_param_count(cfg))
+        target_sequences = max(1, min(len(train_sequences), -(-target_tokens // train_sequences.shape[1])))
+        if target_sequences < len(train_sequences):
+            full_rng = np.random.default_rng(0)
+            idx = full_rng.choice(len(train_sequences), size=target_sequences, replace=False)
+            train_sequences = train_sequences[idx]
+            print(f"Capped training data to {target_sequences:,} sequences "
+                  f"(~{target_sequences * train_sequences.shape[1]:,} tokens) matching this config's "
+                  f"~{target_tokens:,}-token Chinchilla+10 budget -- pass --full-corpus to train on "
+                  f"every packed sequence instead.")
+        if len(val_sequences) > args.max_val_sequences:
+            full_val_rng = np.random.default_rng(1)
+            idx = full_val_rng.choice(len(val_sequences), size=args.max_val_sequences, replace=False)
             val_sequences = val_sequences[idx]
 
     # vocab_size in cfg must match the tokenizer actually used to build
