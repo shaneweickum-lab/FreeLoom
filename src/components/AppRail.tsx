@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
+import { useBennyPanel } from "@/lib/bennyPanelContext";
 import StudentSwitcher from "@/components/StudentSwitcher";
 import LogoMark from "@/components/LogoMark";
 import NotificationBell from "@/components/NotificationBell";
@@ -35,6 +36,50 @@ function CloseIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
       <path d="M6 6l12 12M18 6L6 18" />
     </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-4-1L3 20l1.3-3.9a8.38 8.38 0 0 1-1-4A8.38 8.38 0 0 1 11.8 3.6a8.5 8.5 0 0 1 9.2 8.9Z" />
+    </svg>
+  );
+}
+
+/** Only renders once the signed-in user has opted into Benny assistant mode
+ * (Settings > Account) -- fetches its own enabled state the same
+ * self-contained way AdminAccessIndicator/NotificationBell do, so it can be
+ * dropped into both the desktop rail and the mobile top bar with no prop
+ * drilling. Toggling the panel is all this does -- the actual drawer lives
+ * at the AppShell level, see BennyPanel.tsx. */
+function BennyTriggerButton() {
+  const { toggle } = useBennyPanel();
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("school_profiles")
+        .select("benny_assistant_enabled")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      setEnabled(!!profile?.benny_assistant_enabled);
+    });
+  }, []);
+
+  if (!enabled) return null;
+
+  return (
+    <button
+      onClick={toggle}
+      aria-label="Ask Benny"
+      className="h-9 w-9 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+    >
+      <ChatIcon />
+    </button>
   );
 }
 
@@ -103,7 +148,10 @@ function RailContent({ onNavigate }: { onNavigate?: () => void }) {
           <LogoMark size={32} />
           <span className="font-serif">FREELOOM</span>
         </Link>
-        {user && <NotificationBell />}
+        <div className="flex items-center gap-1">
+          {user && <BennyTriggerButton />}
+          {user && <NotificationBell />}
+        </div>
       </div>
 
       {user && <AdminAccessIndicator />}
@@ -184,6 +232,7 @@ export default function AppRail() {
         </Link>
         <div className="flex items-center gap-2">
           <AdminAccessIndicator compact />
+          <BennyTriggerButton />
           <NotificationBell />
           <button
             onClick={() => setMobileOpen((v) => !v)}

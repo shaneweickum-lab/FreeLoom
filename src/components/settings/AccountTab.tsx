@@ -60,6 +60,24 @@ export default function AccountTab({ userId, initialProfile }: { userId: string;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Independent of the edit-mode form above -- a feature switch, not
+  // identifying account info, so it saves instantly on toggle (same UX as
+  // NotificationsTab.tsx's checkboxes) rather than requiring edit mode + Save.
+  const [bennyEnabled, setBennyEnabled] = useState(initialProfile?.benny_assistant_enabled ?? false);
+  const [bennySaving, setBennySaving] = useState(false);
+
+  async function saveBennyEnabled(next: boolean) {
+    setBennyEnabled(next);
+    setBennySaving(true);
+    const supabase = createClient();
+    await supabase.from("school_profiles").upsert({
+      user_id: userId,
+      benny_assistant_enabled: next,
+      updated_at: new Date().toISOString(),
+    });
+    setBennySaving(false);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -211,6 +229,23 @@ export default function AccountTab({ userId, initialProfile }: { userId: string;
         <span className="text-muted/70 text-[11px] pl-6 -mt-2">
           Same admin read-only access as above, but for birthdates -- shown as a fixed placeholder instead of the
           real date.
+        </span>
+      </div>
+
+      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 accent-gold"
+            checked={bennyEnabled}
+            disabled={bennySaving}
+            onChange={(e) => saveBennyEnabled(e.target.checked)}
+          />
+          <span className="font-medium">Benny (AI Assistant)</span>
+        </label>
+        <span className="text-muted/70 text-[11px]">
+          Adds a chat icon to the app for asking Benny, FreeLoom&apos;s in-progress assistant, questions. Benny is
+          still early -- expect a placeholder reply for now while the assistant itself is being trained.
         </span>
       </div>
 

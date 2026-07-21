@@ -2,7 +2,9 @@
 
 import { StudentProvider } from "@/lib/studentContext";
 import { ThemeProvider, useTheme, type Theme } from "@/lib/themeContext";
+import { BennyPanelProvider } from "@/lib/bennyPanelContext";
 import AppRail from "@/components/AppRail";
+import BennyPanel from "@/components/BennyPanel";
 
 // data-theme has to come from useTheme() (live state), not the initialTheme
 // prop directly -- otherwise toggling Appearance in Settings would update
@@ -20,6 +22,10 @@ function ThemedShell({ children }: { children: React.ReactNode }) {
             edge-to-edge next to the rail on a wide screen. */}
         <div className="max-w-4xl">{children}</div>
       </main>
+      {/* Sibling of AppRail, not nested inside it -- see BennyPanel.tsx's
+          header comment for why (AppRail's own transform breaks fixed-
+          position descendants). */}
+      <BennyPanel />
     </div>
   );
 }
@@ -38,7 +44,9 @@ export default function AppShell({ initialTheme, children }: { initialTheme: The
   return (
     <ThemeProvider initialTheme={initialTheme}>
       <StudentProvider>
-        <ThemedShell>{children}</ThemedShell>
+        <BennyPanelProvider>
+          <ThemedShell>{children}</ThemedShell>
+        </BennyPanelProvider>
       </StudentProvider>
     </ThemeProvider>
   );
