@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import type { ActivityType, EntryStatus, PipelineEntry, SourceStage, TagConfidence, TagSource } from "@/lib/types";
-import type { ClassifyResult, DraftSource } from "@/lib/pipeline/classify";
+import type { DraftSource } from "@/lib/pipeline/classify";
+import type { ClassifyResultWithDraft } from "@/lib/pipeline/slmDraft";
 import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
 import CaptureCard, { type CaptureForm } from "@/components/CaptureCard";
@@ -56,7 +57,7 @@ function LogPageInner() {
   // Set only when Stage 4's confidence check comes back empty-handed — the
   // word dump is held here, unsaved, until the parent resolves it via the
   // manual form below (Stage 5).
-  const [needsReview, setNeedsReview] = useState<{ result: ClassifyResult; rawWordDump: string } | null>(null);
+  const [needsReview, setNeedsReview] = useState<{ result: ClassifyResultWithDraft; rawWordDump: string } | null>(null);
   const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
   const [resolving, setResolving] = useState(false);
 
@@ -206,13 +207,27 @@ function LogPageInner() {
         }),
       });
       if (!res.ok) throw new Error("classify failed");
-      const result: ClassifyResult = await res.json();
+      const result: ClassifyResultWithDraft = await res.json();
 
       if (!result.confident) {
         // Stage 4 → 5: hold the word dump here rather than writing anything
         // yet. The entry only gets created once the parent resolves it below.
+        // A draftCandidate (Stage 4 SLM fallback, only ever present when
+        // SLM_ENTRY_DRAFTING_URL is configured) pre-fills the same manual
+        // form a parent would otherwise start blank -- still fully editable,
+        // still requires their own Save click, never auto-submitted.
+        const draft = result.draftCandidate;
         setNeedsReview({ result, rawWordDump: form.rawWordDump });
-        setManualForm(EMPTY_MANUAL_FORM);
+        setManualForm(
+          draft
+            ? {
+                subjectArea: draft.subjectArea,
+                courseTitle: draft.courseTitle,
+                creditValue: String(draft.creditValue),
+                description: draft.rationale,
+              }
+            : EMPTY_MANUAL_FORM
+        );
         setForm(EMPTY_FORM);
         return;
       }
@@ -570,6 +585,11 @@ function LogPageInner() {
             Nothing in the knowledge base or keyword rules matched this one — write the class entry yourself. This also
             teaches the system: every entry resolved here becomes a candidate for a new rule down the line.
           </p>
+          {needsReview.result.draftCandidate && (
+            <p className="text-xs font-medium text-gold w-fit rounded-full border border-gold/40 px-2 py-0.5">
+              AI-drafted — please review carefully before saving
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               className="input"

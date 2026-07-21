@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { classifyWordDump, type ClassifyResult, type TagConfidence } from "@/lib/pipeline/classify";
 import { findRetrievalMatch } from "@/lib/pipeline/retrieve";
 import { composeFromFragments } from "@/lib/pipeline/compose";
+import { callEntryDraftingAdapter } from "@/lib/pipeline/slmDraft";
 
 /** Maps a retrieval match's similarity score to the same confidence
  * vocabulary the rest of the pipeline uses, instead of introducing a raw
@@ -95,5 +96,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json(stage1);
+  // Stage 4: everything above missed. Feature-flagged and best-effort --
+  // see src/lib/pipeline/slmDraft.ts for why this is a null no-op in every
+  // environment today. Never runs on a confident result (both branches
+  // above already returned before reaching here in that case).
+  const draftCandidate = await callEntryDraftingAdapter({
+    rawWordDump,
+    extractedSlots: stage1.extractedSlots,
+  });
+  return NextResponse.json({ ...stage1, draftCandidate });
 }
