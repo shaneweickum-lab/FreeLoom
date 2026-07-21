@@ -33,12 +33,14 @@ for (see `docs/slm-strategy.md` Section 5).
 
 ## Current state, honestly
 
-- **Training data**: 13 real `knowledgeBase.ts` entries + 60 hand-authored synthetic
-  examples (`data/synthetic_corpus.jsonl`) covering 12 subject areas. This is a
-  proof-of-concept volume, not the "thousands of examples" `docs/slm-strategy.md`
-  Section 4 calls for — enough to validate the whole pipeline end-to-end, not enough to
-  actually pretrain a useful 13.7M-parameter model on yet. Nowhere close, in fact: see the
-  token-budget math below.
+- **Training data**: 13 real `knowledgeBase.ts` entries + 2,060 synthetic examples
+  (`data/synthetic_corpus.jsonl`) covering 15 subject areas — the original 60
+  hand-authored proof-of-concept examples plus 2,000 generated via
+  `data/generate_synthetic.py` (real `claude-sonnet-5` run, 2,000/2,000 succeeded,
+  ~$15.86), matching `docs/slm-strategy.md` Section 4's "thousands of examples" target
+  for the entry-drafting adapter's fine-tuning pool. This is separate from the
+  base-pretraining corpus below, which is its own much larger (and already
+  Chinchilla-budget-sized) pool — scaling this pool improves the adapter, not the base.
 - **Tokenizer**: retrained against a sample of the real base corpus (see below), now at
   a real 8,000-token vocab (was 1,477, sized for the original 76-example
   proof-of-concept corpus — byte-level BPE ran out of distinct merges to learn at that
@@ -151,11 +153,15 @@ wiring is separate follow-up work from this scaffolding pass.
 - Done: `data/prepare_base_corpus.py` has now actually run (on the Mac, real network
   access) — see the corrected TinyStories/FineWeb-Edu numbers above and
   `docs/slm-strategy.md` Section 4.
-- Scale `data/synthetic_corpus.jsonl` into the thousands via `data/generate_synthetic.py`
-  once a real `ANTHROPIC_API_KEY` is available (this script exists but has never been
-  run end-to-end — the key was an empty placeholder in every environment available
-  during this pass). This is still the entry-drafting fine-tune data, separate from the
-  base-pretrain corpus above — scaling it further improves the adapter, not the base.
+- Done: `data/synthetic_corpus.jsonl` scaled from 60 to 2,060 examples via
+  `data/generate_synthetic.py` (real `claude-sonnet-5` run, 2,000/2,000 succeeded,
+  ~$15.86). `train/prepare_dataset.py` needs to be re-run to regenerate
+  `entry_drafting_{train,val}.npz` from this bigger corpus, then
+  `train/train_adapter.py --task entry_drafting` re-run against the new arrays — the
+  first real adapter fine-tune (on the old 66-example split) scored 4/7 (57.1%) on
+  `eval/run_eval.py`, with 2 of the 3 failures being fully unparseable generations, not
+  just borderline content — a data-volume problem this directly targets, not yet
+  confirmed fixed.
 - Done: tokenizer retrained at a real 8,000-token production vocab against the base
   corpus sample, `model/config.py` updated to match.
 - Once real revenue funds a much larger custom-generated corpus (discussed but not
