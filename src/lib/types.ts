@@ -55,6 +55,10 @@ export type SchoolProfile = {
    * means never auto-delete -- the column default, so no existing account
    * is affected until a parent opts in. Constrained 7-30 by a DB check. */
   thread_retention_days: number | null;
+  /** Per-user opt-in for the Benny assistant-mode chat panel. Independent
+   * of whether a real chat backend exists yet (src/lib/benny/chat.ts) --
+   * this just controls whether the trigger button/panel show up at all. */
+  benny_assistant_enabled: boolean;
   updated_at: string;
 };
 
@@ -191,6 +195,26 @@ export type SupportMessage = {
   sender_role: "parent" | "admin";
   body: string;
   read_at: string | null;
+  created_at: string;
+};
+
+/** One Benny assistant-mode conversation -- always single-viewer (just the
+ * owning user), unlike SupportThread which two different people view. */
+export type BennyConversation = {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One message within a Benny conversation. */
+export type BennyMessage = {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  role: "user" | "assistant";
+  body: string;
   created_at: string;
 };
 
