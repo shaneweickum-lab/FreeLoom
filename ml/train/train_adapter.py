@@ -18,6 +18,7 @@ Usage (on the Mac, after train_base.py has produced a base checkpoint):
 """
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
@@ -26,9 +27,10 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
 
-from config import BASE_CONFIG
-from lora import attach_lora_adapters, save_adapter
-from transformer_mlx import BitNetTransformer
+sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
+from config import BASE_CONFIG  # noqa: E402
+from lora import attach_lora_adapters, save_adapter  # noqa: E402
+from transformer_mlx import BitNetTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"

@@ -21,6 +21,7 @@ running prepare_dataset.py):
 """
 
 import argparse
+import sys
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -30,8 +31,9 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
 
-from config import BASE_CONFIG, ModelConfig
-from transformer_mlx import BitNetTransformer
+sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
+from config import BASE_CONFIG, ModelConfig  # noqa: E402
+from transformer_mlx import BitNetTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"

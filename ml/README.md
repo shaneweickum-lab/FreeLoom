@@ -54,18 +54,19 @@ for (see `docs/slm-strategy.md` Section 5).
   current 60-example corpus is on the order of a few thousand tokens — several orders
   of magnitude short, and it stays that way deliberately: it's the domain-specific
   entry-drafting fine-tune data, not the base-pretrain corpus.
-- **Base-pretraining corpus plan (not yet pulled)**: `data/prepare_base_corpus.py`
+- **Base-pretraining corpus (pulled, on the Mac)**: `data/prepare_base_corpus.py`
   streams two already-generated, openly-licensed datasets instead of the small domain
-  corpus for base pretraining — **1.75B tokens from TinyStories** (`roneneldan/TinyStories`,
-  `cdla-sharing-1.0`) + **500M tokens from FineWeb-Edu** (`HuggingFaceFW/fineweb-edu`,
-  `sample-10BT` config, `odc-by`), summing to exactly the 2.25B-token budget above.
-  TinyStories gets the larger share on purpose — its own research finding is that
-  narrow, simple data is what makes small-model coherence achievable, so it should
-  dominate training; FineWeb-Edu is mixed in for academic-register vocabulary breadth,
-  not given equal weight. Read both licenses before shipping a model trained on this
-  data (the script prints both URLs on completion). This has never actually been pulled
-  anywhere this was built — `huggingface.co` is blocked in this container's network
-  policy; run it somewhere with open network access.
+  corpus for base pretraining — TinyStories (`roneneldan/TinyStories`, `cdla-sharing-1.0`)
+  + FineWeb-Edu (`HuggingFaceFW/fineweb-edu`, `sample-10BT` config, `odc-by`). TinyStories
+  was sized at 1.75B tokens but its real `train` split only holds **~475M unique tokens**
+  (2.1M stories) — discovered on the first real pull, since `huggingface.co` is blocked
+  in this container and this had never actually run before. FineWeb-Edu hit its 500M
+  target exactly. `train/prepare_dataset.py` repeats TinyStories 4 epochs (~1.9B tokens,
+  matching the original TinyStories paper's own precedent of training over several
+  epochs of this same small corpus) to keep it the dominant source and land close to the
+  2.25B-token budget above (~2.4B total, slightly over is harmless) — see
+  `docs/slm-strategy.md` Section 4 for the full reasoning. Read both licenses before
+  shipping a model trained on this data (the script prints both URLs on completion).
 - **`entry_drafting` adapter**: has real (if small) training data via
   `train/prepare_dataset.py`.
 - **`kb_authoring` adapter**: structurally wired (its own independent LoRA params on the
@@ -135,9 +136,9 @@ wiring is separate follow-up work from this scaffolding pass.
 
 ## Known gaps / next steps
 
-- Actually run `data/prepare_base_corpus.py` somewhere with open network access —
-  written and dry-run verified against a mocked dataset, never run against the real
-  `huggingface.co` datasets (blocked in this container's network policy).
+- Done: `data/prepare_base_corpus.py` has now actually run (on the Mac, real network
+  access) — see the corrected TinyStories/FineWeb-Edu numbers above and
+  `docs/slm-strategy.md` Section 4.
 - Scale `data/synthetic_corpus.jsonl` into the thousands via `data/generate_synthetic.py`
   once a real `ANTHROPIC_API_KEY` is available (this script exists but has never been
   run end-to-end — the key was an empty placeholder in every environment available
