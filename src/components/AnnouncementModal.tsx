@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import MarkdownContent from "@/components/MarkdownContent";
 import type { AnnouncementPost } from "@/lib/types";
 
 /** Opened from a notification of type "announcement" -- the notification row
@@ -76,7 +77,9 @@ export default function AnnouncementModal({
             <span className="text-[10px] font-mono uppercase tracking-wide text-muted">Announcement</span>
             <h2 className="font-serif text-xl font-bold text-foreground mt-1 pr-6">{announcement.title}</h2>
             <p className="text-xs text-muted mt-1">{new Date(announcement.created_at).toLocaleString()}</p>
-            <p className="text-sm text-foreground mt-4 whitespace-pre-wrap">{announcement.body}</p>
+            <div className="mt-4">
+              <MarkdownContent text={announcement.body} />
+            </div>
           </>
         )}
       </div>

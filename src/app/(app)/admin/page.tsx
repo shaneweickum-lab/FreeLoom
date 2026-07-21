@@ -4,7 +4,16 @@ import AdminUsersPanel from "@/components/AdminUsersPanel";
 import AnnouncementComposer from "@/components/AnnouncementComposer";
 import FamiliesList, { type FamilyRow } from "@/components/FamiliesList";
 import AdminTabs from "@/components/AdminTabs";
+import UsageDashboard from "@/components/UsageDashboard";
 import type { SchoolingType } from "@/lib/types";
+
+// Supabase's free-tier caps -- bump these once the project's plan changes
+// (e.g. Pro's 8GB base compute allowance and its autoscaling disk, or a
+// larger storage add-on). Kept as env vars rather than hardcoded so a plan
+// upgrade doesn't need a code change.
+const GB = 1024 ** 3;
+const DB_LIMIT_BYTES = Number(process.env.SUPABASE_DB_LIMIT_GB ?? 0.5) * GB;
+const STORAGE_LIMIT_BYTES = Number(process.env.SUPABASE_STORAGE_LIMIT_GB ?? 1) * GB;
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -29,11 +38,17 @@ export default async function AdminPage() {
     return <p className="text-sm text-muted">Not authorized.</p>;
   }
 
-  const [{ data: signups, error: signupsError }, { data: admins }, { data: profiles }] = await Promise.all([
+  const [{ data: signups, error: signupsError }, { data: admins }, { data: profiles }, usageResult] = await Promise.all([
     supabase.from("waitlist_signups").select("id, email, created_at").order("created_at", { ascending: false }),
     supabase.from("admin_users").select("user_id, email, approved_by, created_at").order("created_at", { ascending: true }),
     supabase.from("school_profiles").select("user_id, parent_name, schooling_type"),
+    supabase.rpc("admin_db_usage"),
   ]);
+
+  const usage = usageResult.data as
+    | { db_size_bytes: number; storage_size_bytes: number; computed_at: string }
+    | null;
+  const usageError = usageResult.error?.message ?? null;
 
   // Enumerating every account is the one thing only the service-role Auth
   // admin API can do -- everything else here (school_profiles) goes
@@ -131,6 +146,20 @@ export default async function AdminPage() {
                 <p className="text-muted text-sm">Send to everyone, or just families of a specific schooling type.</p>
                 <AnnouncementComposer />
               </div>
+            ),
+          },
+          {
+            id: "usage",
+            label: "Usage",
+            content: (
+              <UsageDashboard
+                error={usageError ?? undefined}
+                dbSizeBytes={usage?.db_size_bytes ?? 0}
+                storageSizeBytes={usage?.storage_size_bytes ?? 0}
+                dbLimitBytes={DB_LIMIT_BYTES}
+                storageLimitBytes={STORAGE_LIMIT_BYTES}
+                computedAt={usage?.computed_at ?? null}
+              />
             ),
           },
         ]}
