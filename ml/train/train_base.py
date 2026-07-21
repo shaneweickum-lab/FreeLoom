@@ -77,11 +77,25 @@ def main():
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--heartbeat-seconds", type=float, default=20.0,
                          help="print an in-epoch progress line at least this often")
+    parser.add_argument("--tiny-train-samples", type=int, default=2000,
+                         help="--tiny also caps the DATA, not just the model -- otherwise a full "
+                              "epoch over millions of real sequences takes hours even at TINY_CONFIG's "
+                              "tiny model size, defeating the point of a fast sanity check")
+    parser.add_argument("--tiny-val-samples", type=int, default=200)
     args = parser.parse_args()
 
     cfg = TINY_CONFIG if args.tiny else BASE_CONFIG
     train_sequences = np.load(DATA_DIR / "base_train.npy")
     val_sequences = np.load(DATA_DIR / "base_val.npy")
+
+    if args.tiny:
+        tiny_rng = np.random.default_rng(0)
+        if len(train_sequences) > args.tiny_train_samples:
+            idx = tiny_rng.choice(len(train_sequences), size=args.tiny_train_samples, replace=False)
+            train_sequences = train_sequences[idx]
+        if len(val_sequences) > args.tiny_val_samples:
+            idx = tiny_rng.choice(len(val_sequences), size=args.tiny_val_samples, replace=False)
+            val_sequences = val_sequences[idx]
 
     # vocab_size in cfg must match the tokenizer actually used to build
     # these arrays -- prepare_dataset.py doesn't re-derive it, so mismatches
