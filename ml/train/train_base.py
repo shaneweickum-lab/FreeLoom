@@ -75,6 +75,8 @@ def main():
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--eval-every", type=int, default=1)
     parser.add_argument("--resume", type=str, default=None)
+    parser.add_argument("--heartbeat-seconds", type=float, default=20.0,
+                         help="print an in-epoch progress line at least this often")
     args = parser.parse_args()
 
     cfg = TINY_CONFIG if args.tiny else BASE_CONFIG
@@ -106,14 +108,34 @@ def main():
           f"d_model={cfg.d_model} n_layers={cfg.n_layers} vocab={cfg.vocab_size}")
     print(f"{len(train_sequences)} train sequences, {len(val_sequences)} val sequences")
 
+    # Batches per epoch, matching iterate_batches' own step math -- used only
+    # to print "N/total" in the heartbeat below, not for anything functional.
+    batches_per_epoch = max(0, (len(train_sequences) - args.batch_size) // args.batch_size + 1) \
+        if len(train_sequences) >= args.batch_size else 0
+
     for epoch in range(args.epochs):
         start = time.time()
         epoch_losses = []
+        last_heartbeat = start
+        batches_done = 0
         for inputs, targets in iterate_batches(train_sequences, args.batch_size, rng):
             loss, grads = loss_and_grad(model, inputs, targets)
             optimizer.update(model, grads)
             mx.eval(model.parameters(), optimizer.state)
             epoch_losses.append(float(loss))
+            batches_done += 1
+
+            # A full run can spend many minutes-to-hours per epoch (hundreds
+            # of thousands of batches at the base config) with the loop above
+            # otherwise printing nothing until the whole epoch finishes --
+            # indistinguishable from a hang. This is the same fix as
+            # prepare_dataset.py's tokenization heartbeat, applied here.
+            now = time.time()
+            if now - last_heartbeat >= args.heartbeat_seconds:
+                running_loss = sum(epoch_losses) / len(epoch_losses)
+                print(f"  ...epoch {epoch + 1}/{args.epochs}: batch {batches_done}/{batches_per_epoch or '?'}, "
+                      f"running loss={running_loss:.4f} ({now - start:.0f}s elapsed this epoch)")
+                last_heartbeat = now
 
         train_loss = sum(epoch_losses) / max(len(epoch_losses), 1)
         msg = f"epoch {epoch + 1}/{args.epochs}  train_loss={train_loss:.4f}  ({time.time() - start:.1f}s)"
