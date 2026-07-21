@@ -24,6 +24,7 @@ import argparse
 import sys
 import time
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import mlx.core as mx
@@ -40,7 +41,7 @@ CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
 
 # A deliberately small config for --tiny: fast enough to sanity-check the
 # whole pipeline (tokenizer, data loading, BitLinear, loss curve) in
-# minutes rather than committing to the full ~75M run untested.
+# minutes rather than committing to the full ~81M run untested.
 TINY_CONFIG = ModelConfig(d_model=128, n_layers=2, n_heads=4, max_seq_len=512)
 
 
@@ -92,7 +93,11 @@ def main():
                               "was assembled), so one epoch over it hits that budget exactly; each "
                               "additional epoch here multiplies the effective token count on top of that, "
                               "not for free")
-    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--batch-size", type=int, default=64,
+                         help="was 8 -- a very conservative default for a 24GB-unified-memory Mac and "
+                              "an ~81M-param model. Bigger batches don't reduce total FLOPs, but they "
+                              "trade many small matmuls for fewer, bigger ones, which usually improves "
+                              "real MLX/Metal throughput. Lower this if you hit a memory error.")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--eval-every", type=int, default=1)
     parser.add_argument("--resume", type=str, default=None)
@@ -138,6 +143,20 @@ def main():
     loss_and_grad = nn.value_and_grad(model, loss_fn)
     rng = np.random.default_rng(0)
 
+    # mx.compile fuses the repeated training-step graph instead of MLX
+    # dispatching each op eagerly every batch -- the standard MLX pattern for
+    # a training loop (state must be passed explicitly since compile can't
+    # otherwise see that model/optimizer state changes between calls).
+    # NOTE: authored without access to Apple Silicon/MLX in this sandbox --
+    # verify this actually runs before trusting it for a long unattended run.
+    state = [model.state, optimizer.state]
+
+    @partial(mx.compile, inputs=state, outputs=state)
+    def train_step(inputs: mx.array, targets: mx.array) -> mx.array:
+        loss, grads = loss_and_grad(model, inputs, targets)
+        optimizer.update(model, grads)
+        return loss
+
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
     ckpt_name = "base_tiny.safetensors" if args.tiny else "base.safetensors"
 
@@ -165,9 +184,8 @@ def main():
         last_heartbeat = start
         batches_done = 0
         for inputs, targets in iterate_batches(train_sequences, args.batch_size, rng):
-            loss, grads = loss_and_grad(model, inputs, targets)
-            optimizer.update(model, grads)
-            mx.eval(model.parameters(), optimizer.state)
+            loss = train_step(inputs, targets)
+            mx.eval(state)
             epoch_losses.append(float(loss))
             batches_done += 1
             total_batches_done += 1
