@@ -70,7 +70,13 @@ def evaluate(model: BitNetTransformer, sequences: np.ndarray, batch_size: int) -
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tiny", action="store_true", help="use TINY_CONFIG for a fast pipeline sanity check")
-    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--epochs", type=int, default=None,
+                         help="defaults to 20 for --tiny (many quick passes over a small subsample) or "
+                              "1 for the full run -- base_train.npy already IS the full ~2.4B-token "
+                              "Chinchilla+10 budget (TinyStories was already repeated 4x when the corpus "
+                              "was assembled), so one epoch over it hits that budget exactly; each "
+                              "additional epoch here multiplies the effective token count on top of that, "
+                              "not for free")
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--eval-every", type=int, default=1)
@@ -83,6 +89,8 @@ def main():
                               "tiny model size, defeating the point of a fast sanity check")
     parser.add_argument("--tiny-val-samples", type=int, default=200)
     args = parser.parse_args()
+    if args.epochs is None:
+        args.epochs = 20 if args.tiny else 1
 
     cfg = TINY_CONFIG if args.tiny else BASE_CONFIG
     train_sequences = np.load(DATA_DIR / "base_train.npy")
