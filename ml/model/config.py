@@ -1,5 +1,5 @@
 """
-Architecture sizing for the shared ~75M-parameter BitNet base model.
+Architecture sizing for the shared ~13.7M-parameter BitNet base model.
 
 Pure-Python arithmetic, no MLX dependency -- verifiable in any environment,
 including this one. The MLX model (transformer_mlx.py) is built directly
@@ -17,12 +17,26 @@ class ModelConfig:
                             # -- train_base.py asserts these stay in sync, since a
                             # mismatch here means a real token id the tokenizer can
                             # produce falls outside the model's embedding table).
-    d_model: int = 876     # widened from 768 -> ~75M params at n_layers=8/n_heads=12
-                            # (see estimate_param_count below); head_dim=73 isn't a
-                            # power of 2, but MLX's attention only requires
-                            # d_model % n_heads == 0, which this satisfies exactly.
-    n_layers: int = 8
-    n_heads: int = 12
+    d_model: int = 384      # shrunk from 876 (~80.7M params) after the first real
+                            # training run on the M5 showed native BitNet QAT training
+                            # is compute-heavier per step than a plain dense model of
+                            # the same size (every BitLinear forward re-quantizes its
+                            # full-precision shadow weights via the straight-through
+                            # estimator, on top of an otherwise-ordinary matmul -- the
+                            # famous BitNet speed/memory win only exists at inference
+                            # time with truly packed low-bit weights, not during
+                            # training). At the observed ~305 tok/s, 876/8-layer sizing
+                            # projected to ~84 days for one epoch of its own 2.42B-token
+                            # budget. This size's Chinchilla+10 budget (see below) is
+                            # ~410.7M tokens -- the token budget scales with param count
+                            # too, so shrinking the model compounds: both less compute
+                            # per token AND fewer total tokens needed, projecting to
+                            # roughly 2 days instead of ~84. Comfortably inside the
+                            # well-evidenced 100K-48M-param small-scale BitNet research
+                            # range cited in docs/slm-strategy.md Section 3 -- more so
+                            # than the previous 80.7M size was.
+    n_layers: int = 6
+    n_heads: int = 6        # head_dim = 384/6 = 64, a clean power of 2.
     mlp_ratio: int = 4
     max_seq_len: int = 512
     dropout: float = 0.1
