@@ -61,31 +61,41 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
   async function handleSubscribe(planTier: "pro" | "premium") {
     setLoadingTier(planTier);
     setError("");
-    const res = await fetch("/api/billing/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tier: planTier, interval: billingInterval }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Couldn't start checkout.");
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: planTier, interval: billingInterval }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't start checkout.");
+        setLoadingTier(null);
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setError("Couldn't start checkout -- please try again.");
       setLoadingTier(null);
-      return;
     }
-    window.location.assign(data.url);
   }
 
   async function handleManageBilling() {
     setLoadingPortal(true);
     setError("");
-    const res = await fetch("/api/billing/portal", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Couldn't open billing management.");
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't open billing management.");
+        setLoadingPortal(false);
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setError("Couldn't open billing management -- please try again.");
       setLoadingPortal(false);
-      return;
     }
-    window.location.assign(data.url);
   }
 
   return (
