@@ -123,4 +123,12 @@ describe("POST /api/billing/change-plan", () => {
     const data = await res.json();
     expect(data.error).toMatch(/payment method/i);
   });
+
+  it("500s cleanly instead of throwing when the subscription lookup itself fails", async () => {
+    fromQueue = [ACTIVE_PRO_MONTHLY];
+    retrieveSubscription.mockRejectedValueOnce(new Error("Stripe API is down"));
+    const res = await POST(makeRequest({ tier: "premium", interval: "quarter" }));
+    expect(res.status).toBe(500);
+    expect(updateSubscription).not.toHaveBeenCalled();
+  });
 });

@@ -84,6 +84,11 @@ export default function AccountTab({
   // NotificationsTab.tsx's checkboxes) rather than requiring edit mode + Save.
   const [bennyEnabled, setBennyEnabled] = useState(initialProfile?.benny_assistant_enabled ?? false);
   const [bennySaving, setBennySaving] = useState(false);
+
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const tier = getEffectiveTier({
     subscription_tier: initialProfile?.subscription_tier ?? "free",
     subscription_status: initialProfile?.subscription_status ?? null,
@@ -136,7 +141,32 @@ export default function AccountTab({
 
   const schoolingLabel = form.schoolingType ? SCHOOLING_TYPE_LABEL[form.schoolingType] : "Not set";
 
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: deleteConfirmText }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDeleteError(data.error ?? "Something went wrong.");
+        setDeleting(false);
+        return;
+      }
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      window.location.href = "/";
+    } catch {
+      setDeleteError("Couldn't reach the server -- try again.");
+      setDeleting(false);
+    }
+  }
+
   return (
+    <div className="flex flex-col gap-4">
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted text-sm">Your own info as a parent on this account.</p>
@@ -302,5 +332,73 @@ export default function AccountTab({
       )}
       {saved && !editing && <p className="text-xs text-gold">Saved.</p>}
     </form>
+
+    <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+      <div>
+        <h3 className="font-medium text-sm">Your data</h3>
+        <p className="text-muted/70 text-[11px]">
+          Download everything FreeLoom has stored for your account -- profile, students, entries, transcripts,
+          notifications, and messages -- as a JSON file.
+        </p>
+      </div>
+      <a href="/api/account/export" className="btn-secondary w-fit text-sm">
+        Download my data
+      </a>
+    </div>
+
+    <div className="rounded-lg border border-red-900/40 bg-red-950/10 p-3 flex flex-col gap-3">
+      <div>
+        <h3 className="font-medium text-sm text-red-400">Delete account</h3>
+        <p className="text-muted/70 text-[11px]">
+          Permanently deletes your account and everything in it -- your profile, students, entries, transcripts,
+          and messages. This can&apos;t be undone.
+        </p>
+      </div>
+      {!confirmingDelete ? (
+        <button
+          type="button"
+          onClick={() => setConfirmingDelete(true)}
+          className="btn-secondary w-fit text-sm border-red-900/50 text-red-400 hover:bg-red-950/20"
+        >
+          Delete my account
+        </button>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted text-xs">Type DELETE to confirm</span>
+            <input
+              className="input"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              disabled={deleting}
+            />
+          </label>
+          {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteConfirmText !== "DELETE" || deleting}
+              className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 transition-colors disabled:opacity-50 w-fit"
+            >
+              {deleting ? "Deleting…" : "Permanently delete my account"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingDelete(false);
+                setDeleteConfirmText("");
+                setDeleteError("");
+              }}
+              disabled={deleting}
+              className="btn-secondary w-fit text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+    </div>
   );
 }

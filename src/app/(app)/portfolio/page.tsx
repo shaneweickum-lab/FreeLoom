@@ -78,7 +78,7 @@ export default function PortfolioPage() {
   if (!currentStudent) {
     return <p className="text-muted text-sm">Add a student from the dashboard first.</p>;
   }
-  if (loading) return null;
+  if (loading) return <p className="text-muted text-sm">Loading…</p>;
 
   return (
     <div className="flex flex-col gap-10">

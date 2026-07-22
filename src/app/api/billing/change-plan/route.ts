@@ -55,7 +55,13 @@ export async function POST(req: NextRequest) {
   }
 
   const stripe = getStripe();
-  const subscription = await stripe.subscriptions.retrieve(profile.stripe_subscription_id);
+  let subscription: Stripe.Subscription;
+  try {
+    subscription = await stripe.subscriptions.retrieve(profile.stripe_subscription_id);
+  } catch (err) {
+    console.error("Failed to retrieve subscription for plan change:", err);
+    return NextResponse.json({ error: "Couldn't look up your subscription -- try again in a moment." }, { status: 500 });
+  }
   const item = subscription.items.data[0];
   if (!item) {
     return NextResponse.json({ error: "Couldn't find your subscription's billing item." }, { status: 500 });

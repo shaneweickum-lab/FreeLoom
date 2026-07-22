@@ -60,70 +60,79 @@ export async function POST(req: NextRequest) {
   // trusting it -- customer IDs aren't portable across accounts.
   const stripe = getStripe();
   let customerId = profile?.stripe_customer_id ?? null;
-  if (customerId) {
-    try {
-      const existing = await stripe.customers.retrieve(customerId);
-      if (existing.deleted) customerId = null;
-    } catch (err) {
-      if (err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing") {
-        customerId = null;
-      } else {
-        throw err;
+
+  // Everything below is a live call to Stripe's API -- a transient network
+  // error or Stripe-side outage must come back as a clean 500 the client
+  // can show a real message for, not an unhandled exception.
+  try {
+    if (customerId) {
+      try {
+        const existing = await stripe.customers.retrieve(customerId);
+        if (existing.deleted) customerId = null;
+      } catch (err) {
+        if (err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing") {
+          customerId = null;
+        } else {
+          throw err;
+        }
       }
     }
-  }
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      metadata: { supabase_user_id: user.id },
-    });
-    customerId = customer.id;
-    const { error } = await supabase.from("school_profiles").upsert({
-      user_id: user.id,
-      stripe_customer_id: customerId,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) console.error("Failed to save new Stripe customer id to school_profiles:", error);
-  }
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { supabase_user_id: user.id },
+      });
+      customerId = customer.id;
+      const { error } = await supabase.from("school_profiles").upsert({
+        user_id: user.id,
+        stripe_customer_id: customerId,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) console.error("Failed to save new Stripe customer id to school_profiles:", error);
+    }
 
-  // Authoritative guard against ever ending up with two live subscriptions
-  // on the same account -- checked live against Stripe (not just
-  // school_profiles' cached subscription_status) since that column could
-  // in principle be stale if a webhook delivery lagged or failed. Blocks
-  // on anything short of a fully terminal status, not just active/
-  // trialing -- a past_due, unpaid, or incomplete subscription is still a
-  // real one that a second Checkout would run alongside rather than fix;
-  // those need Manage billing (to update the payment method) instead. A
-  // real subscriber changing tier/interval should go through
-  // /api/billing/change-plan, which updates this same subscription in
-  // place rather than starting a second one here.
-  const existingSubscriptions = await stripe.subscriptions.list({ customer: customerId, limit: 10 });
-  const hasBlockingSubscription = existingSubscriptions.data.some(
-    (s) => s.status !== "canceled" && s.status !== "incomplete_expired"
-  );
-  if (hasBlockingSubscription) {
-    return NextResponse.json(
-      { error: "You already have an active subscription -- use Switch plan or Manage billing instead." },
-      { status: 400 }
+    // Authoritative guard against ever ending up with two live subscriptions
+    // on the same account -- checked live against Stripe (not just
+    // school_profiles' cached subscription_status) since that column could
+    // in principle be stale if a webhook delivery lagged or failed. Blocks
+    // on anything short of a fully terminal status, not just active/
+    // trialing -- a past_due, unpaid, or incomplete subscription is still a
+    // real one that a second Checkout would run alongside rather than fix;
+    // those need Manage billing (to update the payment method) instead. A
+    // real subscriber changing tier/interval should go through
+    // /api/billing/change-plan, which updates this same subscription in
+    // place rather than starting a second one here.
+    const existingSubscriptions = await stripe.subscriptions.list({ customer: customerId, limit: 10 });
+    const hasBlockingSubscription = existingSubscriptions.data.some(
+      (s) => s.status !== "canceled" && s.status !== "incomplete_expired"
     );
-  }
+    if (hasBlockingSubscription) {
+      return NextResponse.json(
+        { error: "You already have an active subscription -- use Switch plan or Manage billing instead." },
+        { status: 400 }
+      );
+    }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${APP_URL}${successPath}?billing=success`,
-    cancel_url: `${APP_URL}${cancelPath}?billing=canceled`,
-    // Belt-and-suspenders alongside customer.metadata -- the webhook reads
-    // whichever of these is present to map a Stripe event back to the
-    // Supabase account, since some events carry the subscription/customer
-    // but not the originating Checkout Session.
-    metadata: { supabase_user_id: user.id },
-    subscription_data: { metadata: { supabase_user_id: user.id } },
-  });
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${APP_URL}${successPath}?billing=success`,
+      cancel_url: `${APP_URL}${cancelPath}?billing=canceled`,
+      // Belt-and-suspenders alongside customer.metadata -- the webhook reads
+      // whichever of these is present to map a Stripe event back to the
+      // Supabase account, since some events carry the subscription/customer
+      // but not the originating Checkout Session.
+      metadata: { supabase_user_id: user.id },
+      subscription_data: { metadata: { supabase_user_id: user.id } },
+    });
 
-  if (!session.url) {
-    return NextResponse.json({ error: "Couldn't start checkout." }, { status: 500 });
+    if (!session.url) {
+      return NextResponse.json({ error: "Couldn't start checkout." }, { status: 500 });
+    }
+    return NextResponse.json({ url: session.url });
+  } catch (err) {
+    console.error("Stripe checkout session creation failed:", err);
+    return NextResponse.json({ error: "Couldn't start checkout -- try again in a moment." }, { status: 500 });
   }
-  return NextResponse.json({ url: session.url });
 }

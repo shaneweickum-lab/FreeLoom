@@ -44,6 +44,7 @@ function OnboardingWizardInner({ userId, initialProfile, prices }: Props) {
   const [state, setState] = useState(initialProfile?.state ?? "");
   const [schoolingType, setSchoolingType] = useState(initialProfile?.schooling_type ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState("");
 
   const [billingInterval, setBillingInterval] = useState<Interval>("month");
   const [loadingTier, setLoadingTier] = useState<SubscriptionTier | null>(null);
@@ -52,8 +53,9 @@ function OnboardingWizardInner({ userId, initialProfile, prices }: Props) {
   async function handleProfileSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSavingProfile(true);
+    setProfileError("");
     const supabase = createClient();
-    await supabase.from("school_profiles").upsert({
+    const { error } = await supabase.from("school_profiles").upsert({
       user_id: userId,
       parent_name: parentName || null,
       state: state || null,
@@ -61,6 +63,12 @@ function OnboardingWizardInner({ userId, initialProfile, prices }: Props) {
       updated_at: new Date().toISOString(),
     });
     setSavingProfile(false);
+    // A failed upsert must not silently advance to the plan step -- that
+    // would tell the parent their info was saved when it wasn't.
+    if (error) {
+      setProfileError("Couldn't save -- try again.");
+      return;
+    }
     setStep("plan");
   }
 
@@ -152,6 +160,7 @@ function OnboardingWizardInner({ userId, initialProfile, prices }: Props) {
           <button type="submit" className="btn-primary" disabled={savingProfile}>
             {savingProfile ? "Saving…" : "Continue"}
           </button>
+          {profileError && <p className="text-xs text-red-400 text-center">{profileError}</p>}
         </form>
       ) : (
         <div className="flex flex-col gap-6">
