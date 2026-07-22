@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, IBM_Plex_Mono, Inter } from "next/font/google";
 import { APP_URL } from "@/lib/appUrl";
 import "./globals.css";
@@ -44,6 +44,13 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
   },
+};
+
+// Tints Safari's tab/URL bar (and the iOS status bar once added to the
+// home screen) to match the app's own background instead of Safari's
+// default white/gray chrome.
+export const viewport: Viewport = {
+  themeColor: "#0a0d1c",
 };
 
 export default function RootLayout({
