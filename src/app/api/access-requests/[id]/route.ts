@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getEffectiveTier } from "@/lib/billing/tier";
 
 const ACTION_TO_STATUS = {
   approve: "approved",
@@ -22,6 +23,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const newStatus = ACTION_TO_STATUS[action as keyof typeof ACTION_TO_STATUS];
   if (!newStatus) {
     return NextResponse.json({ error: "Invalid action." }, { status: 400 });
+  }
+
+  // Belt-and-suspenders against a stale pending row from before this
+  // account downgraded to Free -- RLS's access_requests_target_update only
+  // lets the target parent themselves call "approve", so the caller here
+  // IS the target when this action is "approve"; deny/revoke stay allowed
+  // regardless of tier (a parent can always say no / close it out).
+  if (action === "approve") {
+    const { data: callerProfile } = await supabase
+      .from("school_profiles")
+      .select("subscription_tier, subscription_status, grandfathered_until")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const callerTier = getEffectiveTier({
+      subscription_tier: callerProfile?.subscription_tier ?? "free",
+      subscription_status: callerProfile?.subscription_status ?? null,
+      grandfathered_until: callerProfile?.grandfathered_until ?? null,
+    });
+    if (callerTier === "free") {
+      return NextResponse.json(
+        { error: "Your account is on the Free plan and can't approve admin access." },
+        { status: 400 }
+      );
+    }
   }
 
   // Real enforcement is RLS -- the target parent can approve/deny/revoke

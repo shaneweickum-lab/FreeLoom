@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { useBennyPanel } from "@/lib/bennyPanelContext";
+import { getEffectiveTier } from "@/lib/billing/tier";
 import StudentSwitcher from "@/components/StudentSwitcher";
 import LogoMark from "@/components/LogoMark";
 import NotificationBell from "@/components/NotificationBell";
@@ -63,10 +64,18 @@ function BennyTriggerButton() {
       if (!data.user) return;
       const { data: profile } = await supabase
         .from("school_profiles")
-        .select("benny_assistant_enabled")
+        .select("benny_assistant_enabled, subscription_tier, subscription_status, grandfathered_until")
         .eq("user_id", data.user.id)
         .maybeSingle();
-      setEnabled(!!profile?.benny_assistant_enabled);
+      // Free tier never sees Benny at all, regardless of the toggle --
+      // see AccountTab.tsx, where the toggle itself is also gated so a
+      // Free-tier parent can't even turn this on to find it hidden anyway.
+      const tier = getEffectiveTier({
+        subscription_tier: profile?.subscription_tier ?? "free",
+        subscription_status: profile?.subscription_status ?? null,
+        grandfathered_until: profile?.grandfathered_until ?? null,
+      });
+      setEnabled(!!profile?.benny_assistant_enabled && tier !== "free");
     });
   }, []);
 

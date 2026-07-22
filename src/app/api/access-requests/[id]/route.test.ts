@@ -54,20 +54,32 @@ describe("PATCH /api/access-requests/[id]", () => {
     expect(res.status).toBe(400);
   });
 
+  const NOT_FREE = { data: { subscription_tier: "pro", subscription_status: "active", grandfathered_until: null } };
+
   it("404s when the request doesn't belong to this user (or doesn't exist)", async () => {
-    fromQueue = [{ data: null, error: null }];
+    fromQueue = [NOT_FREE, { data: null, error: null }];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(404);
   });
 
   it("400s when the transition is invalid (trigger rejects it)", async () => {
-    fromQueue = [{ data: null, error: { message: "Invalid access request transition from denied to approved" } }];
+    fromQueue = [NOT_FREE, { data: null, error: { message: "Invalid access request transition from denied to approved" } }];
+    const res = await callWithId({ action: "approve" });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s when the caller's own account is on the Free plan", async () => {
+    fromQueue = [{ data: { subscription_tier: "free", subscription_status: null, grandfathered_until: null } }];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(400);
   });
 
   it("approves the request and marks its notification read", async () => {
-    fromQueue = [{ data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null }, { error: null }];
+    fromQueue = [
+      NOT_FREE,
+      { data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null },
+      { error: null },
+    ];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(200);
   });

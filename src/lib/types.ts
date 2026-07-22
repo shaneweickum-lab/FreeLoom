@@ -59,6 +59,30 @@ export type SchoolProfile = {
    * of whether a real chat backend exists yet (src/lib/benny/chat.ts) --
    * this just controls whether the trigger button/panel show up at all. */
   benny_assistant_enabled: boolean;
+  /** The tier this account is actually subscribed to (or 'free' if never
+   * subscribed / after cancellation) -- only trusted when
+   * subscription_status is 'active'/'trialing'. Use
+   * src/lib/billing/tier.ts's getEffectiveTier() rather than reading this
+   * column directly, since it also accounts for grandfathered_until. */
+  subscription_tier: "free" | "pro" | "premium";
+  subscription_status:
+    | "active"
+    | "trialing"
+    | "past_due"
+    | "canceled"
+    | "unpaid"
+    | "incomplete"
+    | "incomplete_expired"
+    | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  billing_interval: "month" | "quarter" | "year" | null;
+  current_period_end: string | null;
+  /** One-time migration backfill: existing accounts get temporary Premium
+   * access through this timestamp regardless of subscription_tier, so
+   * nobody's real usage breaks the moment tiers went live. Null for any
+   * account created after that migration ran. */
+  grandfathered_until: string | null;
   updated_at: string;
 };
 

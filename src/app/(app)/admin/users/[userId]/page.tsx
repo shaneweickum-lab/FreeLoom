@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getEffectiveTier } from "@/lib/billing/tier";
 import MessageThreads from "@/components/MessageThreads";
 import UserAnnouncementForm from "@/components/UserAnnouncementForm";
 import AccessRequestPanel from "@/components/AccessRequestPanel";
@@ -30,7 +31,11 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
   const adminClient = createAdminClient();
   const [{ data: targetUserData }, { data: profile }, { data: existingRequests }] = await Promise.all([
     adminClient.auth.admin.getUserById(userId),
-    supabase.from("school_profiles").select("parent_name, schooling_type").eq("user_id", userId).maybeSingle(),
+    supabase
+      .from("school_profiles")
+      .select("parent_name, schooling_type, subscription_tier, subscription_status, grandfathered_until")
+      .eq("user_id", userId)
+      .maybeSingle(),
     // Plural, and not filtered to this admin -- AccessRequestPanel narrows
     // to "mine" itself once it knows its own user id, and needs every
     // admin's requests visible in its realtime feed to stay accurate if
@@ -45,6 +50,11 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
 
   const targetEmail = targetUserData?.user?.email ?? "Unknown account";
   const schoolingLabel = profile?.schooling_type ? SCHOOLING_TYPE_LABEL[profile.schooling_type] : null;
+  const targetTier = getEffectiveTier({
+    subscription_tier: profile?.subscription_tier ?? "free",
+    subscription_status: profile?.subscription_status ?? null,
+    grandfathered_until: profile?.grandfathered_until ?? null,
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -63,7 +73,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
 
       <div className="flex flex-col gap-2">
         <h2 className="font-serif text-xl font-bold">Account access</h2>
-        <AccessRequestPanel targetUserId={userId} initialRequests={existingRequests ?? []} />
+        <AccessRequestPanel targetUserId={userId} initialRequests={existingRequests ?? []} targetIsFreeTier={targetTier === "free"} />
       </div>
 
       <div className="flex flex-col gap-2">

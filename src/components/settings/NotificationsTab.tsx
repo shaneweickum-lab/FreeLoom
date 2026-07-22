@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getEffectiveTier, MAX_RETENTION_DAYS } from "@/lib/billing/tier";
 import type { SchoolProfile } from "@/lib/types";
 
-const RETENTION_OPTIONS = [
-  { value: "", label: "Never" },
-  { value: "7", label: "7 days" },
-  { value: "14", label: "14 days" },
-  { value: "21", label: "21 days" },
-  { value: "30", label: "30 days" },
+const ALL_RETENTION_OPTIONS = [
+  { value: "", label: "Never", days: null as number | null },
+  { value: "7", label: "7 days", days: 7 },
+  { value: "14", label: "14 days", days: 14 },
+  { value: "21", label: "21 days", days: 21 },
+  { value: "30", label: "30 days", days: 30 },
 ];
 
 function formFromProfile(profile: SchoolProfile | null) {
@@ -26,13 +27,28 @@ export default function NotificationsTab({ userId, initialProfile }: { userId: s
   const [form, setForm] = useState(formFromProfile(initialProfile));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  // initialProfile is server-fetched, so tier is already known here with no
+  // extra client request -- unlike StudentSwitcher.tsx, which has no
+  // profile prop to read from and fetches its own. Real enforcement is a
+  // DB trigger (see the billing-tiers migration); filtering these options
+  // is purely so a parent never sees a choice their plan doesn't allow.
+  const tier = getEffectiveTier({
+    subscription_tier: initialProfile?.subscription_tier ?? "free",
+    subscription_status: initialProfile?.subscription_status ?? null,
+    grandfathered_until: initialProfile?.grandfathered_until ?? null,
+  });
+  const maxDays = MAX_RETENTION_DAYS[tier];
+  const retentionOptions = ALL_RETENTION_OPTIONS.filter((opt) => (opt.days === null ? tier === "premium" : opt.days <= maxDays));
 
   async function save(next: typeof form) {
     setForm(next);
     setSaving(true);
     setSaved(false);
+    setError("");
     const supabase = createClient();
-    await supabase.from("school_profiles").upsert({
+    const { error: saveError } = await supabase.from("school_profiles").upsert({
       user_id: userId,
       email_notify_messages: next.emailNotifyMessages,
       email_notify_announcements: next.emailNotifyAnnouncements,
@@ -42,6 +58,10 @@ export default function NotificationsTab({ userId, initialProfile }: { userId: s
       updated_at: new Date().toISOString(),
     });
     setSaving(false);
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
     setSaved(true);
   }
 
@@ -104,7 +124,7 @@ export default function NotificationsTab({ userId, initialProfile }: { userId: s
             disabled={saving}
             onChange={(e) => save({ ...form, threadRetentionDays: e.target.value })}
           >
-            {RETENTION_OPTIONS.map((opt) => (
+            {retentionOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -114,10 +134,12 @@ export default function NotificationsTab({ userId, initialProfile }: { userId: s
         <span className="text-muted/70 text-[11px]">
           Any of your message threads with no new activity for this long get permanently deleted, thread and all --
           not just hidden. Checked once a day.
+          {tier !== "premium" && " Longer windows (and \"Never\") are available on higher plans."}
         </span>
       </div>
 
       {saved && !saving && <p className="text-xs text-gold">Saved.</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );
 }
