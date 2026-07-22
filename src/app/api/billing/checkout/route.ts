@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdFor, type BillingTier, type BillingInterval } from "@/lib/stripe";
 
@@ -39,8 +40,24 @@ export async function POST(req: NextRequest) {
   // (e.g. a prior canceled subscription) -- creating a fresh one every
   // checkout would orphan payment-method history and confuse the
   // Customer Portal, which is keyed off a single customer per account.
+  // A stored ID can still be stale (e.g. STRIPE_SECRET_KEY pointed at a
+  // different Stripe account when it was created, or the customer was
+  // deleted directly in Stripe), so verify it actually resolves before
+  // trusting it -- customer IDs aren't portable across accounts.
   const stripe = getStripe();
   let customerId = profile?.stripe_customer_id ?? null;
+  if (customerId) {
+    try {
+      const existing = await stripe.customers.retrieve(customerId);
+      if (existing.deleted) customerId = null;
+    } catch (err) {
+      if (err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing") {
+        customerId = null;
+      } else {
+        throw err;
+      }
+    }
+  }
   if (!customerId) {
     const customer = await stripe.customers.create({
       email: user.email,
