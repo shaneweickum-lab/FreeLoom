@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCookieConsent } from "@/lib/cookieConsent";
 
 /** Mounted once at the root layout, so it's present on every route
@@ -15,12 +15,30 @@ export default function CookieConsentBanner() {
   const [analytics, setAnalytics] = useState(consent?.analytics ?? false);
   const [marketing, setMarketing] = useState(consent?.marketing ?? false);
 
-  if (!panelOpen) return null;
-
   const hasExistingDecision = consent !== null;
 
+  // Escape only closes when there's already a saved decision to fall back
+  // on (same condition the visible Close button below already uses) -- a
+  // first-time visitor with no decision yet shouldn't be able to dismiss
+  // this without an explicit choice.
+  useEffect(() => {
+    if (!panelOpen || !hasExistingDecision) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") closePreferences();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [panelOpen, hasExistingDecision, closePreferences]);
+
+  if (!panelOpen) return null;
+
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-navy-line bg-navy-soft shadow-2xl">
+    <div
+      role="dialog"
+      aria-modal="false"
+      aria-label="Cookie preferences"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-navy-line bg-navy-soft shadow-2xl"
+    >
       <div className="mx-auto max-w-3xl px-4 sm:px-6 py-4 flex flex-col gap-3">
         {!customizing ? (
           <>

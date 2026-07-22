@@ -60,6 +60,7 @@ export default function FamiliesList({ families }: { families: FamilyRow[] }) {
       <input
         className="input sm:w-72"
         placeholder="Search by email or name…"
+        aria-label="Search families by email or name"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
