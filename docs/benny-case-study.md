@@ -116,6 +116,33 @@ data already exists — see `ml/RESULTS.md`'s synthetic-data-generation section)
 `entry_drafting`'s 99.5% result was measured before this checkpoint existed, so it's
 worth re-running against the real pretrained base too, to confirm the number holds.
 
+**2026-07-22 — A real bug in the synthetic-data pipeline, caught before it cost
+anything.** Running `prepare_dataset.py` to pack the `kb_authoring`/`platform_help`
+adapter data crashed with `KeyError: 'rationale'` — one of the 660 generated
+`kb_authoring` clusters was missing a field the tool schema itself marks `required`.
+Root cause, worth remembering for anyone building a synthetic-data pipeline on top of
+forced tool calls: `tool_choice` forcing the model to call a specific tool guarantees
+*a* call happens, not that every field the schema calls required actually gets
+populated. None of the three `generate_*_synthetic.py` scripts checked for that before
+writing a row to disk.
+
+Fixed in two places rather than one: `prepare_dataset.py`'s three packing functions now
+skip (and count) a malformed row instead of crashing the whole run — which is what
+actually unblocked training on the already-generated, already-paid-for data without
+spending anything to regenerate it — and all three generator scripts now validate a
+response against its own required-fields list before writing, so a future run doesn't
+persist the same kind of incomplete row in the first place. Also added
+`--skip-base` to `prepare_dataset.py`, since re-packing the full multi-million-text base
+corpus just to pick up two adapters' worth of newly-generated data would have wasted
+hours re-doing already-correct work.
+
+Once unblocked: **`kb_authoring` adapter fine-tuned for the first time**, against the
+real pretrained base. val_loss dropped every single epoch, 2.3982 → 1.2486 over 10
+epochs (~150s total), with no overfitting uptick at all — unlike `entry_drafting`'s run,
+this one hadn't plateaued yet by the last epoch, meaning 1.2486 is probably not this
+adapter's real ceiling. Worth a re-run at more epochs before treating that number as
+final. `platform_help` fine-tuning is running next.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)

@@ -51,9 +51,21 @@ completed run, it doesn't belong in this file yet.
 - Notes: statistically meaningful for the first time (n=207 vs. the old n=7, where one
   example flipping swung the score by ~14 points).
 
-### kb_authoring — pending
-No real fine-tuning run yet — synthetic training data exists (see below) but the
-adapter hasn't been trained on it.
+### kb_authoring — 2026-07-22
+- Config: real pretrained base (`checkpoints/base.safetensors`, see base-pretraining
+  section above) + LoRA (rank 8, alpha 16), M5 MacBook, default 10 epochs/batch-size
+  8/lr 1e-3
+- Data: 350 train / 38 val synthetic (word-dump cluster → drafted knowledge-base
+  entry) examples — 660 generated clusters minus 267 dropped for exceeding
+  `max_len=512` and 5 skipped for a missing required field (see
+  `docs/benny-case-study.md`/commit history for that bug and its fix)
+- Result: val_loss 2.3982 → 1.2486 across all 10 epochs, decreasing every single
+  epoch with no overfitting uptick at all — unlike entry_drafting's run, val_loss was
+  still clearly improving at the final epoch, not past its optimum yet.
+- Wall-clock: ~15s/epoch, ~150s total
+- Notes: since val_loss hadn't plateaued, this run is likely undertrained rather than
+  at its real optimum — worth a re-run with more epochs (e.g. `--epochs 20`) to see
+  where it actually levels off, before treating 1.2486 as this adapter's ceiling.
 
 ### platform_help — pending
 No real fine-tuning run yet — synthetic training data exists (see below) but the
