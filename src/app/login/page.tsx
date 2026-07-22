@@ -20,6 +20,7 @@ function LoginForm() {
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -101,9 +102,31 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
+        {mode === "signup" && (
+          <label className="flex items-start gap-2 text-xs text-muted">
+            <input
+              type="checkbox"
+              required
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              I&apos;m 18 or older and the parent/guardian of any student I add. I agree to FreeLoom&apos;s{" "}
+              <Link href="/terms" target="_blank" className="text-gold hover:underline">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" target="_blank" className="text-gold hover:underline">
+                Privacy &amp; Cookie Policy
+              </Link>
+              .
+            </span>
+          </label>
+        )}
         {error && <p className="text-sm text-red-600">{error}</p>}
         {notice && <p className="text-sm text-gold">{notice}</p>}
-        <button type="submit" className="btn-primary" disabled={submitting}>
+        <button type="submit" className="btn-primary" disabled={submitting || (mode === "signup" && !agreedToTerms)}>
           {submitting ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
         </button>
       </form>

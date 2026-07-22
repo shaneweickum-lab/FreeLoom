@@ -29,6 +29,9 @@ export default function AboutTab() {
         ))}
       </ul>
       <div className="flex items-center gap-4 border-t border-navy-line pt-3 text-sm">
+        <Link href="/terms" className="text-gold hover:underline">
+          Terms
+        </Link>
         <Link href="/privacy" className="text-gold hover:underline">
           Privacy &amp; Cookie Policy
         </Link>
