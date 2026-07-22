@@ -85,6 +85,9 @@ export async function POST(req: NextRequest) {
       // to lapse.
       cancel_at_period_end: false,
       cancel_at: null,
+      // Ensures tax is recalculated on the new price too, and brings it
+      // onto any subscription that predates Stripe Tax being enabled here.
+      automatic_tax: { enabled: true },
     });
   } catch (err) {
     console.error("Failed to update subscription for plan change:", err);

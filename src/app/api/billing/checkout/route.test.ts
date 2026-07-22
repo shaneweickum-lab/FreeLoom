@@ -87,6 +87,18 @@ describe("POST /api/billing/checkout", () => {
     expect(res.status).toBe(400);
   });
 
+  it("enables Stripe Tax and collects a billing address on every checkout session", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automatic_tax: { enabled: true },
+        customer_update: { address: "auto", name: "auto" },
+        billing_address_collection: "required",
+      })
+    );
+  });
+
   it("500s when the plan has no configured Price ID", async () => {
     const res = await POST(makeRequest({ tier: "premium", interval: "year" }));
     expect(res.status).toBe(500);

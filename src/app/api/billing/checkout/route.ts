@@ -149,6 +149,16 @@ export async function POST(req: NextRequest) {
       // but not the originating Checkout Session.
       metadata: { supabase_user_id: user.id },
       subscription_data: { metadata: { supabase_user_id: user.id } },
+      // Stripe Tax calculates and collects the right sales tax/VAT per
+      // customer location -- requires a billing address to determine
+      // jurisdiction (collected here since neither of FreeLoom's own
+      // customer-creation calls set one), and tax registrations to be
+      // configured in the Stripe Dashboard for wherever there's nexus
+      // before it actually charges anything (a Dashboard-only step, not
+      // something this code can set up).
+      automatic_tax: { enabled: true },
+      customer_update: { address: "auto", name: "auto" },
+      billing_address_collection: "required",
     });
 
     if (!session.url) {

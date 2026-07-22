@@ -109,6 +109,7 @@ describe("POST /api/billing/change-plan", () => {
         payment_behavior: "error_if_incomplete",
         cancel_at_period_end: false,
         cancel_at: null,
+        automatic_tax: { enabled: true },
       })
     );
   });
