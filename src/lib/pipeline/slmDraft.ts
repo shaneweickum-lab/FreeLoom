@@ -98,7 +98,14 @@ export async function callEntryDraftingAdapter(input: {
   try {
     const res = await fetch(`${process.env.SLM_ENTRY_DRAFTING_URL}/entry-draft`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // The inference server runs on the Mac and is reachable over the
+        // public internet via a tunnel -- this shared secret is the only
+        // thing stopping anyone who finds the URL from running free
+        // inference against it. See ml/serve/inference_server.py.
+        ...(process.env.SLM_SHARED_SECRET ? { Authorization: `Bearer ${process.env.SLM_SHARED_SECRET}` } : {}),
+      },
       body: JSON.stringify({ raw_word_dump: input.rawWordDump, extracted_slots: input.extractedSlots }),
       signal: controller.signal,
     });
