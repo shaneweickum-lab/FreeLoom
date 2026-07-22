@@ -1,0 +1,90 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { NextRequest } from "next/server";
+
+function chain(result: unknown) {
+  const builder: Record<string, unknown> = {};
+  for (const method of ["select", "eq", "insert", "upsert"]) {
+    builder[method] = vi.fn(() => builder);
+  }
+  builder.maybeSingle = vi.fn(async () => result);
+  builder.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+    Promise.resolve(result).then(resolve, reject);
+  return builder;
+}
+
+let getUserResult: { data: { user: { id: string; email: string } | null } };
+let fromQueue: unknown[];
+
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn(async () => ({
+    auth: { getUser: vi.fn(async () => getUserResult) },
+    from: vi.fn(() => chain(fromQueue.shift() ?? { data: null, error: null })),
+  })),
+}));
+
+const createCustomer = vi.fn(async () => ({ id: "cus_new" }));
+const createSession = vi.fn(async () => ({ url: "https://checkout.stripe.com/session123" }));
+
+vi.mock("@/lib/stripe", () => ({
+  getStripe: vi.fn(() => ({
+    customers: { create: (...args: Parameters<typeof createCustomer>) => createCustomer(...args) },
+    checkout: { sessions: { create: (...args: Parameters<typeof createSession>) => createSession(...args) } },
+  })),
+  priceIdFor: vi.fn((tier: string, interval: string) =>
+    tier === "pro" && interval === "month" ? "price_pro_month" : undefined
+  ),
+}));
+
+import { POST } from "./route";
+
+function makeRequest(body: unknown): NextRequest {
+  return { json: async () => body } as unknown as NextRequest;
+}
+
+const USER = { id: "user-1", email: "parent@example.com" };
+
+describe("POST /api/billing/checkout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getUserResult = { data: { user: USER } };
+    fromQueue = [];
+  });
+
+  it("rejects when signed out", async () => {
+    getUserResult = { data: { user: null } };
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects an invalid tier/interval", async () => {
+    const res = await POST(makeRequest({ tier: "gold", interval: "month" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("500s when the plan has no configured Price ID", async () => {
+    const res = await POST(makeRequest({ tier: "premium", interval: "year" }));
+    expect(res.status).toBe(500);
+  });
+
+  it("creates a new Stripe customer when none exists yet, then a checkout session", async () => {
+    fromQueue = [{ data: null, error: null }, { error: null }];
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.url).toBe("https://checkout.stripe.com/session123");
+    expect(createCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({ email: USER.email, metadata: { supabase_user_id: USER.id } })
+    );
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ customer: "cus_new", mode: "subscription" })
+    );
+  });
+
+  it("reuses an existing Stripe customer without creating a new one", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(200);
+    expect(createCustomer).not.toHaveBeenCalled();
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_existing" }));
+  });
+});

@@ -28,9 +28,16 @@ function isActiveRow(row: AccessRequestRow | undefined): row is AccessRequestRow
 export default function AccessRequestPanel({
   targetUserId,
   initialRequests,
+  targetIsFreeTier = false,
 }: {
   targetUserId: string;
   initialRequests: AccessRequestRow[];
+  /** UX only -- the real gate is server-side in POST /api/admin/access-requests
+   * (blocks both the initial request and "request more time" reusing this
+   * same endpoint) and PATCH /api/access-requests/[id] (blocks approving a
+   * stale pending row into a since-downgraded account). This just avoids an
+   * admin wasting effort on a request that would get rejected anyway. */
+  targetIsFreeTier?: boolean;
 }) {
   const [requests, setRequests] = useState(initialRequests);
   const [myUserId, setMyUserId] = useState<string | null>(null);
@@ -165,6 +172,10 @@ export default function AccessRequestPanel({
 
   if (pendingRequest) {
     return <p className="text-sm text-muted">Waiting on the parent to approve your request.</p>;
+  }
+
+  if (targetIsFreeTier) {
+    return <p className="text-sm text-muted">This account is on the Free plan -- read-only access isn&apos;t available.</p>;
   }
 
   return (

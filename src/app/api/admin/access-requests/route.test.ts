@@ -66,14 +66,32 @@ describe("POST /api/admin/access-requests", () => {
   });
 
   it("creates the request and notifies the target parent", async () => {
-    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: { id: "req-1" }, error: null }, { error: null }];
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: { subscription_tier: "pro", subscription_status: "active", grandfathered_until: null } },
+      { data: { id: "req-1" }, error: null },
+      { error: null },
+    ];
     const res = await POST(makeRequest({ targetUserId: PARENT_ID, reason: "Portfolio isn't loading" }));
     expect(res.status).toBe(200);
   });
 
   it("500s when the request insert fails", async () => {
-    fromQueue = [{ data: { user_id: ADMIN.id } }, { data: null, error: { code: "XX000" } }];
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: { subscription_tier: "pro", subscription_status: "active", grandfathered_until: null } },
+      { data: null, error: { code: "XX000" } },
+    ];
     const res = await POST(makeRequest({ targetUserId: PARENT_ID, reason: "debugging" }));
     expect(res.status).toBe(500);
+  });
+
+  it("403s when the target account is on the Free plan", async () => {
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: { subscription_tier: "free", subscription_status: null, grandfathered_until: null } },
+    ];
+    const res = await POST(makeRequest({ targetUserId: PARENT_ID, reason: "debugging" }));
+    expect(res.status).toBe(403);
   });
 });

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useStudents } from "@/lib/studentContext";
+import { createClient } from "@/lib/supabase/client";
+import { getStudentCap } from "@/lib/billing/tier";
 import type { Student } from "@/lib/types";
 
 // Darker avatar-safe variants of the brand gold/violet -- the brand tokens
@@ -63,7 +65,34 @@ function PlusIcon() {
 export default function StudentSwitcher() {
   const { students, currentStudent, stats, loading, selectStudent } = useStudents();
   const [open, setOpen] = useState(false);
+  const [cap, setCap] = useState<number | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // Self-contained, same pattern as AppRail's BennyTriggerButton -- fetches
+  // its own tier-relevant data rather than needing a prop threaded down.
+  // Real enforcement is a DB trigger (see the billing-tiers migration);
+  // this is purely for a clean upgrade-prompt experience instead of a raw
+  // Postgres error if a parent somehow got past this UI.
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("school_profiles")
+        .select("subscription_tier, subscription_status, grandfathered_until")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      setCap(
+        getStudentCap({
+          subscription_tier: profile?.subscription_tier ?? "free",
+          subscription_status: profile?.subscription_status ?? null,
+          grandfathered_until: profile?.grandfathered_until ?? null,
+        })
+      );
+    });
+  }, []);
+
+  const atCap = cap !== null && students.length >= cap;
 
   useEffect(() => {
     if (!open) return;
@@ -160,14 +189,25 @@ export default function StudentSwitcher() {
             })}
           </div>
           <div className="border-t border-border py-1">
-            <Link
-              href="/dashboard?new=1"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
-            >
-              <PlusIcon />
-              Add a student
-            </Link>
+            {atCap ? (
+              <Link
+                href="/settings"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-gold hover:underline transition-colors"
+              >
+                <PlusIcon />
+                Upgrade to add more students (Settings &gt; Billing)
+              </Link>
+            ) : (
+              <Link
+                href="/dashboard?new=1"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+              >
+                <PlusIcon />
+                Add a student
+              </Link>
+            )}
             <Link
               href="/dashboard"
               onClick={() => setOpen(false)}

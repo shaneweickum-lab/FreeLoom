@@ -19,7 +19,7 @@ export default function SettingsTabs({ userId, initialProfile }: { userId: strin
           label: "Notifications",
           content: <NotificationsTab userId={userId} initialProfile={initialProfile} />,
         },
-        { id: "billing", label: "Billing", content: <BillingTab /> },
+        { id: "billing", label: "Billing", content: <BillingTab userId={userId} initialProfile={initialProfile} /> },
         { id: "about", label: "About", content: <AboutTab /> },
       ]}
     />
