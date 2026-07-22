@@ -55,6 +55,14 @@ from typing import Iterable
 import numpy as np
 from tokenizers import Tokenizer
 
+# stdout is only line-buffered when connected to a real terminal -- piped
+# through `tee` (or redirected to a file) it's fully block-buffered instead,
+# so the progress prints below (the whole point of which is "don't let a
+# multi-hour run look like a hang") can sit invisible for minutes. Force
+# line buffering unconditionally so `python3 prepare_dataset.py | tee log`
+# streams live without needing `python3 -u`.
+sys.stdout.reconfigure(line_buffering=True)
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 BASE_CORPUS_DIR = DATA_DIR / "base_corpus"
 TOKENIZER_PATH = Path(__file__).parent.parent / "tokenizer" / "tokenizer.json"
