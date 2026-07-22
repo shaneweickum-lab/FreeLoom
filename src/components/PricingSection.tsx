@@ -44,12 +44,13 @@ export default function PricingSection({ prices }: { prices: PriceTable }) {
         </p>
       </div>
 
-      <div className="flex items-center gap-1 rounded-lg border border-navy-line p-1 w-fit mx-auto">
+      <div role="group" aria-label="Billing interval" className="flex items-center gap-1 rounded-lg border border-navy-line p-1 w-fit mx-auto">
         {(["month", "quarter", "year"] as Interval[]).map((opt) => (
           <button
             key={opt}
             type="button"
             onClick={() => setInterval(opt)}
+            aria-pressed={interval === opt}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               interval === opt ? "bg-gold/15 text-gold" : "text-muted hover:text-foreground"
             }`}

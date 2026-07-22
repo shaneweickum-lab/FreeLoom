@@ -19,6 +19,9 @@
   --navy-line: #2b3260;
   --gold: #c7a252;
   --gold-bright: #e6c878;
+  /* Borderline AA contrast against --navy-deep at small text sizes -- fine
+     for the accents/icons it's actually used for today, but don't use it
+     for body copy without checking contrast first. */
   --violet: #8968c9;
   --violet-soft: #b09cdc;
   --parchment: #f7f2e6;
