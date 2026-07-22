@@ -69,15 +69,36 @@ ENTRY_DRAFT_PATTERN = re.compile(
 )
 
 
+# Greedy decoding can fall into a stable repetition loop on some prompts --
+# confirmed real (not implementation-specific) when
+# src/lib/benny/inference/model.ts's KV-cached port and
+# ml/serve/verify_web_port.py's from-scratch-every-step numpy reference both
+# independently landed on the exact same stuck token. This one deliberate
+# divergence from the eval scripts' raw greedy loop (run_eval.py /
+# run_eval_platform_help.py, which must stay unchanged for eval numbers to
+# stay comparable across retrains) -- keep this in sync with model.ts/
+# verify_web_port.py's generate() instead.
+MAX_CONSECUTIVE_REPEATS = 3
+
+
 def generate(model, tokenizer, prompt_ids, max_new_tokens, eos_id):
     """Same greedy-decoding loop as the eval scripts (run_eval.py /
-    run_eval_platform_help.py) -- kept in sync deliberately, since serving
-    should behave identically to what was actually evaluated."""
+    run_eval_platform_help.py), plus a repetition-loop guard eval doesn't
+    have (see MAX_CONSECUTIVE_REPEATS above)."""
     ids = list(prompt_ids)
+    last_token = None
+    repeat_count = 0
     for _ in range(max_new_tokens):
         window = ids[-model.cfg.max_seq_len:]
         logits = model(mx.array([window]))
         next_id = int(mx.argmax(logits[0, -1]))
+        if next_id == last_token:
+            repeat_count += 1
+            if repeat_count >= MAX_CONSECUTIVE_REPEATS:
+                break
+        else:
+            last_token = next_id
+            repeat_count = 1
         ids.append(next_id)
         if eos_id is not None and next_id == eos_id:
             break

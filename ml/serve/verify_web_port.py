@@ -118,12 +118,30 @@ def forward(token_ids: list[int], base: dict, adapter: dict) -> np.ndarray:
     return x @ base["token_emb.weight"].T
 
 
+# Greedy decoding can fall into a stable repetition loop on some prompts --
+# confirmed real (not a bug in either implementation) by this script
+# reproducing the exact same stuck token as src/lib/benny/inference/model.ts's
+# generate() despite this one recomputing from scratch every step with no
+# KV cache at all. Mirrored in that file and ml/serve/inference_server.py --
+# keep all three in sync.
+MAX_CONSECUTIVE_REPEATS = 3
+
+
 def generate(prompt_ids: list[int], max_new_tokens: int, base: dict, adapter: dict, eos_id: int) -> list[int]:
     ids = list(prompt_ids)
     generated = []
+    last_token = None
+    repeat_count = 0
     for _ in range(max_new_tokens):
         logits = forward(ids, base, adapter)
         next_id = int(np.argmax(logits[-1]))
+        if next_id == last_token:
+            repeat_count += 1
+            if repeat_count >= MAX_CONSECUTIVE_REPEATS:
+                break
+        else:
+            last_token = next_id
+            repeat_count = 1
         generated.append(next_id)
         ids.append(next_id)
         if next_id == eos_id:

@@ -185,6 +185,31 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
 - Real trained-weight parity check and live Vercel deployment: pending (needs the
   actual base.safetensors/adapter files exported and bundled, on the Mac)
 
+### stale committed tokenizer.json + a real greedy-decoding repetition loop — 2026-07-22
+- First real-weight test surfaced two distinct issues once weights were actually bundled:
+  1. Every generated token decoded as `<unk>`. Root cause: `ml/tokenizer/tokenizer.json`
+     committed to git was the **old 1,477-vocab tokenizer** — the real, retrained
+     8,000-vocab one (`model/config.py`'s own comment already documented this as the
+     expected file) only ever existed locally on the Mac. Every Python script
+     (train/eval/`inference_server.py`) read that correct local file directly, so this
+     never surfaced until the TS port bundled whatever was actually committed. Fixed by
+     committing the real 8,000-vocab file.
+  2. With the tokenizer fixed, `platform_help` got stuck repeating a single token
+     ("Every", id 3779) for an entire generation on "where do I get help with
+     freeloom?". Confirmed as genuine model behavior, not a port bug: `verify_web_port.py`
+     (full recompute every step, no KV cache at all) landed on the *exact same* stuck
+     token as `model.ts`'s KV-cached generate() -- mathematically, causal attention
+     guarantees these two approaches produce identical output, so agreement here rules
+     out a caching bug. Greedy decoding (always the single most-likely token) is a
+     known-generally failure mode for repetition loops, more likely on a smaller model
+     given an out-of-training-distribution question.
+- Fix: added `MAX_CONSECUTIVE_REPEATS = 3` -- stop generation once a token has repeated
+  3 times in a row, rather than repeating for the rest of `max_new_tokens`. Applied to
+  `model.ts`, `verify_web_port.py`, and `inference_server.py`'s `generate()` loops
+  (kept in sync); deliberately **not** applied to `run_eval.py`/
+  `run_eval_platform_help.py`, since those need to keep measuring raw greedy-decoding
+  behavior unchanged for eval numbers to stay comparable across retrains.
+
 ## Synthetic data generation (real, paid API runs)
 
 ### entry_drafting corpus — `data/generate_synthetic.py`

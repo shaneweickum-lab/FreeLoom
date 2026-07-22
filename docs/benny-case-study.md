@@ -248,6 +248,33 @@ difference eventually flips an argmax coin-flip. With the real trained weights -
 which produce much more decisively peaked predictions, per the adapters' own eval
 scores -- that kind of flip is far less likely to matter in practice.
 
+**The first real-weight test found two bugs — one old, one new, only one actually in
+the new code.** Bundling the real trained weights into the deployed app for the first
+time immediately broke chat: every reply came back as a wall of `<unk>`. The cause
+turned out to predate this whole porting effort entirely — `ml/tokenizer/tokenizer.json`
+committed to git was the *old* 1,477-vocab tokenizer, not the real, retrained
+8,000-vocab one the model actually learned against. That correct file had only ever
+existed locally on the Mac; every Python script that ever ran (training, eval, the old
+HTTP server) happened to read it straight off disk there, so a file that was silently
+wrong in git for who knows how long never once caused a visible problem until the TS
+port — the first thing to ever read whatever was actually committed — exposed it.
+Committing the real file fixed it immediately.
+
+With that fixed, a second, genuinely new symptom appeared: platform_help got stuck
+repeating a single word forever on one specific question. This one *could* have been a
+bug in the from-scratch port's KV-cache logic — worth taking seriously rather than
+assuming innocence. The test that settled it: run `verify_web_port.py` (the
+completely independent, full-recompute-every-step numpy reference, no caching
+whatsoever) against the identical real weights and prompt. It landed on the *exact
+same* stuck token. Since causal attention makes a KV cache and a full recompute
+mathematically required to agree, two independent implementations reaching identical
+output rules out a caching bug definitively — this is just greedy decoding's own
+well-known failure mode, surfacing on a question this size of model and training set
+hadn't seen the likes of. Fixed with a small, deliberately narrow addition: stop
+generating once a token has repeated three times in a row, applied to every serving
+path but *not* to the eval scripts, which need to keep measuring raw model behavior
+unchanged for retrain-to-retrain comparisons to mean anything.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)
