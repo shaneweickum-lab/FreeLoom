@@ -4,6 +4,9 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { meetsMinimumStrength } from "@/lib/passwordStrength";
+import { recordRememberMeChoice } from "@/lib/authSession";
+import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
 
 function LoginForm() {
   const router = useRouter();
@@ -16,17 +19,26 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(
     searchParams.get("error") === "confirmation_failed"
       ? "That confirmation link is invalid or has expired. Try signing up again."
+      : searchParams.get("reason") === "inactivity"
+      ? "You were signed out after 72 hours of inactivity. Sign in again to continue."
       : null
   );
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [keepSignedIn, setKeepSignedIn] = useState(true);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
     setError(null);
     setNotice(null);
+
+    if (mode === "signup" && !meetsMinimumStrength(password)) {
+      setError("Choose a stronger password -- add more length or mix in a number/symbol.");
+      return;
+    }
+
+    setSubmitting(true);
     const supabase = createClient();
 
     if (mode === "signin") {
@@ -36,6 +48,7 @@ function LoginForm() {
         setSubmitting(false);
         return;
       }
+      recordRememberMeChoice(keepSignedIn);
       router.push(next);
       router.refresh();
     } else {
@@ -53,6 +66,7 @@ function LoginForm() {
         return;
       }
       if (data.session) {
+        recordRememberMeChoice(keepSignedIn);
         router.push("/onboarding");
         router.refresh();
       } else {
@@ -96,11 +110,21 @@ function LoginForm() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={mode === "signup" ? 8 : 6}
             className="input"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+        </label>
+        {mode === "signup" && <PasswordStrengthMeter password={password} />}
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={keepSignedIn}
+            onChange={(e) => setKeepSignedIn(e.target.checked)}
+            className="h-4 w-4 shrink-0 accent-gold"
+          />
+          <span className="text-muted">Keep me signed in</span>
         </label>
         {mode === "signup" && (
           <label className="flex items-start gap-2 text-xs text-muted">
