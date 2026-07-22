@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdFor, type BillingTier, type BillingInterval } from "@/lib/stripe";
 
@@ -60,10 +61,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't find your subscription's billing item." }, { status: 500 });
   }
 
-  await stripe.subscriptions.update(profile.stripe_subscription_id, {
-    items: [{ id: item.id, price: priceId }],
-    proration_behavior: "create_prorations",
-  });
+  try {
+    await stripe.subscriptions.update(profile.stripe_subscription_id, {
+      items: [{ id: item.id, price: priceId }],
+      // always_invoice charges the prorated difference immediately, rather
+      // than create_prorations' default of deferring it to the next
+      // scheduled invoice -- with a deferred charge, a customer could
+      // upgrade for instant access to a higher tier, then switch back down
+      // before that invoice is ever generated, getting the upgrade for
+      // free. error_if_incomplete makes a failed charge reject the whole
+      // plan change instead of granting the new tier on an unpaid promise.
+      proration_behavior: "always_invoice",
+      payment_behavior: "error_if_incomplete",
+      // Switching plans is a clear signal to keep the subscription going --
+      // clear any pending cancellation (set via the Portal's cancel flow)
+      // so the account doesn't end up on the new plan but still scheduled
+      // to lapse.
+      cancel_at_period_end: false,
+      cancel_at: null,
+    });
+  } catch (err) {
+    console.error("Failed to update subscription for plan change:", err);
+    if (err instanceof Stripe.errors.StripeError) {
+      return NextResponse.json(
+        { error: "Your payment method couldn't be charged for this change -- update it via Manage billing and try again." },
+        { status: 402 }
+      );
+    }
+    throw err;
+  }
 
   return NextResponse.json({ success: true });
 }

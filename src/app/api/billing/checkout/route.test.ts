@@ -113,4 +113,23 @@ describe("POST /api/billing/checkout", () => {
     expect(res.status).toBe(400);
     expect(createSession).not.toHaveBeenCalled();
   });
+
+  it("400s for a past_due subscription too, not just active/trialing", async () => {
+    // A payment hiccup mid-retry is still a real, non-terminal subscription
+    // -- a second Checkout would run alongside it, not fix it; Manage
+    // billing (updating the payment method) is the right path instead.
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    listSubscriptions.mockResolvedValueOnce({ data: [{ id: "sub_1", status: "past_due" }] });
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(400);
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("allows a fresh checkout when the only prior subscription is fully canceled", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    listSubscriptions.mockResolvedValueOnce({ data: [{ id: "sub_1", status: "canceled" }] });
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(200);
+    expect(createSession).toHaveBeenCalled();
+  });
 });
