@@ -19,6 +19,7 @@ Usage:
 import argparse
 import re
 import sys
+import time
 from pathlib import Path
 
 import mlx.core as mx
@@ -85,9 +86,14 @@ def main():
 
     val_data = np.load(DATA_DIR / "entry_drafting_val.npz")
     known_subject_areas = load_known_subject_areas()
+    total = len(val_data["input_ids"])
 
+    # Autoregressive generation (up to max_new_tokens per example, no batching)
+    # over the full held-out set has no other output until the very end --
+    # without this, a long eval run looks identical to a hung process.
     results = []
-    for input_ids, loss_mask in zip(val_data["input_ids"], val_data["loss_mask"]):
+    run_start = time.time()
+    for i, (input_ids, loss_mask) in enumerate(zip(val_data["input_ids"], val_data["loss_mask"])):
         completion_start = int(np.argmax(loss_mask))
         prompt_ids = [t for t in input_ids[:completion_start].tolist() if t != pad_id]
         if not prompt_ids or prompt_ids[0] != bos_id:
@@ -99,9 +105,14 @@ def main():
 
         if draft is None:
             results.append((False, ["could not parse expected fields from generated text"]))
-            continue
-        result = validate_draft(draft, known_subject_areas)
-        results.append((bool(result), result.errors))
+        else:
+            result = validate_draft(draft, known_subject_areas)
+            results.append((bool(result), result.errors))
+
+        elapsed = time.time() - run_start
+        avg = elapsed / (i + 1)
+        eta = avg * (total - i - 1)
+        print(f"  ...{i + 1}/{total} evaluated ({elapsed:.0f}s elapsed, ETA {eta:.0f}s)", flush=True)
 
     n_valid = sum(1 for valid, _ in results if valid)
     print(f"Format-valid: {n_valid}/{len(results)} ({100 * n_valid / max(len(results), 1):.1f}%)")
