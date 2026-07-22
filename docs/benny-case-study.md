@@ -183,8 +183,13 @@ the adapter file), not treated as independently swappable artifacts. For now: re
 **`entry_drafting` retrained against the current base, same day.** val_loss 2.4120 →
 1.9354 across all 10 epochs, decreasing every epoch and still trending down at the
 end — a healthy curve, and the expected fix for the base/adapter mismatch above.
-Re-eval against this new checkpoint is queued; the real pass/fail number goes in
-`ml/RESULTS.md` the moment it finishes.
+
+Re-eval confirmed it: **207/207 (100%) format-valid** — a clean recovery from the 0%
+collapse, and even a touch above the original 99.5%. The diagnosis holds up: the
+adapter and the pipeline were both fine all along, it was specifically the stale
+base/adapter pairing causing the total failure. All three adapters now have a real,
+current-base-paired result: `entry_drafting` 100%, `kb_authoring` 100% (n=38),
+`platform_help` un-scored (qualitative eval by design — see its own entry above).
 
 ---
 
