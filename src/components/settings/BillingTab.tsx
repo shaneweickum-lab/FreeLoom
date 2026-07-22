@@ -36,6 +36,10 @@ function daysRemaining(iso: string): number {
   return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
 /** userId isn't used here -- every billing action (checkout/portal) infers
  * the caller from the server-side session, not a client-supplied id -- but
  * the prop is kept in the signature to match AccountTab/NotificationsTab's
@@ -57,6 +61,10 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
     initialProfile?.subscription_status !== "active" &&
     initialProfile?.subscription_status !== "trialing" &&
     !!initialProfile?.grandfathered_until;
+  // Set via the Customer Portal's cancel flow -- Stripe keeps the
+  // subscription (and this account's tier gates) active through the end
+  // of the period already paid for, it just won't renew afterward.
+  const cancelPending = !!initialProfile?.cancel_at_period_end && !!initialProfile?.current_period_end;
 
   async function handleSubscribe(planTier: "pro" | "premium") {
     setLoadingTier(planTier);
@@ -111,6 +119,12 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
             You have full Premium access for {daysRemaining(initialProfile.grandfathered_until)} more day
             {daysRemaining(initialProfile.grandfathered_until) === 1 ? "" : "s"} while paid plans roll out -- pick a
             plan below to keep it afterward.
+          </p>
+        )}
+        {cancelPending && initialProfile?.current_period_end && (
+          <p className="text-xs text-gold">
+            Your {tier} plan cancels on {formatDate(initialProfile.current_period_end)} -- resubscribe anytime before
+            then to keep it.
           </p>
         )}
         {initialProfile?.stripe_customer_id && (

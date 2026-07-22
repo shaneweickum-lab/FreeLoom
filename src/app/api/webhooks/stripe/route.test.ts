@@ -87,6 +87,7 @@ describe("POST /api/webhooks/stripe", () => {
       id: "sub_123",
       status: "active",
       customer: "cus_1",
+      cancel_at_period_end: false,
       items: { data: [{ price: { id: "price_pro_month" }, current_period_end: 1700000000 }] },
     });
     const res = await POST(makeRequest("{}"));
@@ -94,6 +95,28 @@ describe("POST /api/webhooks/stripe", () => {
     const upsertCall = fromCalls.find((c) => c.table === "school_profiles" && c.method === "upsert");
     expect(upsertCall?.args[0]).toEqual(
       expect.objectContaining({ user_id: "user-1", subscription_tier: "pro", subscription_status: "active" })
+    );
+  });
+
+  it("records cancel_at_period_end when a Portal cancellation comes through as an update", async () => {
+    constructEventImpl = vi.fn(() => ({
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: "sub_123",
+          status: "active",
+          customer: "cus_1",
+          metadata: { supabase_user_id: "user-1" },
+          cancel_at_period_end: true,
+          items: { data: [{ price: { id: "price_pro_month" }, current_period_end: 1700000000 }] },
+        },
+      },
+    }));
+    const res = await POST(makeRequest("{}"));
+    expect(res.status).toBe(200);
+    const upsertCall = fromCalls.find((c) => c.table === "school_profiles" && c.method === "upsert");
+    expect(upsertCall?.args[0]).toEqual(
+      expect.objectContaining({ user_id: "user-1", subscription_status: "active", cancel_at_period_end: true })
     );
   });
 
@@ -106,7 +129,12 @@ describe("POST /api/webhooks/stripe", () => {
     expect(res.status).toBe(200);
     const upsertCall = fromCalls.find((c) => c.table === "school_profiles" && c.method === "upsert");
     expect(upsertCall?.args[0]).toEqual(
-      expect.objectContaining({ user_id: "user-1", subscription_tier: "free", subscription_status: "canceled" })
+      expect.objectContaining({
+        user_id: "user-1",
+        subscription_tier: "free",
+        subscription_status: "canceled",
+        cancel_at_period_end: false,
+      })
     );
   });
 
