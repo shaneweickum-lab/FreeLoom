@@ -196,8 +196,18 @@ def build_entry_drafting_arrays(tokenizer: Tokenizer, examples: list[dict], max_
     input_ids = np.full((len(examples), max_len), pad_id, dtype=np.int32)
     loss_mask = np.zeros((len(examples), max_len), dtype=np.int32)
 
+    required_keys = ("raw_word_dump", "course_title", "subject_area", "credit_value", "rationale")
     dropped = 0
+    malformed = 0
     for i, example in enumerate(examples):
+        # An LLM-generated example (synthetic_corpus.jsonl) isn't schema-
+        # validated before it's written to disk -- tool_choice forcing a
+        # tool call doesn't guarantee every "required" field in the schema
+        # actually came back populated. Skip a row missing one rather than
+        # crashing the whole prep run over a single bad generation.
+        if not all(k in example for k in required_keys):
+            malformed += 1
+            continue
         prompt_text = f"activity: {example['raw_word_dump']}\n"
         completion_text = (
             f"course_title: {example['course_title']}\n"
@@ -218,6 +228,8 @@ def build_entry_drafting_arrays(tokenizer: Tokenizer, examples: list[dict], max_
 
     if dropped:
         print(f"  dropped {dropped}/{len(examples)} examples exceeding max_len={max_len}")
+    if malformed:
+        print(f"  skipped {malformed}/{len(examples)} malformed examples missing a required field")
 
     keep = loss_mask.sum(axis=1) > 0
     return input_ids[keep], loss_mask[keep]
@@ -251,8 +263,17 @@ def build_kb_authoring_arrays(tokenizer: Tokenizer, examples: list[dict], max_le
     input_ids = np.full((len(examples), max_len), pad_id, dtype=np.int32)
     loss_mask = np.zeros((len(examples), max_len), dtype=np.int32)
 
+    required_keys = ("word_dumps", "keywords", "course_title", "subject_area", "skills", "base_credit_hours", "rationale")
     dropped = 0
+    malformed = 0
     for i, example in enumerate(examples):
+        # Same reasoning as build_entry_drafting_arrays -- a tool-forced
+        # generation isn't guaranteed to actually populate every field the
+        # schema calls "required," so a single bad row from
+        # kb_authoring_synthetic.jsonl shouldn't crash the whole prep run.
+        if not all(k in example for k in required_keys):
+            malformed += 1
+            continue
         word_dump_lines = "\n".join(f"- {w}" for w in example["word_dumps"])
         prompt_text = f"activities not yet in the knowledge base:\n{word_dump_lines}\ndraft a new knowledge base entry:\n"
         completion_text = (
@@ -276,6 +297,8 @@ def build_kb_authoring_arrays(tokenizer: Tokenizer, examples: list[dict], max_le
 
     if dropped:
         print(f"  dropped {dropped}/{len(examples)} examples exceeding max_len={max_len}")
+    if malformed:
+        print(f"  skipped {malformed}/{len(examples)} malformed examples missing a required field")
 
     keep = loss_mask.sum(axis=1) > 0
     return input_ids[keep], loss_mask[keep]
@@ -308,8 +331,16 @@ def build_platform_help_arrays(tokenizer: Tokenizer, examples: list[dict], max_l
     input_ids = np.full((len(examples), max_len), pad_id, dtype=np.int32)
     loss_mask = np.zeros((len(examples), max_len), dtype=np.int32)
 
+    required_keys = ("question", "answer")
     dropped = 0
+    malformed = 0
     for i, example in enumerate(examples):
+        # Same reasoning as the other build_*_arrays functions -- guard
+        # against a malformed generated/paraphrased row rather than
+        # crashing the whole prep run over one bad entry.
+        if not all(k in example for k in required_keys):
+            malformed += 1
+            continue
         prompt_text = f"question: {example['question']}\n"
         completion_text = f"answer: {example['answer']}"
         prompt_ids = [bos_id] + tokenizer.encode(prompt_text).ids
@@ -325,6 +356,8 @@ def build_platform_help_arrays(tokenizer: Tokenizer, examples: list[dict], max_l
 
     if dropped:
         print(f"  dropped {dropped}/{len(examples)} examples exceeding max_len={max_len}")
+    if malformed:
+        print(f"  skipped {malformed}/{len(examples)} malformed examples missing a required field")
 
     keep = loss_mask.sum(axis=1) > 0
     return input_ids[keep], loss_mask[keep]

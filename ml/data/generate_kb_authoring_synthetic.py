@@ -207,6 +207,8 @@ def main():
     def next_task():
         return random.choice(TOPIC_POOL)
 
+    required_keys = EMIT_TOOL["input_schema"]["required"]
+
     def worker(f):
         topic = next_task()
         example, in_tok, out_tok = generate_one(client, topic, few_shot)
@@ -214,10 +216,17 @@ def main():
         with lock:
             state["attempted"] += 1
             state["cost"] += call_cost
-            if example:
+            # tool_choice forcing a tool call doesn't guarantee the model
+            # actually populated every field the schema calls "required" --
+            # a response missing one is treated the same as a failed
+            # generation (not written, not counted as successful) rather
+            # than persisting a row that'll later crash prepare_dataset.py.
+            if example and all(k in example for k in required_keys):
                 f.write(json.dumps(example) + "\n")
                 f.flush()
                 examples.append(example)
+            elif example:
+                print(f"  ! generation for {topic} was missing a required field, skipping")
             if state["attempted"] % 25 == 0:
                 budget_msg = f", ${state['cost']:.2f}" + (f"/${args.max_cost:.2f}" if args.max_cost else "")
                 print(f"  {state['attempted']}/{args.count} attempted ({len(examples)} successful{budget_msg})")
