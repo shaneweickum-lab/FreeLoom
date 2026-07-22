@@ -7,6 +7,15 @@ import { APP_URL } from "@/lib/appUrl";
 const VALID_TIERS: BillingTier[] = ["pro", "premium"];
 const VALID_INTERVALS: BillingInterval[] = ["month", "quarter", "year"];
 
+/** Only accepts a same-origin relative path (starting with "/", not "//")
+ * -- these get concatenated onto APP_URL below, so anything else (an
+ * absolute URL, a protocol-relative "//host") is rejected rather than
+ * risking an open redirect through Stripe's success/cancel flow. */
+function safeRelativePath(path: unknown, fallback: string): string {
+  if (typeof path === "string" && path.startsWith("/") && !path.startsWith("//")) return path;
+  return fallback;
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -28,6 +37,12 @@ export async function POST(req: NextRequest) {
     console.error(`No Stripe Price configured for ${tier}/${interval}`);
     return NextResponse.json({ error: "That plan isn't available right now." }, { status: 500 });
   }
+
+  // Lets a caller (e.g. the onboarding wizard) land the customer somewhere
+  // other than Settings after Checkout -- defaults preserve the original
+  // behavior for every existing call site.
+  const successPath = safeRelativePath(body?.successPath, "/settings");
+  const cancelPath = safeRelativePath(body?.cancelPath, "/settings");
 
   const { data: profile } = await supabase
     .from("school_profiles")
@@ -97,8 +112,8 @@ export async function POST(req: NextRequest) {
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${APP_URL}/settings?billing=success`,
-    cancel_url: `${APP_URL}/settings?billing=canceled`,
+    success_url: `${APP_URL}${successPath}?billing=success`,
+    cancel_url: `${APP_URL}${cancelPath}?billing=canceled`,
     // Belt-and-suspenders alongside customer.metadata -- the webhook reads
     // whichever of these is present to map a Stripe event back to the
     // Supabase account, since some events carry the subscription/customer

@@ -63,3 +63,21 @@ export function isRetentionDaysAllowed(profile: TierInputProfile, days: number |
   if (days === null) return tier === "premium";
   return days >= 7 && days <= MAX_RETENTION_DAYS[tier];
 }
+
+export const PLAN_NAMES: Record<SubscriptionTier, string> = { free: "Free", pro: "Pro", premium: "Premium" };
+
+/** The one canonical list of what each tier includes -- shared by
+ * BillingTab.tsx (Settings) and the landing page's pricing section, so
+ * the two can never drift into describing different plans. */
+export function featuresFor(tier: SubscriptionTier): string[] {
+  const cap = STUDENT_CAP[tier];
+  const maxDays = MAX_RETENTION_DAYS[tier];
+  return [
+    `${cap} student profile${cap === 1 ? "" : "s"}`,
+    tier === "free"
+      ? "Message threads auto-delete after 7 days (fixed)"
+      : `Choose message auto-delete, up to ${maxDays} days${tier === "premium" ? " (or never)" : ""}`,
+    tier === "free" ? "Benny assistant not included" : "Benny assistant-mode chat",
+    tier === "free" ? "No admin read-only support access" : "Admin read-only support access",
+  ];
+}

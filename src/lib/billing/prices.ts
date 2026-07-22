@@ -14,7 +14,6 @@ const INTERVALS: BillingInterval[] = ["month", "quarter", "year"];
  * null rather than throwing -- BillingTab shows "—" and disables that
  * plan's button instead of taking down the whole tab. */
 export async function fetchPriceTable(): Promise<PriceTable> {
-  const stripe = getStripe();
   const table: PriceTable = {
     pro: { month: null, quarter: null, year: null },
     premium: { month: null, quarter: null, year: null },
@@ -26,6 +25,11 @@ export async function fetchPriceTable(): Promise<PriceTable> {
         const priceId = priceIdFor(tier, interval);
         if (!priceId) return;
         try {
+          // getStripe() itself can throw (e.g. STRIPE_SECRET_KEY unset) --
+          // called inside this try, not once up front, so a misconfigured
+          // key degrades every price to null instead of crashing whichever
+          // page called this (Settings, onboarding, or the landing page).
+          const stripe = getStripe();
           const price = await stripe.prices.retrieve(priceId);
           table[tier][interval] = typeof price.unit_amount === "number" ? price.unit_amount / 100 : null;
         } catch (err) {
