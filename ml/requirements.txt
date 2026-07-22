@@ -24,3 +24,8 @@ datasets>=2.19
 # src/lib/benny/chat.ts (SLM_CHAT_URL) call out to.
 fastapi>=0.115
 uvicorn>=0.30
+
+# Only needed to run ml/serve/export_web_weights.py -- reads .safetensors
+# checkpoints without needing MLX (or torch), so the export step is a plain
+# numpy script that can be reviewed/run anywhere, not just on the Mac.
+safetensors>=0.4

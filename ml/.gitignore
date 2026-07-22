@@ -4,3 +4,8 @@ __pycache__/
 checkpoints/
 data/prepared/
 data/base_corpus/
+
+# export_web_weights.py's local output -- staging only. Real output gets
+# copied into wherever the Next.js app actually bundles it from (decided once
+# the TS runtime lands), not committed from here directly.
+serve/web_weights/
