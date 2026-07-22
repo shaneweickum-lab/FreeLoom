@@ -77,8 +77,10 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
   kb_authoring's run) — a healthy curve, unlike the 0% collapse that motivated this
   retrain
 - Wall-clock: ~80.6s/epoch, ~806s total
-- Eval: pending -- `eval/run_eval.py` queued against this new checkpoint, will be
-  appended here once it finishes
+- Eval: **207/207 (100%) format-valid** via `eval/run_eval.py` against this new
+  checkpoint -- confirms the diagnosis in the eval-regression entry above: the
+  0% collapse was the stale base/adapter pairing, not a real regression in the
+  adapter or the pipeline. Even slightly better than the original 99.5%.
 
 ### entry_drafting — 2026-07-21
 - Config: ~13.7M-param frozen base + LoRA (rank 8, alpha 16), M5 MacBook
