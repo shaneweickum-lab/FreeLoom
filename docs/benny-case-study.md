@@ -154,6 +154,32 @@ retrained with more data or more epochs, unlike `kb_authoring`'s run, which was 
 cleanly improving. All three adapters now have a real fine-tuning result against the
 actual pretrained base — see `ml/RESULTS.md` for the full numbers on each.
 
+**Evaluating all three adapters surfaces a real bug: a LoRA adapter is only valid
+paired with the exact base checkpoint it was trained against.** `kb_authoring` scored
+**38/38 (100%)** format-valid — genuinely encouraging, though n=38 is small enough to
+treat as a good sign, not a settled result. `entry_drafting`, previously measured at
+99.5%, scored **0/207 (0.0%)** — every single generation failed to parse, a total
+collapse.
+
+The reason isn't a code bug in the eval script (`kb_authoring` used nearly identical
+code, same day, and worked fine) — it's that `entry_drafting`'s adapter was fine-tuned
+on 2026-07-21 against *whatever* `base.safetensors` existed at that time, which
+`train_base.py`'s full run overwrote with a completely different, actually-pretrained
+set of weights on 2026-07-22. Same filename, same architecture and shape (so nothing
+throws an error), but different real values underneath. A LoRA adapter's low-rank
+matrices are a correction fit on top of one specific base's weights; swap the base out
+from under it and the "correction" composes with weights it was never actually fit
+against — the result isn't degraded, it's noise. `kb_authoring` and `platform_help`
+avoided this only because they happened to be trained *after* the current base was
+finalized, not because of anything that actually guards against it.
+
+This is worth a post on its own — "**I trained three adapters and one was completely
+broken, and the eval harness is what caught it**" — and a real process gap worth
+closing properly later: a LoRA checkpoint and the base checkpoint it was trained
+against need to be tracked as a pair (e.g. embedding a hash of the base weights into
+the adapter file), not treated as independently swappable artifacts. For now: retrain
+`entry_drafting` against the current base before trusting any number from it again.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)
@@ -176,10 +202,12 @@ lockstep with parameter count at every step — not scaling one and not the othe
 ## Notes for turning this into posts
 
 - Each dated entry above is close to publish-ready as a standalone post; the *reversal*
-  entry (2026-07-21, the ~84-day discovery) and the *scaling-law* entry (2026-07-22) are
-  the two with the most inherent narrative tension ("we built it, then discovered it
+  entry (2026-07-21, the ~84-day discovery), the *scaling-law* entry (2026-07-22), and
+  the *stale-adapter* entry (2026-07-22, the entry_drafting 99.5%→0% collapse) are the
+  three with the most inherent narrative tension ("we built it, then discovered it
   couldn't actually train — here's the fix" / "the number I remembered wasn't real —
-  here's what the literature actually says").
+  here's what the literature actually says" / "the eval harness caught something a
+  human review would've missed entirely").
 - Real numbers only — every cost, ratio, and eval score above is pulled from an actual
   commit, an actual API run's logged cost, or an actual measured throughput on real
   hardware, never estimated for effect. Keep that discipline as this doc grows; it's the
