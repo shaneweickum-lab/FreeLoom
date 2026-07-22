@@ -19,10 +19,6 @@ const PLANS: {
   { tier: "premium", name: "Premium", prices: { month: 39.99, quarter: 101.97, year: 374.31 } },
 ];
 
-// Index = rank -- higher is a more expensive/capable plan. Used to tell a
-// downgrade attempt (blocked below) apart from an upgrade.
-const TIER_ORDER: SubscriptionTier[] = ["free", "pro", "premium"];
-
 function featuresFor(tier: SubscriptionTier): string[] {
   const cap = STUDENT_CAP[tier];
   const maxDays = MAX_RETENTION_DAYS[tier];
@@ -101,6 +97,37 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
     }
   }
 
+  async function handleChangePlan(planTier: "pro" | "premium", planName: string) {
+    const confirmed = window.confirm(
+      `Switch to ${planName} (${INTERVAL_LABEL[billingInterval]})? Stripe will prorate the difference on your next invoice.`
+    );
+    if (!confirmed) return;
+
+    setLoadingTier(planTier);
+    setError("");
+    try {
+      const res = await fetch("/api/billing/change-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: planTier, interval: billingInterval }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't switch plans.");
+        setLoadingTier(null);
+        return;
+      }
+      // The webhook updates school_profiles asynchronously once Stripe
+      // processes the change -- give it a moment before reloading so this
+      // page's server-fetched profile reflects the new plan, not the
+      // stale one from before the switch.
+      setTimeout(() => window.location.reload(), 1500);
+    } catch {
+      setError("Couldn't switch plans -- please try again.");
+      setLoadingTier(null);
+    }
+  }
+
   async function handleManageBilling() {
     setLoadingPortal(true);
     setError("");
@@ -170,11 +197,11 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
           const isCurrent =
             tier === plan.tier &&
             (plan.tier === "free" || !initialProfile?.billing_interval || initialProfile.billing_interval === billingInterval);
-          const isDowngrade =
-            !!realSubscribedTier &&
-            plan.tier !== "free" &&
-            plan.tier !== realSubscribedTier &&
-            TIER_ORDER.indexOf(plan.tier) < TIER_ORDER.indexOf(realSubscribedTier);
+          // A real subscriber switching to any other paid plan or interval
+          // updates their existing subscription (with proration) instead
+          // of going through Checkout, which would always start a second,
+          // parallel subscription.
+          const isPlanChange = !!realSubscribedTier && plan.tier !== "free" && !isCurrent;
           return (
             <div
               key={plan.tier}
@@ -202,10 +229,14 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
               {plan.tier !== "free" &&
                 (isCurrent ? (
                   <span className="text-xs text-gold font-medium">Current plan</span>
-                ) : isDowngrade ? (
-                  <span className="text-xs text-muted">
-                    Included in your {realSubscribedTier} plan -- cancel via Manage billing first to switch down.
-                  </span>
+                ) : isPlanChange ? (
+                  <button
+                    onClick={() => handleChangePlan(plan.tier as "pro" | "premium", plan.name)}
+                    disabled={loadingTier !== null}
+                    className="btn-secondary text-sm w-fit disabled:opacity-50"
+                  >
+                    {loadingTier === plan.tier ? "Updating…" : "Switch plan"}
+                  </button>
                 ) : (
                   <button
                     onClick={() => handleSubscribe(plan.tier as "pro" | "premium")}
