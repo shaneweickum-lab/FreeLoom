@@ -156,8 +156,14 @@ def health():
     return {"ok": True}
 
 
+# async def (not def) on both routes below deliberately -- FastAPI runs plain
+# `def` handlers on a worker-thread pool, but MLX's array/stream context is
+# thread-local, and it's only guaranteed set up on the thread models were
+# loaded on (main, in main() below). A worker thread that's never touched MLX
+# raises "There is no Stream(cpu, 1) in current thread" the first time it
+# tries. `async def` keeps every request on that same main/event-loop thread.
 @app.post("/entry-draft", response_model=EntryDraftResponse)
-def entry_draft(req: EntryDraftRequest, authorization: str | None = Header(default=None)):
+async def entry_draft(req: EntryDraftRequest, authorization: str | None = Header(default=None)):
     require_shared_secret(authorization)
     assert models is not None
 
@@ -184,7 +190,7 @@ def entry_draft(req: EntryDraftRequest, authorization: str | None = Header(defau
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, authorization: str | None = Header(default=None)):
+async def chat(req: ChatRequest, authorization: str | None = Header(default=None)):
     require_shared_secret(authorization)
     assert models is not None
 
