@@ -92,11 +92,29 @@ small and the TinyStories/FineWeb-Edu corpus makes extra tokens cheap relative t
 quality upside. See `ml/model/config.py` for the constant and `ml/RESULTS.md` for what
 actually happens once a real run trains at this ratio.
 
-**Pending — base model pretraining run (Mac, in progress as of this writing).**
-`train/prepare_dataset.py` is packing the full base corpus now. Next: `train/train_base.py`
-(full run, not `--tiny`), which will train at the new 56:1 ratio automatically. Real
-loss curves, wall-clock time, and tokens/sec throughput go in `ml/RESULTS.md` the
-moment this finishes — that data is the actual receipts for everything above.
+**2026-07-22 — First base model pretraining run completes.**
+`train/train_base.py`'s full run (not `--tiny`) finished: **train_loss 2.5515, val_loss
+2.2834** after one epoch, ~765M tokens processed against the ~766.6M-token budget the
+56:1 ratio called for — matching almost exactly. Val loss landing *below* train loss is
+a healthy sign at this size/budget, not a fluke of a single epoch. ~10.3 hours
+wall-clock on the M5 MacBook, ~20,600 tokens/sec sustained the whole run — see
+`ml/RESULTS.md` for the full entry.
+
+Worth noting for anyone reading this as a training-recipe reference: this run used
+*no* learning-rate warmup or decay schedule, and *no* gradient clipping — just a flat
+AdamW learning rate the entire epoch. The loss curve was smooth and monotonically
+decreasing throughout regardless, no spikes. That doesn't mean those techniques are
+unnecessary in general (most published BitNet training recipes use both, specifically
+because the straight-through estimator's gradient through the ternary rounding step is
+noisier than a normal forward pass), just that this particular run — this size, this
+budget, this data — didn't need them to stay stable. Whether that holds at the next
+size up is an open question, not an assumption.
+
+Checkpoint saved to `checkpoints/base.safetensors`. Next: fine-tune the `kb_authoring`
+and `platform_help` adapters against this real trained base (their synthetic training
+data already exists — see `ml/RESULTS.md`'s synthetic-data-generation section).
+`entry_drafting`'s 99.5% result was measured before this checkpoint existed, so it's
+worth re-running against the real pretrained base too, to confirm the number holds.
 
 ---
 
