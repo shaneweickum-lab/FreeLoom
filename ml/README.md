@@ -7,6 +7,11 @@ This directory is a separate Python subproject from the Next.js app in `src/` â€
 no shared test runner or build step with the TS app, and nothing here is imported by
 production code yet (see "Where this plugs in" below).
 
+This project is also being run as a documented public case study â€” see
+[`docs/benny-case-study.md`](../docs/benny-case-study.md) for the dated narrative log
+and [`RESULTS.md`](./RESULTS.md) for every real run's actual numbers. Update both
+whenever a real training/eval run completes, not just this file.
+
 ## Two execution environments, on purpose
 
 This was built in a cloud Linux container with no Apple Silicon, so the code here splits
