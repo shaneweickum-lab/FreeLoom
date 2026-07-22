@@ -27,11 +27,11 @@ class ModelConfig:
                             # time with truly packed low-bit weights, not during
                             # training). At the observed ~305 tok/s, 876/8-layer sizing
                             # projected to ~84 days for one epoch of its own 2.42B-token
-                            # budget. This size's Chinchilla+10 budget (see below) is
-                            # ~410.7M tokens -- the token budget scales with param count
-                            # too, so shrinking the model compounds: both less compute
-                            # per token AND fewer total tokens needed, projecting to
-                            # roughly 2 days instead of ~84. Comfortably inside the
+                            # budget. This size's deliberate-overtraining budget (see
+                            # below) is ~766.6M tokens -- the token budget scales with
+                            # param count too, so shrinking the model compounds: both
+                            # less compute per token AND fewer total tokens needed,
+                            # projecting to roughly 4 days instead of ~84. Comfortably inside the
                             # well-evidenced 100K-48M-param small-scale BitNet research
                             # range cited in docs/slm-strategy.md Section 3 -- more so
                             # than the previous 80.7M size was.
@@ -88,10 +88,14 @@ def estimate_lora_param_count(cfg: ModelConfig, rank: int = LORA_RANK) -> int:
 # Chinchilla (Hoffmann et al. 2022) found ~20 tokens/parameter compute-optimal.
 # Training past that ratio is well-precedented for small models meant to run
 # cheaply at inference (LLaMA trained well beyond compute-optimal for exactly
-# this reason) -- +10 tokens/parameter here is a deliberate, modest
-# overtraining budget on top of the Chinchilla baseline, not a guess.
+# this reason). Pushed further here than a modest +10 margin -- Benny's base
+# model is unusually small and the TinyStories/FineWeb-Edu corpus makes extra
+# tokens cheap to come by, so deliberately overtraining well past
+# compute-optimal (56 tokens/param, ~766.6M tokens at this config's ~13.7M
+# params) trades cheap extra pretraining compute for a smaller, cheaper
+# model at a given quality bar, same trade LLaMA made.
 CHINCHILLA_TOKENS_PER_PARAM = 20
-TRAIN_TOKENS_PER_PARAM = CHINCHILLA_TOKENS_PER_PARAM + 10
+TRAIN_TOKENS_PER_PARAM = 56
 
 
 def estimate_token_budget(param_count: int, tokens_per_param: int = TRAIN_TOKENS_PER_PARAM) -> int:
@@ -110,6 +114,6 @@ if __name__ == "__main__":
     print(f"Two adapters total: ~{2 * lora_params:,} parameters ({2 * lora_params / 1e6:.2f}M)")
     print(
         f"Training token budget at {TRAIN_TOKENS_PER_PARAM} tokens/param "
-        f"(Chinchilla's {CHINCHILLA_TOKENS_PER_PARAM} + 10): ~{token_budget:,} tokens "
-        f"({token_budget / 1e9:.2f}B)"
+        f"(Chinchilla's {CHINCHILLA_TOKENS_PER_PARAM} compute-optimal ratio, deliberately "
+        f"overtrained past it): ~{token_budget:,} tokens ({token_budget / 1e9:.2f}B)"
     )

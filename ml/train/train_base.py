@@ -89,10 +89,10 @@ def main():
     parser.add_argument("--epochs", type=int, default=None,
                          help="defaults to 20 for --tiny (many quick passes over a small subsample) or "
                               "1 for the full run -- base_train.npy already IS the full ~2.4B-token "
-                              "Chinchilla+10 budget (TinyStories was already repeated 4x when the corpus "
-                              "was assembled), so one epoch over it hits that budget exactly; each "
-                              "additional epoch here multiplies the effective token count on top of that, "
-                              "not for free")
+                              "budget the corpus was originally packed for (TinyStories was already "
+                              "repeated 4x when the corpus was assembled), so one epoch over it hits "
+                              "that budget exactly; each additional epoch here multiplies the effective "
+                              "token count on top of that, not for free")
     parser.add_argument("--batch-size", type=int, default=64,
                          help="was 8 -- a very conservative default for a 24GB-unified-memory Mac and "
                               "an ~81M-param model. Bigger batches don't reduce total FLOPs, but they "
@@ -110,11 +110,13 @@ def main():
     parser.add_argument("--tiny-val-samples", type=int, default=200)
     parser.add_argument("--target-tokens", type=int, default=None,
                          help="full run only -- caps train_sequences to roughly this many tokens "
-                              "(defaults to cfg's own Chinchilla+10 estimate_token_budget()). "
+                              "(defaults to cfg's own estimate_token_budget(), i.e. "
+                              "TRAIN_TOKENS_PER_PARAM tokens/param from model/config.py). "
                               "base_train.npy holds however many tokens the corpus pipeline packed, "
                               "which can be far more than a given model's budget calls for -- training "
-                              "an extra 5-6x more tokens than needed doesn't improve on Chinchilla+10, "
-                              "just wastes the same multiple in wall-clock time.")
+                              "extra tokens past that deliberate-overtraining target doesn't add "
+                              "anything the ratio says is worth having, just wastes the same multiple "
+                              "in wall-clock time.")
     parser.add_argument("--max-val-sequences", type=int, default=2000,
                          help="full run only -- val is just a generalization sanity check, doesn't "
                               "need every held-out sequence to be useful")
@@ -139,11 +141,11 @@ def main():
             val_sequences = val_sequences[idx]
     elif not args.full_corpus and len(train_sequences) > 0:
         # The packed corpus can hold far more tokens than this cfg's own
-        # Chinchilla+10 budget calls for (it was sized for whatever model was
-        # configured at packing time, not necessarily this one) -- training
-        # every extra token doesn't add anything Chinchilla+10 says is worth
-        # having, it just spends the same multiple in wall-clock time for no
-        # benefit.
+        # deliberate-overtraining budget calls for (it was sized for whatever
+        # model was configured at packing time, not necessarily this one) --
+        # training every extra token past that target doesn't add anything the
+        # ratio says is worth having, it just spends the same multiple in
+        # wall-clock time for no benefit.
         target_tokens = args.target_tokens or estimate_token_budget(estimate_param_count(cfg))
         target_sequences = max(1, min(len(train_sequences), -(-target_tokens // train_sequences.shape[1])))
         if target_sequences < len(train_sequences):
@@ -152,7 +154,7 @@ def main():
             train_sequences = train_sequences[idx]
             print(f"Capped training data to {target_sequences:,} sequences "
                   f"(~{target_sequences * train_sequences.shape[1]:,} tokens) matching this config's "
-                  f"~{target_tokens:,}-token Chinchilla+10 budget -- pass --full-corpus to train on "
+                  f"~{target_tokens:,}-token budget -- pass --full-corpus to train on "
                   f"every packed sequence instead.")
         if len(val_sequences) > args.max_val_sequences:
             full_val_rng = np.random.default_rng(1)

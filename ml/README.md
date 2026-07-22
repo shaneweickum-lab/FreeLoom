@@ -58,14 +58,17 @@ for (see `docs/slm-strategy.md` Section 5).
   speed/memory win only exists at inference time with truly packed low-bit weights, not
   during training). At ~80.7M params, the measured ~305 tok/s projected to ~84 days for
   one epoch -- untenable. See `docs/slm-strategy.md` Section 5 for the full story.
-- **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 30
-  tokens/parameter — Chinchilla's ~20 compute-optimal ratio plus a deliberate +10
-  overtraining margin (same rationale as LLaMA training past compute-optimal for a
-  cheaper-to-run model). At ~13.7M params that's **~410.7 million training tokens**
-  (down from ~2.42B at the old size -- the budget scales with param count too, so
-  shrinking the model compounds: less compute per token *and* fewer tokens needed).
-  The domain-specific `synthetic_corpus.jsonl` (a few thousand tokens) is separately
-  the entry-drafting fine-tune data, not the base-pretrain corpus below.
+- **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 56
+  tokens/parameter — well past Chinchilla's ~20 compute-optimal ratio, a deliberate
+  overtraining budget (same rationale as LLaMA training past compute-optimal for a
+  cheaper-to-run model, pushed further here since Benny's base model is unusually
+  small and TinyStories/FineWeb-Edu make extra tokens cheap). At ~13.7M params that's
+  **~766.6 million training tokens** (the budget scales with param count too, so
+  shrinking the model compounds: less compute per token *and* fewer tokens needed
+  at a fixed ratio -- though the ratio itself has been bumped up from the smaller
+  size's original +10 margin, see `model/config.py`). The domain-specific
+  `synthetic_corpus.jsonl` (a few thousand tokens) is separately the entry-drafting
+  fine-tune data, not the base-pretrain corpus below.
 - **Base-pretraining corpus (pulled, on the Mac)**: `data/prepare_base_corpus.py`
   streams two already-generated, openly-licensed datasets instead of the small domain
   corpus for base pretraining — TinyStories (`roneneldan/TinyStories`, `cdla-sharing-1.0`)
@@ -78,7 +81,7 @@ for (see `docs/slm-strategy.md` Section 5).
   epochs of this same small corpus) to keep it the dominant source, packing ~2.46B
   tokens total on its first real run -- sized for the ~80.7M config in place at the
   time. `train/train_base.py`'s full run now subsamples that packed corpus down to
-  whatever the *current* config's own budget calls for (~410.7M tokens, ~802K of the
+  whatever the *current* config's own budget calls for (~766.6M tokens, ~1.50M of the
   packed 4.3M sequences) rather than assuming the two always match — see
   `docs/slm-strategy.md` Section 4 for the full reasoning. Read both licenses before
   shipping a model trained on this data (the script prints both URLs on completion).
@@ -153,8 +156,8 @@ python3 train/train_base.py --tiny
 
 # 4. Full base pretrain (once the tiny run's loss curve looks sane).
 #    Automatically subsamples the packed corpus down to this config's own
-#    ~410.7M-token Chinchilla+10 budget rather than training on the whole
-#    packed corpus (which was sized for an earlier, larger config):
+#    ~766.6M-token deliberate-overtraining budget rather than training on the
+#    whole packed corpus (which was sized for an earlier, larger config):
 python3 train/train_base.py
 
 # 5. Fine-tune the entry-drafting adapter on the frozen base:
@@ -234,8 +237,8 @@ single request calls synchronously. That scheduling/approval-queue piece is unbu
   corpus sample, `model/config.py` updated to match.
 - Once real revenue funds a much larger custom-generated corpus (discussed but not
   committed to yet): a 30B-token target is even further past this 13.7M-parameter
-  model's Chinchilla+10 budget now (~2,190 tokens/param vs. the 30 target) than it was
-  at the old ~80.7M size (~400 tokens/param) — that scale of spend is better matched to
+  model's deliberate-overtraining budget now (~2,190 tokens/param vs. the 56 target)
+  than it was at the old ~80.7M size (~400 tokens/param) — that scale of spend is better matched to
   a genuinely bigger model than to overtraining Benny as currently sized, or to reusing
   the corpus across several small models rather than one.
 - Build the classical subject-area cross-check from `docs/slm-strategy.md` Section 7
