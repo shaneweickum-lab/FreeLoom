@@ -122,6 +122,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Closes the double-tab race the subscription check above can't: two
+    // tabs can both pass hasBlockingSubscription (neither has completed
+    // payment yet, so Stripe has no Subscription object for either one) and
+    // both go on to create a session, ending in two live subscriptions if
+    // both get paid. Checked live against Stripe's own open Checkout
+    // Sessions for this customer, same "authoritative, not just our cached
+    // state" approach as the subscription check above.
+    const openSessions = await stripe.checkout.sessions.list({ customer: customerId, status: "open", limit: 1 });
+    if (openSessions.data.length > 0) {
+      return NextResponse.json(
+        { error: "A checkout is already in progress -- finish or close that tab, then try again." },
+        { status: 409 }
+      );
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
