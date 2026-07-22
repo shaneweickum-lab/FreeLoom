@@ -191,7 +191,11 @@ async def entry_draft(req: EntryDraftRequest, authorization: str | None = Header
     prompt_text = f"activity: {req.raw_word_dump}\n"
     prompt_ids = [models.bos_id] + models.tokenizer.encode(prompt_text).ids
     generated_ids = generate(models.entry_drafting, models.tokenizer, prompt_ids, 120, models.eos_id)
-    completion_text = models.tokenizer.decode(generated_ids)
+    # Byte-level BPE decoding substitutes U+FFFD for an incomplete/invalid
+    # UTF-8 byte sequence -- generation stopping (repetition guard, hitting
+    # max_new_tokens) partway through a multi-byte character's tokens
+    # produces exactly that. Never legitimate output, always safe to drop.
+    completion_text = models.tokenizer.decode(generated_ids).replace("�", "")
 
     match = ENTRY_DRAFT_PATTERN.search(completion_text)
     if not match:
@@ -224,7 +228,7 @@ async def chat(req: ChatRequest, authorization: str | None = Header(default=None
     prompt_text = f"question: {req.message}\n"
     prompt_ids = [models.bos_id] + models.tokenizer.encode(prompt_text).ids
     generated_ids = generate(models.platform_help, models.tokenizer, prompt_ids, 200, models.eos_id)
-    completion_text = models.tokenizer.decode(generated_ids).strip()
+    completion_text = models.tokenizer.decode(generated_ids).replace("�", "").strip()
 
     reply = completion_text
     if reply.lower().startswith("answer:"):

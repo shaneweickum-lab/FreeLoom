@@ -143,7 +143,12 @@ function runAdapter(task: AdapterTask, promptText: string, maxNewTokens: number)
   const adapter = loadAdapterWeights(task);
   const promptIds = [bosId(), ...encode(promptText)];
   const generatedIds = generate(promptIds, maxNewTokens, base, adapter.layers);
-  return decode(generatedIds);
+  // The byte-level BPE decoder (@huggingface/tokenizers) substitutes U+FFFD
+  // for any incomplete/invalid UTF-8 byte sequence -- generation stopping
+  // (repetition guard, hitting max_new_tokens, anything else) partway
+  // through a multi-byte character's constituent tokens produces exactly
+  // that. Never legitimate model output, so it's always safe to drop.
+  return decode(generatedIds).replace(/�/g, "");
 }
 
 // Mirrors ml/serve/inference_server.py's ENTRY_DRAFT_PATTERN exactly (same
