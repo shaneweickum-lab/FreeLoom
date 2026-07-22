@@ -31,15 +31,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // IS the target when this action is "approve"; deny/revoke stay allowed
   // regardless of tier (a parent can always say no / close it out).
   if (action === "approve") {
-    const { data: callerProfile } = await supabase
-      .from("school_profiles")
-      .select("subscription_tier, subscription_status, grandfathered_until")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const [{ data: callerProfile }, { data: callerAdminRow }] = await Promise.all([
+      supabase
+        .from("school_profiles")
+        .select("subscription_tier, subscription_status, grandfathered_until, current_period_end")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle(),
+    ]);
     const callerTier = getEffectiveTier({
       subscription_tier: callerProfile?.subscription_tier ?? "free",
       subscription_status: callerProfile?.subscription_status ?? null,
       grandfathered_until: callerProfile?.grandfathered_until ?? null,
+      current_period_end: callerProfile?.current_period_end ?? null,
+      isAdmin: !!callerAdminRow,
     });
     if (callerTier === "free") {
       return NextResponse.json(

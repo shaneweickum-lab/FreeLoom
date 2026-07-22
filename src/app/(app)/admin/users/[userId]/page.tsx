@@ -29,24 +29,31 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
   if (!callerAdminRow) return <p className="text-sm text-muted">Not authorized.</p>;
 
   const adminClient = createAdminClient();
-  const [{ data: targetUserData }, { data: profile }, { data: existingRequests }] = await Promise.all([
-    adminClient.auth.admin.getUserById(userId),
-    supabase
-      .from("school_profiles")
-      .select("parent_name, schooling_type, subscription_tier, subscription_status, grandfathered_until")
-      .eq("user_id", userId)
-      .maybeSingle(),
-    // Plural, and not filtered to this admin -- AccessRequestPanel narrows
-    // to "mine" itself once it knows its own user id, and needs every
-    // admin's requests visible in its realtime feed to stay accurate if
-    // more than one admin is working this account.
-    supabase
-      .from("account_access_requests")
-      .select("id, status, expires_at, requested_at, requested_by")
-      .eq("target_user_id", userId)
-      .order("requested_at", { ascending: false })
-      .limit(10),
-  ]);
+  const [{ data: targetUserData }, { data: profile }, { data: existingRequests }, { data: targetAdminRow }] =
+    await Promise.all([
+      adminClient.auth.admin.getUserById(userId),
+      supabase
+        .from("school_profiles")
+        .select(
+          "parent_name, schooling_type, subscription_tier, subscription_status, grandfathered_until, current_period_end"
+        )
+        .eq("user_id", userId)
+        .maybeSingle(),
+      // Plural, and not filtered to this admin -- AccessRequestPanel narrows
+      // to "mine" itself once it knows its own user id, and needs every
+      // admin's requests visible in its realtime feed to stay accurate if
+      // more than one admin is working this account.
+      supabase
+        .from("account_access_requests")
+        .select("id, status, expires_at, requested_at, requested_by")
+        .eq("target_user_id", userId)
+        .order("requested_at", { ascending: false })
+        .limit(10),
+      // Is the *target* account itself an admin? Billing tiers never apply
+      // to admins, so viewing another admin's account should never show
+      // them as gated to Free.
+      supabase.from("admin_users").select("user_id").eq("user_id", userId).maybeSingle(),
+    ]);
 
   const targetEmail = targetUserData?.user?.email ?? "Unknown account";
   const schoolingLabel = profile?.schooling_type ? SCHOOLING_TYPE_LABEL[profile.schooling_type] : null;
@@ -54,6 +61,8 @@ export default async function AdminUserPage({ params }: { params: Promise<{ user
     subscription_tier: profile?.subscription_tier ?? "free",
     subscription_status: profile?.subscription_status ?? null,
     grandfathered_until: profile?.grandfathered_until ?? null,
+    current_period_end: profile?.current_period_end ?? null,
+    isAdmin: !!targetAdminRow,
   });
 
   return (

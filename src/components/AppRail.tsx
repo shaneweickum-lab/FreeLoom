@@ -62,11 +62,14 @@ function BennyTriggerButton() {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
-      const { data: profile } = await supabase
-        .from("school_profiles")
-        .select("benny_assistant_enabled, subscription_tier, subscription_status, grandfathered_until")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
+      const [{ data: profile }, { data: adminRow }] = await Promise.all([
+        supabase
+          .from("school_profiles")
+          .select("benny_assistant_enabled, subscription_tier, subscription_status, grandfathered_until, current_period_end")
+          .eq("user_id", data.user.id)
+          .maybeSingle(),
+        supabase.from("admin_users").select("user_id").eq("user_id", data.user.id).maybeSingle(),
+      ]);
       // Free tier never sees Benny at all, regardless of the toggle --
       // see AccountTab.tsx, where the toggle itself is also gated so a
       // Free-tier parent can't even turn this on to find it hidden anyway.
@@ -74,6 +77,8 @@ function BennyTriggerButton() {
         subscription_tier: profile?.subscription_tier ?? "free",
         subscription_status: profile?.subscription_status ?? null,
         grandfathered_until: profile?.grandfathered_until ?? null,
+        current_period_end: profile?.current_period_end ?? null,
+        isAdmin: !!adminRow,
       });
       setEnabled(!!profile?.benny_assistant_enabled && tier !== "free");
     });

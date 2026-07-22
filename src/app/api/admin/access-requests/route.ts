@@ -23,16 +23,23 @@ export async function POST(req: NextRequest) {
 
   // Covers both the initial request and "request more time" (the same
   // extension flow reuses this endpoint) -- a Free-tier account is never
-  // requestable, full stop.
-  const { data: targetProfile } = await supabase
-    .from("school_profiles")
-    .select("subscription_tier, subscription_status, grandfathered_until")
-    .eq("user_id", targetUserId)
-    .maybeSingle();
+  // requestable, full stop. Also check whether the target is themselves an
+  // admin -- billing tiers never apply to admins, so this never blocks
+  // requesting access to another admin's account on tier grounds.
+  const [{ data: targetProfile }, { data: targetAdminRow }] = await Promise.all([
+    supabase
+      .from("school_profiles")
+      .select("subscription_tier, subscription_status, grandfathered_until, current_period_end")
+      .eq("user_id", targetUserId)
+      .maybeSingle(),
+    supabase.from("admin_users").select("user_id").eq("user_id", targetUserId).maybeSingle(),
+  ]);
   const targetTier = getEffectiveTier({
     subscription_tier: targetProfile?.subscription_tier ?? "free",
     subscription_status: targetProfile?.subscription_status ?? null,
     grandfathered_until: targetProfile?.grandfathered_until ?? null,
+    current_period_end: targetProfile?.current_period_end ?? null,
+    isAdmin: !!targetAdminRow,
   });
   if (targetTier === "free") {
     return NextResponse.json(

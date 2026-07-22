@@ -46,6 +46,71 @@ describe("getEffectiveTier", () => {
       getEffectiveTier({ subscription_tier: "pro", subscription_status: "active", grandfathered_until: FUTURE })
     ).toBe("pro");
   });
+
+  it("grants a 5-day grace period past_due, measured from current_period_end", () => {
+    const justEndedPeriod = new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(); // 2 days ago
+    expect(
+      getEffectiveTier({
+        subscription_tier: "premium",
+        subscription_status: "past_due",
+        grandfathered_until: null,
+        current_period_end: justEndedPeriod,
+      })
+    ).toBe("premium");
+  });
+
+  it("also grants the grace period for unpaid, not just past_due", () => {
+    const justEndedPeriod = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
+    expect(
+      getEffectiveTier({
+        subscription_tier: "pro",
+        subscription_status: "unpaid",
+        grandfathered_until: null,
+        current_period_end: justEndedPeriod,
+      })
+    ).toBe("pro");
+  });
+
+  it("falls back to free once the grace period has elapsed", () => {
+    const longEndedPeriod = new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(); // 10 days ago
+    expect(
+      getEffectiveTier({
+        subscription_tier: "premium",
+        subscription_status: "past_due",
+        grandfathered_until: null,
+        current_period_end: longEndedPeriod,
+      })
+    ).toBe("free");
+  });
+
+  it("doesn't grant grace period without a current_period_end to measure from", () => {
+    expect(
+      getEffectiveTier({
+        subscription_tier: "premium",
+        subscription_status: "past_due",
+        grandfathered_until: null,
+        current_period_end: null,
+      })
+    ).toBe("free");
+  });
+
+  it("doesn't grant a grace period for canceled or incomplete statuses", () => {
+    const justEndedPeriod = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
+    expect(
+      getEffectiveTier({
+        subscription_tier: "premium",
+        subscription_status: "canceled",
+        grandfathered_until: null,
+        current_period_end: justEndedPeriod,
+      })
+    ).toBe("free");
+  });
+
+  it("grants an admin full access regardless of subscription state", () => {
+    expect(
+      getEffectiveTier({ subscription_tier: "free", subscription_status: null, grandfathered_until: null, isAdmin: true })
+    ).toBe("premium");
+  });
 });
 
 describe("getStudentCap", () => {

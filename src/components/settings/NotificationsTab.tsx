@@ -23,7 +23,15 @@ function formFromProfile(profile: SchoolProfile | null) {
   };
 }
 
-export default function NotificationsTab({ userId, initialProfile }: { userId: string; initialProfile: SchoolProfile | null }) {
+export default function NotificationsTab({
+  userId,
+  initialProfile,
+  isAdmin,
+}: {
+  userId: string;
+  initialProfile: SchoolProfile | null;
+  isAdmin: boolean;
+}) {
   const [form, setForm] = useState(formFromProfile(initialProfile));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -38,6 +46,8 @@ export default function NotificationsTab({ userId, initialProfile }: { userId: s
     subscription_tier: initialProfile?.subscription_tier ?? "free",
     subscription_status: initialProfile?.subscription_status ?? null,
     grandfathered_until: initialProfile?.grandfathered_until ?? null,
+    current_period_end: initialProfile?.current_period_end ?? null,
+    isAdmin,
   });
   const maxDays = MAX_RETENTION_DAYS[tier];
   const retentionOptions = ALL_RETENTION_OPTIONS.filter((opt) => (opt.days === null ? tier === "premium" : opt.days <= maxDays));

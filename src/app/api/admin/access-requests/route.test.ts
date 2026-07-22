@@ -69,6 +69,7 @@ describe("POST /api/admin/access-requests", () => {
     fromQueue = [
       { data: { user_id: ADMIN.id } },
       { data: { subscription_tier: "pro", subscription_status: "active", grandfathered_until: null } },
+      { data: null }, // target isn't an admin
       { data: { id: "req-1" }, error: null },
       { error: null },
     ];
@@ -80,6 +81,7 @@ describe("POST /api/admin/access-requests", () => {
     fromQueue = [
       { data: { user_id: ADMIN.id } },
       { data: { subscription_tier: "pro", subscription_status: "active", grandfathered_until: null } },
+      { data: null }, // target isn't an admin
       { data: null, error: { code: "XX000" } },
     ];
     const res = await POST(makeRequest({ targetUserId: PARENT_ID, reason: "debugging" }));
@@ -90,8 +92,21 @@ describe("POST /api/admin/access-requests", () => {
     fromQueue = [
       { data: { user_id: ADMIN.id } },
       { data: { subscription_tier: "free", subscription_status: null, grandfathered_until: null } },
+      { data: null }, // target isn't an admin either, so the Free-plan block still applies
     ];
     const res = await POST(makeRequest({ targetUserId: PARENT_ID, reason: "debugging" }));
     expect(res.status).toBe(403);
+  });
+
+  it("allows requesting access to a Free-plan target when that target is themselves an admin", async () => {
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { data: { subscription_tier: "free", subscription_status: null, grandfathered_until: null } },
+      { data: { user_id: PARENT_ID } }, // target IS an admin -- bypasses the Free-plan block
+      { data: { id: "req-1" }, error: null },
+      { error: null },
+    ];
+    const res = await POST(makeRequest({ targetUserId: PARENT_ID, reason: "debugging" }));
+    expect(res.status).toBe(200);
   });
 });

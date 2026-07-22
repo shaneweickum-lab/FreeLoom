@@ -3,20 +3,17 @@
 import { useState } from "react";
 import { getEffectiveTier, STUDENT_CAP, MAX_RETENTION_DAYS } from "@/lib/billing/tier";
 import type { SubscriptionTier } from "@/lib/billing/tier";
+import type { PriceTable } from "@/lib/billing/prices";
 import type { SchoolProfile } from "@/lib/types";
 
 type Interval = "month" | "quarter" | "year";
 
 const INTERVAL_LABEL: Record<Interval, string> = { month: "Monthly", quarter: "Quarterly", year: "Yearly" };
 
-const PLANS: {
-  tier: SubscriptionTier;
-  name: string;
-  prices: Record<Interval, number> | null;
-}[] = [
-  { tier: "free", name: "Free", prices: null },
-  { tier: "pro", name: "Pro", prices: { month: 14.99, quarter: 40.47, year: 149.3 } },
-  { tier: "premium", name: "Premium", prices: { month: 39.99, quarter: 101.97, year: 374.31 } },
+const PLAN_META: { tier: SubscriptionTier; name: string }[] = [
+  { tier: "free", name: "Free" },
+  { tier: "pro", name: "Pro" },
+  { tier: "premium", name: "Premium" },
 ];
 
 function featuresFor(tier: SubscriptionTier): string[] {
@@ -44,8 +41,19 @@ function formatDate(iso: string): string {
  * the caller from the server-side session, not a client-supplied id -- but
  * the prop is kept in the signature to match AccountTab/NotificationsTab's
  * shared {userId, initialProfile} convention SettingsTabs.tsx calls all
- * three with uniformly. */
-export default function BillingTab({ initialProfile }: { userId: string; initialProfile: SchoolProfile | null }) {
+ * three with uniformly. `prices` is fetched live from Stripe server-side
+ * (src/lib/billing/prices.ts) rather than hardcoded here, so this card can
+ * never show a different number than what Checkout actually charges. */
+export default function BillingTab({
+  initialProfile,
+  isAdmin,
+  prices,
+}: {
+  userId: string;
+  initialProfile: SchoolProfile | null;
+  isAdmin: boolean;
+  prices: PriceTable;
+}) {
   const [billingInterval, setBillingInterval] = useState<Interval>("month");
   const [loadingTier, setLoadingTier] = useState<SubscriptionTier | null>(null);
   const [loadingPortal, setLoadingPortal] = useState(false);
@@ -55,8 +63,11 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
     subscription_tier: initialProfile?.subscription_tier ?? "free",
     subscription_status: initialProfile?.subscription_status ?? null,
     grandfathered_until: initialProfile?.grandfathered_until ?? null,
+    current_period_end: initialProfile?.current_period_end ?? null,
+    isAdmin,
   });
   const grandfathered =
+    !isAdmin &&
     tier === "premium" &&
     initialProfile?.subscription_status !== "active" &&
     initialProfile?.subscription_status !== "trialing" &&
@@ -146,6 +157,26 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
     }
   }
 
+  if (isAdmin) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border border-navy-line p-4 flex flex-col gap-2">
+          <h2 className="font-serif text-lg font-bold">Billing</h2>
+          <p className="text-sm text-muted">
+            Admin account -- the entire platform is available to you regardless of billing status. No subscription
+            needed.
+          </p>
+          {initialProfile?.stripe_customer_id && (
+            <button onClick={handleManageBilling} disabled={loadingPortal} className="btn-secondary w-fit text-sm mt-1">
+              {loadingPortal ? "Opening…" : "Manage billing"}
+            </button>
+          )}
+        </div>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border border-navy-line p-4 flex flex-col gap-2">
@@ -189,7 +220,8 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        {PLANS.map((plan) => {
+        {PLAN_META.map((plan) => {
+          const price = plan.tier === "free" ? 0 : prices[plan.tier as "pro" | "premium"]?.[billingInterval] ?? null;
           // Free has no interval to match against; a paid plan is only
           // "current" when both the tier AND the toggled interval match
           // the real subscription (or there's no real interval yet, i.e.
@@ -212,8 +244,8 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
               <div>
                 <h3 className="font-serif text-base font-bold">{plan.name}</h3>
                 <p className="text-2xl font-bold mt-1">
-                  {plan.prices ? `$${plan.prices[billingInterval].toFixed(2)}` : "$0"}
-                  {plan.prices && (
+                  {price === null ? "—" : `$${price.toFixed(2)}`}
+                  {plan.tier !== "free" && price !== null && (
                     <span className="text-xs font-normal text-muted">
                       {" "}
                       /{billingInterval === "month" ? "mo" : billingInterval}
@@ -232,7 +264,7 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
                 ) : isPlanChange ? (
                   <button
                     onClick={() => handleChangePlan(plan.tier as "pro" | "premium", plan.name)}
-                    disabled={loadingTier !== null}
+                    disabled={loadingTier !== null || price === null}
                     className="btn-secondary text-sm w-fit disabled:opacity-50"
                   >
                     {loadingTier === plan.tier ? "Updating…" : "Switch plan"}
@@ -240,7 +272,7 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
                 ) : (
                   <button
                     onClick={() => handleSubscribe(plan.tier as "pro" | "premium")}
-                    disabled={loadingTier !== null}
+                    disabled={loadingTier !== null || price === null}
                     className="btn-primary text-sm w-fit disabled:opacity-50"
                   >
                     {loadingTier === plan.tier ? "Redirecting…" : "Subscribe"}
