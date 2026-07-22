@@ -8,20 +8,19 @@
  * accepts (src/app/(app)/log/page.tsx), it never gets written to `entries`
  * on its own.
  *
- * IMPORTANT constraint this file works around: the trained model only runs
- * via MLX, which is Apple Silicon/Metal-only -- it cannot execute inside
- * this app's own Vercel/Node runtime (confirmed: ml/README.md's own
- * "Mac-only (MLX/Apple Silicon)" column). So this doesn't call MLX
- * directly; it calls out to SLM_ENTRY_DRAFTING_URL, a small HTTP inference
- * endpoint that doesn't exist yet -- nothing currently listens there. Once
- * something is actually serving this exact contract (see
- * callEntryDraftingAdapter's request/response shape below) and the env var
- * points at it, this feature works end-to-end with no further TS changes.
- * Until then, isSlmEntryDraftingEnabled() is false and this always resolves
- * to null -- identical to today's "Stage 1-3 found nothing" behavior.
+ * Runs in-process (src/lib/benny/inference/) rather than calling out to an
+ * external server -- MLX (what the model was trained with) is Apple
+ * Silicon-only and can't run in this app's own Vercel/Node runtime, but
+ * inference-only forward passes don't need MLX at all, so
+ * ml/serve/export_web_weights.py bakes the trained weights into a portable
+ * format a plain TS port can run directly. See that directory's README for
+ * how the weight files get bundled here. isSlmEntryDraftingEnabled() is
+ * false (and this always resolves to null, identical to "Stage 1-3 found
+ * nothing") until those files are actually present.
  */
 
 import { isSlmEntryDraftingEnabled } from "@/lib/flags";
+import { draftEntry } from "@/lib/benny/inference/model";
 import type { ClassifyResult, ExtractedSlots } from "@/lib/pipeline/classify";
 
 export type DraftCandidate = {
@@ -38,8 +37,6 @@ export type DraftCandidate = {
  * classify.ts (Stage 1) stays exactly as unaware of Stage 4 as its own
  * header comment already says every other caller should be. */
 export type ClassifyResultWithDraft = ClassifyResult & { draftCandidate?: DraftCandidate | null };
-
-const REQUEST_TIMEOUT_MS = 5000;
 
 // Mirrors ml/eval/validate_output.py's validate_draft() -- same rules, TS
 // side, since a draft that fails this check needs to fall through to Stage
@@ -76,16 +73,15 @@ export function validateDraftCandidate(candidate: unknown): candidate is DraftCa
   return true;
 }
 
-/** Calls the entry-drafting adapter's inference endpoint, if configured.
- * Best-effort: not-configured, a network error, a timeout, or a malformed/
- * invalid response all resolve to null, identical to Stage 1-3 finding
- * nothing -- the caller falls through to today's blank Stage 5 form either
- * way, never a broken UI over this being unavailable.
+/** Runs the entry-drafting adapter in-process, if its weight files are
+ * bundled with this deployment. Best-effort: not-yet-bundled, an unparseable
+ * generation, or an out-of-range result all resolve to null, identical to
+ * Stage 1-3 finding nothing -- the caller falls through to today's blank
+ * Stage 5 form either way, never a broken UI over this being unavailable.
  *
- * Request contract (POST {SLM_ENTRY_DRAFTING_URL}/entry-draft):
- *   { raw_word_dump: string, extracted_slots: ExtractedSlots }
- * Expected response (whatever's listening should return this shape):
- *   { subject_area: string, course_title: string, credit_value: number, rationale: string }
+ * `extractedSlots` is accepted for contract compatibility with this
+ * function's existing callers, but (same as the model was actually trained)
+ * only rawWordDump feeds the prompt -- see model.ts's draftEntry().
  */
 export async function callEntryDraftingAdapter(input: {
   rawWordDump: string;
@@ -93,36 +89,18 @@ export async function callEntryDraftingAdapter(input: {
 }): Promise<DraftCandidate | null> {
   if (!isSlmEntryDraftingEnabled()) return null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const res = await fetch(`${process.env.SLM_ENTRY_DRAFTING_URL}/entry-draft`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // The inference server runs on the Mac and is reachable over the
-        // public internet via a tunnel -- this shared secret is the only
-        // thing stopping anyone who finds the URL from running free
-        // inference against it. See ml/serve/inference_server.py.
-        ...(process.env.SLM_SHARED_SECRET ? { Authorization: `Bearer ${process.env.SLM_SHARED_SECRET}` } : {}),
-      },
-      body: JSON.stringify({ raw_word_dump: input.rawWordDump, extracted_slots: input.extractedSlots }),
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-
-    const data = await res.json();
+    const result = draftEntry(input.rawWordDump);
+    if (!result) return null;
     const candidate: DraftCandidate = {
-      subjectArea: data.subject_area,
-      courseTitle: data.course_title,
-      creditValue: Number(data.credit_value),
-      rationale: data.rationale,
+      subjectArea: result.subjectArea,
+      courseTitle: result.courseTitle,
+      creditValue: result.creditValue,
+      rationale: result.rationale,
     };
     return validateDraftCandidate(candidate) ? candidate : null;
   } catch (err) {
     console.error("entry-drafting adapter call failed:", err);
     return null;
-  } finally {
-    clearTimeout(timeout);
   }
 }
