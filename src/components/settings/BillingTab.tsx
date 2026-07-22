@@ -65,6 +65,15 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
   // subscription (and this account's tier gates) active through the end
   // of the period already paid for, it just won't renew afterward.
   const cancelPending = !!initialProfile?.cancel_at_period_end && !!initialProfile?.current_period_end;
+  // A real, currently-billing subscription -- distinct from `tier` above,
+  // which also counts a temporary grandfather window as "premium." Only a
+  // real subscription can conflict with a new one, so grandfathered/free
+  // accounts should still see every paid plan as subscribable.
+  const realSubscribedTier =
+    initialProfile?.stripe_subscription_id &&
+    (initialProfile?.subscription_status === "active" || initialProfile?.subscription_status === "trialing")
+      ? initialProfile.subscription_tier
+      : null;
 
   async function handleSubscribe(planTier: "pro" | "premium") {
     setLoadingTier(planTier);
@@ -84,6 +93,37 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
       window.location.assign(data.url);
     } catch {
       setError("Couldn't start checkout -- please try again.");
+      setLoadingTier(null);
+    }
+  }
+
+  async function handleChangePlan(planTier: "pro" | "premium", planName: string) {
+    const confirmed = window.confirm(
+      `Switch to ${planName} (${INTERVAL_LABEL[billingInterval]})? Stripe will prorate the difference on your next invoice.`
+    );
+    if (!confirmed) return;
+
+    setLoadingTier(planTier);
+    setError("");
+    try {
+      const res = await fetch("/api/billing/change-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: planTier, interval: billingInterval }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't switch plans.");
+        setLoadingTier(null);
+        return;
+      }
+      // The webhook updates school_profiles asynchronously once Stripe
+      // processes the change -- give it a moment before reloading so this
+      // page's server-fetched profile reflects the new plan, not the
+      // stale one from before the switch.
+      setTimeout(() => window.location.reload(), 1500);
+    } catch {
+      setError("Couldn't switch plans -- please try again.");
       setLoadingTier(null);
     }
   }
@@ -150,7 +190,18 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
 
       <div className="grid gap-3 sm:grid-cols-3">
         {PLANS.map((plan) => {
-          const isCurrent = tier === plan.tier;
+          // Free has no interval to match against; a paid plan is only
+          // "current" when both the tier AND the toggled interval match
+          // the real subscription (or there's no real interval yet, i.e.
+          // a grandfathered account with no Stripe subscription at all).
+          const isCurrent =
+            tier === plan.tier &&
+            (plan.tier === "free" || !initialProfile?.billing_interval || initialProfile.billing_interval === billingInterval);
+          // A real subscriber switching to any other paid plan or interval
+          // updates their existing subscription (with proration) instead
+          // of going through Checkout, which would always start a second,
+          // parallel subscription.
+          const isPlanChange = !!realSubscribedTier && plan.tier !== "free" && !isCurrent;
           return (
             <div
               key={plan.tier}
@@ -178,6 +229,14 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
               {plan.tier !== "free" &&
                 (isCurrent ? (
                   <span className="text-xs text-gold font-medium">Current plan</span>
+                ) : isPlanChange ? (
+                  <button
+                    onClick={() => handleChangePlan(plan.tier as "pro" | "premium", plan.name)}
+                    disabled={loadingTier !== null}
+                    className="btn-secondary text-sm w-fit disabled:opacity-50"
+                  >
+                    {loadingTier === plan.tier ? "Updating…" : "Switch plan"}
+                  </button>
                 ) : (
                   <button
                     onClick={() => handleSubscribe(plan.tier as "pro" | "premium")}
