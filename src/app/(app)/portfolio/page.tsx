@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
+import PortfolioPdfModal from "@/components/PortfolioPdfModal";
 import type { PipelineClass, PipelineEntry } from "@/lib/types";
 
 type ClassWithEntries = PipelineClass & { entries: PipelineEntry[] };
@@ -13,6 +14,7 @@ export default function PortfolioPage() {
   const [classes, setClasses] = useState<ClassWithEntries[]>([]);
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
   async function load() {
     if (!currentStudent) {
@@ -82,13 +84,28 @@ export default function PortfolioPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Portfolio</h1>
-        <p className="text-muted text-sm">
-          Every class {currentStudent.name} has built up, and the reasoning behind each entry —
-          edit anything that needs a second look. New activities are logged from the Learning Log page.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Portfolio</h1>
+          <p className="text-muted text-sm">
+            Every class {currentStudent.name} has built up, and the reasoning behind each entry —
+            edit anything that needs a second look. New activities are logged from the Learning Log page.
+          </p>
+        </div>
+        {classes.length > 0 && (
+          <button onClick={() => setPdfModalOpen(true)} className="btn-secondary text-sm shrink-0">
+            Download PDF
+          </button>
+        )}
       </div>
+
+      {pdfModalOpen && (
+        <PortfolioPdfModal
+          studentId={currentStudent.id}
+          classes={classes}
+          onClose={() => setPdfModalOpen(false)}
+        />
+      )}
 
       {classes.length === 0 && (
         <p className="text-muted text-sm">
