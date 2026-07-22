@@ -120,6 +120,32 @@ describe("POST /api/webhooks/stripe", () => {
     );
   });
 
+  it("also records cancel_at_period_end when Stripe schedules it via cancel_at instead", async () => {
+    // Observed in practice: the Customer Portal's default cancel flow sets
+    // cancel_at (a timestamp) rather than flipping cancel_at_period_end,
+    // on at least this Stripe API version -- either one means "ending."
+    constructEventImpl = vi.fn(() => ({
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: "sub_123",
+          status: "active",
+          customer: "cus_1",
+          metadata: { supabase_user_id: "user-1" },
+          cancel_at_period_end: false,
+          cancel_at: 1700000000,
+          items: { data: [{ price: { id: "price_pro_month" }, current_period_end: 1700000000 }] },
+        },
+      },
+    }));
+    const res = await POST(makeRequest("{}"));
+    expect(res.status).toBe(200);
+    const upsertCall = fromCalls.find((c) => c.table === "school_profiles" && c.method === "upsert");
+    expect(upsertCall?.args[0]).toEqual(
+      expect.objectContaining({ user_id: "user-1", cancel_at_period_end: true })
+    );
+  });
+
   it("resets to free on customer.subscription.deleted", async () => {
     constructEventImpl = vi.fn(() => ({
       type: "customer.subscription.deleted",
