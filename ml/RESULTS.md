@@ -51,13 +51,38 @@ completed run, it doesn't belong in this file yet.
 - Notes: statistically meaningful for the first time (n=207 vs. the old n=7, where one
   example flipping swung the score by ~14 points).
 
-### kb_authoring — pending
-No real fine-tuning run yet — synthetic training data exists (see below) but the
-adapter hasn't been trained on it.
+### kb_authoring — 2026-07-22
+- Config: real pretrained base (`checkpoints/base.safetensors`, see base-pretraining
+  section above) + LoRA (rank 8, alpha 16), M5 MacBook, default 10 epochs/batch-size
+  8/lr 1e-3
+- Data: 350 train / 38 val synthetic (word-dump cluster → drafted knowledge-base
+  entry) examples — 660 generated clusters minus 267 dropped for exceeding
+  `max_len=512` and 5 skipped for a missing required field (see
+  `docs/benny-case-study.md`/commit history for that bug and its fix)
+- Result: val_loss 2.3982 → 1.2486 across all 10 epochs, decreasing every single
+  epoch with no overfitting uptick at all — unlike entry_drafting's run, val_loss was
+  still clearly improving at the final epoch, not past its optimum yet.
+- Wall-clock: ~15s/epoch, ~150s total
+- Notes: since val_loss hadn't plateaued, this run is likely undertrained rather than
+  at its real optimum — worth a re-run with more epochs (e.g. `--epochs 20`) to see
+  where it actually levels off, before treating 1.2486 as this adapter's ceiling.
 
-### platform_help — pending
-No real fine-tuning run yet — synthetic training data exists (see below) but the
-adapter hasn't been trained on it.
+### platform_help — 2026-07-22
+- Config: real pretrained base (`checkpoints/base.safetensors`) + LoRA (rank 8, alpha
+  16), M5 MacBook, default 10 epochs/batch-size 8/lr 1e-3
+- Data: 1,246 train / 138 val (hand-authored seed + paraphrased variants) examples
+- Result: train_loss decreased smoothly and monotonically the whole run (1.4865 →
+  0.2249). val_loss dropped sharply through epoch 5 (0.5988 → 0.3525), then plateaued
+  with small noise (upticking slightly at epochs 6 and 9) before landing at its lowest
+  point, 0.3331, at epoch 10 -- a different shape than kb_authoring's clean monotonic
+  curve: this one looks converged/plateaued rather than still clearly improving, with
+  train_loss continuing to drop while val holds roughly flat being the early signature
+  of overfitting starting, even though val hasn't turned upward in a clear trend yet.
+- Wall-clock: ~55s/epoch, ~550s total
+- Notes: saved checkpoint's own log line said "later epochs overfit and were
+  discarded," which was printed by the pre-fix version of train_adapter.py (see the
+  kb_authoring entry above) and isn't a reliable description of what actually happened
+  here -- go by the epoch-by-epoch numbers above, not that message.
 
 ## Synthetic data generation (real, paid API runs)
 

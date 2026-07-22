@@ -145,9 +145,16 @@ def main():
     save_path = CKPT_DIR / f"{args.task}_adapter.safetensors"
     if best_params is not None:
         save_adapter_params(best_params, str(save_path))
+        if best_epoch < args.epochs:
+            note = "later epochs overfit and were discarded"
+        else:
+            # val_loss was still improving at the last epoch -- nothing was
+            # actually discarded, and this run may be undertrained rather
+            # than at/past its optimum. Say so instead of the (wrong, in
+            # this case) overfitting message.
+            note = "val_loss was still improving at the final epoch -- consider more epochs (--epochs) next time"
         print(f"Saved '{args.task}' adapter to {save_path} "
-              f"(epoch {best_epoch}/{args.epochs}, best val_loss={best_val_loss:.4f} -- "
-              "later epochs overfit and were discarded)")
+              f"(epoch {best_epoch}/{args.epochs}, best val_loss={best_val_loss:.4f} -- {note})")
     else:
         # No val set to compare against (val_loss was nan every epoch) --
         # nothing to select by, so fall back to the final epoch's params.
