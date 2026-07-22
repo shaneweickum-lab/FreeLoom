@@ -120,6 +120,12 @@ export type Transcript = {
   pdf_url: string | null;
   included_entry_ids: string[];
   branding_snapshot: Record<string, unknown> | null;
+  /** A parent-controlled kill switch for an already-shared link -- unlike
+   * everything else on this row, revoking never expires or resets itself.
+   * Checked via the is_transcript_share_revoked() RPC by both the public
+   * /share page and the transcript-pdf download route, since a share link
+   * can otherwise circulate indefinitely once it's ever been sent out. */
+  share_revoked: boolean;
 };
 
 export type EntryStatus = "draft" | "accepted" | "needs_human_review";

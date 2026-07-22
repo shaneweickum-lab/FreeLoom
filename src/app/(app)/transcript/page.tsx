@@ -29,6 +29,12 @@ function toTranscriptCourse(entry: EntryWithClass): TranscriptCourse {
   };
 }
 
+// The file input's accept="image/*" is only a browser-level hint (and easy
+// to bypass by picking "All files") -- this is the actual enforcement
+// before anything reaches the public "branding" storage bucket.
+const ALLOWED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"];
+const MAX_LOGO_BYTES = 5 * 1024 * 1024;
+
 const EMPTY_SCHOOL_FORM = {
   schoolName: "",
   parentName: "",
@@ -51,6 +57,7 @@ export default function TranscriptPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState("");
   const schoolOpenInitialized = useRef(false);
 
   async function load() {
@@ -131,7 +138,7 @@ export default function TranscriptPage() {
     setSavingSchool(true);
 
     let logoUrl = schoolProfile?.logo_url ?? null;
-    if (logoFile) {
+    if (logoFile && ALLOWED_LOGO_TYPES.includes(logoFile.type) && logoFile.size <= MAX_LOGO_BYTES) {
       const ext = logoFile.name.split(".").pop() || "png";
       const path = `${user.id}/logo.${ext}`;
       const { error: uploadError } = await supabase.storage.from("branding").upload(path, logoFile, { upsert: true });
@@ -181,6 +188,22 @@ export default function TranscriptPage() {
     await navigator.clipboard.writeText(url);
     setCopiedId(transcriptId);
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  /** Once a share link has been sent out (a message, a printout, a saved
+   * bookmark), there's no way to un-send it -- revoking is the only way to
+   * actually cut it off, rather than relying on whoever has the link
+   * choosing not to use it. */
+  async function toggleShareRevoked(t: Transcript) {
+    const supabase = createClient();
+    const nextRevoked = !t.share_revoked;
+    setTranscripts((prev) => prev.map((row) => (row.id === t.id ? { ...row, share_revoked: nextRevoked } : row)));
+    const { error } = await supabase.from("transcripts").update({ share_revoked: nextRevoked }).eq("id", t.id);
+    if (error) {
+      // Revert the optimistic update -- a parent thinking a link is
+      // revoked when it silently isn't would be worse than the delay.
+      setTranscripts((prev) => prev.map((row) => (row.id === t.id ? { ...row, share_revoked: t.share_revoked } : row)));
+    }
   }
 
   if (!currentStudent) {
@@ -260,9 +283,31 @@ export default function TranscriptPage() {
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (!file) {
+                    setLogoFile(null);
+                    setLogoError("");
+                    return;
+                  }
+                  if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
+                    setLogoFile(null);
+                    setLogoError("That file type isn't supported -- use a PNG, JPEG, WebP, GIF, or SVG image.");
+                    e.target.value = "";
+                    return;
+                  }
+                  if (file.size > MAX_LOGO_BYTES) {
+                    setLogoFile(null);
+                    setLogoError("That image is too large -- keep it under 5MB.");
+                    e.target.value = "";
+                    return;
+                  }
+                  setLogoError("");
+                  setLogoFile(file);
+                }}
                 className="text-sm text-muted"
               />
+              {logoError && <span className="text-red-400">{logoError}</span>}
             </label>
             <label className="flex flex-col gap-1.5 text-xs text-muted">
               Accent color
@@ -395,14 +440,27 @@ export default function TranscriptPage() {
             <div key={t.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
               <div className="text-sm">
                 <div>{new Date(t.generated_at).toLocaleString()}</div>
-                <div className="text-muted text-xs">{t.included_entry_ids.length} course(s)</div>
+                <div className="text-muted text-xs">
+                  {t.included_entry_ids.length} course(s)
+                  {t.share_revoked && <span className="text-red-400"> · Share link revoked</span>}
+                </div>
               </div>
               <div className="flex gap-2">
                 <a href={`/api/transcript-pdf/${t.id}`} className="btn-secondary text-xs">
                   Download PDF
                 </a>
-                <button onClick={() => copyShareLink(t.id)} className="btn-secondary text-xs">
+                <button
+                  onClick={() => copyShareLink(t.id)}
+                  disabled={t.share_revoked}
+                  className="btn-secondary text-xs disabled:opacity-50"
+                >
                   {copiedId === t.id ? "Link copied!" : "Copy share link"}
+                </button>
+                <button
+                  onClick={() => toggleShareRevoked(t)}
+                  className={`btn-secondary text-xs ${t.share_revoked ? "" : "border-red-900/50 text-red-400 hover:bg-red-950/20"}`}
+                >
+                  {t.share_revoked ? "Re-enable share link" : "Revoke share link"}
                 </button>
               </div>
             </div>

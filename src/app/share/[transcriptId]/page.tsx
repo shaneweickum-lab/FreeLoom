@@ -42,7 +42,14 @@ export default async function SharePage({ params }: { params: Promise<{ transcri
   if (error) console.error("get_shared_transcript RPC failed", error);
   const shared = data as SharedTranscript | null;
 
-  if (!shared) {
+  // A separate, dedicated RPC rather than folding this into
+  // get_shared_transcript's own query -- revoking is a newer, additive
+  // concept layered on top of an existing function whose exact original
+  // SQL isn't tracked in this repo, so this checks it independently
+  // instead of risking a subtle change to that function's behavior.
+  const { data: revoked } = await supabase.rpc("is_transcript_share_revoked", { p_transcript_id: transcriptId });
+
+  if (!shared || revoked) {
     return <p className="text-muted text-sm">This share link is invalid or has expired.</p>;
   }
 
