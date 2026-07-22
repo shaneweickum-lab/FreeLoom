@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.supabase_user_id;
-      if (!userId || !session.subscription) break;
+      if (!userId || !session.subscription) {
+        console.error("checkout.session.completed missing supabase_user_id or subscription", {
+          sessionId: session.id,
+        });
+        break;
+      }
 
       const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
       await syncSubscription(adminClient, userId, subscription);
@@ -41,7 +46,12 @@ export async function POST(req: NextRequest) {
     case "customer.subscription.updated": {
       const subscription = event.data.object as Stripe.Subscription;
       const userId = await resolveUserId(adminClient, subscription);
-      if (!userId) break;
+      if (!userId) {
+        console.error("customer.subscription.updated: couldn't resolve a Supabase user", {
+          subscriptionId: subscription.id,
+        });
+        break;
+      }
       await syncSubscription(adminClient, userId, subscription);
       break;
     }
@@ -49,10 +59,16 @@ export async function POST(req: NextRequest) {
     case "customer.subscription.deleted": {
       const subscription = event.data.object as Stripe.Subscription;
       const userId = await resolveUserId(adminClient, subscription);
-      if (!userId) break;
-      await adminClient
+      if (!userId) {
+        console.error("customer.subscription.deleted: couldn't resolve a Supabase user", {
+          subscriptionId: subscription.id,
+        });
+        break;
+      }
+      const { error } = await adminClient
         .from("school_profiles")
         .upsert({ user_id: userId, subscription_tier: "free", subscription_status: "canceled" });
+      if (error) console.error("Failed to reset school_profiles to free on cancellation:", error);
       break;
     }
 
@@ -68,13 +84,14 @@ export async function POST(req: NextRequest) {
       if (!profile) break;
       // Best-effort, in-app only -- Stripe's own Smart Retries handle the
       // actual recovery attempts, this just lets the parent know to check.
-      await adminClient.from("notifications").insert({
+      const { error } = await adminClient.from("notifications").insert({
         user_id: profile.user_id,
         type: "announcement",
         title: "A payment on your FreeLoom plan failed",
         body: "Update your payment method in Settings > Billing to keep your plan active.",
         link_path: "/settings",
       });
+      if (error) console.error("Failed to insert payment-failed notification:", error);
       break;
     }
 
@@ -112,7 +129,7 @@ async function syncSubscription(
   const mapped = item ? tierAndIntervalForPrice(item.price.id) : null;
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
 
-  await adminClient.from("school_profiles").upsert({
+  const { error } = await adminClient.from("school_profiles").upsert({
     user_id: userId,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscription.id,
@@ -122,4 +139,5 @@ async function syncSubscription(
     current_period_end: item ? new Date(item.current_period_end * 1000).toISOString() : null,
     updated_at: new Date().toISOString(),
   });
+  if (error) console.error("Failed to sync school_profiles from Stripe subscription:", error);
 }
