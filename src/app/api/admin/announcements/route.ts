@@ -21,7 +21,13 @@ async function sendAnnouncementEmail(to: string, title: string, excerpt: string)
   }
 }
 
-const SCHOOLING_TYPES = ["homeschooling", "unschooling", "wildschooling"];
+const SCHOOLING_TYPES = [
+  "homeschooling",
+  "unschooling",
+  "wildschooling",
+  "alternative_schooling",
+  "private_schooling",
+];
 const TARGET_TYPES = ["everyone", "user", "schooling_type"];
 
 export async function POST(req: NextRequest) {

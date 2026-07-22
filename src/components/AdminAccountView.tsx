@@ -28,6 +28,8 @@ const SCHOOLING_TYPE_LABEL: Record<string, string> = {
   homeschooling: "Homeschooling",
   unschooling: "Unschooling",
   wildschooling: "Wildschooling",
+  alternative_schooling: "Alternative Schooling",
+  private_schooling: "Private Schooling",
 };
 
 /** Every field below is populated read-only -- disabled, never wired to

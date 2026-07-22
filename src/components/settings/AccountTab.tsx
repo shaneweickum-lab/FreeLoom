@@ -10,12 +10,16 @@ const SCHOOLING_TYPE_OPTIONS = [
   { value: "homeschooling", label: "Homeschooling" },
   { value: "unschooling", label: "Unschooling" },
   { value: "wildschooling", label: "Wildschooling" },
+  { value: "alternative_schooling", label: "Alternative Schooling" },
+  { value: "private_schooling", label: "Private Schooling" },
 ] as const;
 
 const SCHOOLING_TYPE_LABEL: Record<string, string> = {
   homeschooling: "Homeschooling",
   unschooling: "Unschooling",
   wildschooling: "Wildschooling",
+  alternative_schooling: "Alternative Schooling",
+  private_schooling: "Private Schooling",
 };
 
 function formFromProfile(profile: SchoolProfile | null) {
@@ -25,7 +29,13 @@ function formFromProfile(profile: SchoolProfile | null) {
     address: profile?.address ?? "",
     phone: profile?.phone ?? "",
     email: profile?.email ?? "",
-    schoolingType: (profile?.schooling_type ?? "") as "" | "homeschooling" | "unschooling" | "wildschooling",
+    schoolingType: (profile?.schooling_type ?? "") as
+      | ""
+      | "homeschooling"
+      | "unschooling"
+      | "wildschooling"
+      | "alternative_schooling"
+      | "private_schooling",
     hideStudentNames: profile?.hide_student_names ?? false,
     hideStudentBirthdates: profile?.hide_student_birthdates ?? false,
   };

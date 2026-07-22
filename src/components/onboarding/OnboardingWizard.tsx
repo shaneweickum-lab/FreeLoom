@@ -14,6 +14,8 @@ const SCHOOLING_TYPE_OPTIONS = [
   { value: "homeschooling", label: "Homeschooling" },
   { value: "unschooling", label: "Unschooling" },
   { value: "wildschooling", label: "Wildschooling" },
+  { value: "alternative_schooling", label: "Alternative Schooling" },
+  { value: "private_schooling", label: "Private Schooling" },
 ] as const;
 
 type Interval = "month" | "quarter" | "year";

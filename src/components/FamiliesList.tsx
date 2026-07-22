@@ -15,6 +15,8 @@ const SCHOOLING_TYPE_LABEL: Record<SchoolingType, string> = {
   homeschooling: "Homeschooling",
   unschooling: "Unschooling",
   wildschooling: "Wildschooling",
+  alternative_schooling: "Alternative Schooling",
+  private_schooling: "Private Schooling",
 };
 
 /** Every signed-up account, not just admins or waitlist signups -- click a
