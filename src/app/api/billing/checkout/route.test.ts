@@ -162,4 +162,13 @@ describe("POST /api/billing/checkout", () => {
       expect.objectContaining({ success_url: expect.stringContaining("/settings?billing=success") })
     );
   });
+
+  it("500s cleanly instead of throwing when Stripe itself errors mid-checkout", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    createSession.mockRejectedValueOnce(new Error("Stripe API is down"));
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/try again/i);
+  });
 });

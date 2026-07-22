@@ -54,7 +54,15 @@ export async function POST(req: NextRequest) {
   // a generic cluster guess (or Stage 1 found nothing at all).
   const worthRetrying = !stage1.confident || stage1.tags.every((tag) => tag.source === "heuristic_cluster");
   if (worthRetrying) {
-    const match = await findRetrievalMatch(supabase, studentId, rawWordDump);
+    // A retrieval-lookup failure (e.g. a transient DB error) shouldn't 500
+    // the whole classify request when Stage 1's own result is still usable
+    // -- treat it the same as "no match found" and fall through.
+    let match: Awaited<ReturnType<typeof findRetrievalMatch>> = null;
+    try {
+      match = await findRetrievalMatch(supabase, studentId, rawWordDump);
+    } catch (err) {
+      console.error("Stage 2 retrieval match failed:", err);
+    }
     if (match) {
       // A retrieval match replaces the whole tag set with what was
       // actually accepted for a similar past word dump -- there's no
@@ -80,17 +88,25 @@ export async function POST(req: NextRequest) {
     // an assembled one, doesn't touch the subject/credit/confidence, which
     // are still exactly as sure as the underlying keyword match was.
     if (stage1.confident) {
-      const composedTags = await Promise.all(
-        stage1.tags.map(async (tag) => {
-          if (tag.source !== "heuristic_cluster") return tag;
-          const composed = await composeFromFragments(supabase, {
-            subjectArea: tag.subjectArea,
-            activityType: stage1.extractedSlots.activity_type,
-          });
-          if (!composed) return tag;
-          return { ...tag, courseTitle: composed.courseTitle, reasoning: composed.reasoning, source: "fragment_composition" as const };
-        })
-      );
+      // Same reasoning as Stage 2 above -- a composition failure degrades
+      // to the plain heuristic-cluster tag rather than failing the request,
+      // since Stage 1's result is already a confident, usable answer.
+      let composedTags = stage1.tags;
+      try {
+        composedTags = await Promise.all(
+          stage1.tags.map(async (tag) => {
+            if (tag.source !== "heuristic_cluster") return tag;
+            const composed = await composeFromFragments(supabase, {
+              subjectArea: tag.subjectArea,
+              activityType: stage1.extractedSlots.activity_type,
+            });
+            if (!composed) return tag;
+            return { ...tag, courseTitle: composed.courseTitle, reasoning: composed.reasoning, source: "fragment_composition" as const };
+          })
+        );
+      } catch (err) {
+        console.error("Stage 3 fragment composition failed:", err);
+      }
       const result: ClassifyResult = { confident: true, tags: composedTags, extractedSlots: stage1.extractedSlots };
       return NextResponse.json(result);
     }
