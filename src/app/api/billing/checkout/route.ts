@@ -64,11 +64,12 @@ export async function POST(req: NextRequest) {
       metadata: { supabase_user_id: user.id },
     });
     customerId = customer.id;
-    await supabase.from("school_profiles").upsert({
+    const { error } = await supabase.from("school_profiles").upsert({
       user_id: user.id,
       stripe_customer_id: customerId,
       updated_at: new Date().toISOString(),
     });
+    if (error) console.error("Failed to save new Stripe customer id to school_profiles:", error);
   }
 
   const session = await stripe.checkout.sessions.create({
