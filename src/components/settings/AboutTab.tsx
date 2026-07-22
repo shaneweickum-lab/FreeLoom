@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { APP_VERSION } from "@/lib/appVersion";
+import CookiePreferencesButton from "@/components/CookiePreferencesButton";
 
 const ABOUT_FEATURES = [
   "Learning Log with AI-assisted subject tagging and plain-language reasoning",
@@ -26,6 +28,12 @@ export default function AboutTab() {
           <li key={feature}>{feature}</li>
         ))}
       </ul>
+      <div className="flex items-center gap-4 border-t border-navy-line pt-3 text-sm">
+        <Link href="/privacy" className="text-gold hover:underline">
+          Privacy &amp; Cookie Policy
+        </Link>
+        <CookiePreferencesButton className="text-muted hover:text-foreground hover:underline" />
+      </div>
     </div>
   );
 }

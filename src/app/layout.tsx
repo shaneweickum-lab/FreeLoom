@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, IBM_Plex_Mono, Inter } from "next/font/google";
 import { APP_URL } from "@/lib/appUrl";
+import { CookieConsentProvider } from "@/lib/cookieConsent";
+import CookieConsentBanner from "@/components/CookieConsentBanner";
 import "./globals.css";
 
 const inter = Inter({
@@ -71,7 +73,12 @@ export default function RootLayout({
         serve both. See src/app/(app)/layout.tsx (AppRail) and
         src/app/page.tsx.
       */}
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <CookieConsentProvider>
+          {children}
+          <CookieConsentBanner />
+        </CookieConsentProvider>
+      </body>
     </html>
   );
 }

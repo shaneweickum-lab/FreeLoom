@@ -4,6 +4,7 @@ import StitchDivider from "@/components/StitchDivider";
 import WaitlistForm from "@/components/WaitlistForm";
 import { fetchPriceTable } from "@/lib/billing/prices";
 import PricingSection from "@/components/PricingSection";
+import CookiePreferencesButton from "@/components/CookiePreferencesButton";
 
 // Render per-request rather than being statically prerendered at build time:
 // the pricing section must always show live Stripe prices ("shadow Stripe"),
@@ -291,9 +292,14 @@ export default async function Home() {
         </main>
 
         <footer className="border-t border-navy-line">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-2">
+          <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-4">
             <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
-            <span>A record-keeping platform for Alternative schooling families.</span>
+            <div className="flex items-center gap-4">
+              <Link href="/privacy" className="hover:text-foreground hover:underline">
+                Privacy &amp; Cookie Policy
+              </Link>
+              <CookiePreferencesButton className="hover:text-foreground hover:underline" />
+            </div>
           </div>
         </footer>
       </div>
