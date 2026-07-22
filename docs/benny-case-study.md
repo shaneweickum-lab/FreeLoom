@@ -180,6 +180,12 @@ against need to be tracked as a pair (e.g. embedding a hash of the base weights 
 the adapter file), not treated as independently swappable artifacts. For now: retrain
 `entry_drafting` against the current base before trusting any number from it again.
 
+**`entry_drafting` retrained against the current base, same day.** val_loss 2.4120 →
+1.9354 across all 10 epochs, decreasing every epoch and still trending down at the
+end — a healthy curve, and the expected fix for the base/adapter mismatch above.
+Re-eval against this new checkpoint is queued; the real pass/fail number goes in
+`ml/RESULTS.md` the moment it finishes.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)

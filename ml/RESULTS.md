@@ -66,6 +66,20 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
   (e.g. embedding a hash of the base checkpoint into the adapter's saved file), not
   just remembered.
 
+### entry_drafting — retrained against current base, 2026-07-22
+- Config: real pretrained base (`checkpoints/base.safetensors`) + LoRA (rank 8, alpha
+  16), M5 MacBook, default 10 epochs/batch-size 8/lr 1e-3 — same data as the
+  2026-07-21 run below (1,866 train / 207 val), just fine-tuned fresh against the
+  current base checkpoint instead of the stale one behind the eval-regression entry
+  above
+- Result: val_loss 2.4120 → 1.9354 across all 10 epochs, decreasing every epoch, still
+  trending down at the final epoch (same "not yet at its ceiling" pattern as
+  kb_authoring's run) — a healthy curve, unlike the 0% collapse that motivated this
+  retrain
+- Wall-clock: ~80.6s/epoch, ~806s total
+- Eval: pending -- `eval/run_eval.py` queued against this new checkpoint, will be
+  appended here once it finishes
+
 ### entry_drafting — 2026-07-21
 - Config: ~13.7M-param frozen base + LoRA (rank 8, alpha 16), M5 MacBook
 - Data: 2,060 synthetic (activity → course_title/subject_area/credit_value/rationale)
