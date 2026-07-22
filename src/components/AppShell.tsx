@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import { StudentProvider } from "@/lib/studentContext";
 import { ThemeProvider, useTheme, type Theme } from "@/lib/themeContext";
 import { BennyPanelProvider } from "@/lib/bennyPanelContext";
+import { clearRememberMeMarkers, shouldForceSignOutForRememberMe } from "@/lib/authSession";
+import { createClient } from "@/lib/supabase/client";
 import AppRail from "@/components/AppRail";
 import BennyPanel from "@/components/BennyPanel";
 
@@ -41,6 +44,22 @@ function ThemedShell({ children }: { children: React.ReactNode }) {
 // marketing pages, which don't render inside this component at all -- see
 // the [data-theme="light"] block in globals.css.
 export default function AppShell({ initialTheme, children }: { initialTheme: Theme; children: React.ReactNode }) {
+  // Enforces the "Keep me signed in" choice from login -- see
+  // src/lib/authSession.ts for why this can't be done via the Supabase
+  // client's own cookie config. Runs once per fresh page load into the app;
+  // the server-verified session cookie itself is still valid at this point
+  // (proxy.ts already let the request through), this only catches the case
+  // where the parent explicitly asked not to be remembered past closing
+  // the browser.
+  useEffect(() => {
+    if (!shouldForceSignOutForRememberMe()) return;
+    clearRememberMeMarkers();
+    const supabase = createClient();
+    supabase.auth.signOut().finally(() => {
+      window.location.href = "/login";
+    });
+  }, []);
+
   return (
     <ThemeProvider initialTheme={initialTheme}>
       <StudentProvider>
