@@ -3,8 +3,7 @@ import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/adminAuth";
 import { buildMessageNotificationEmail } from "@/lib/email/messageNotification";
-
-const APP_URL = "https://freeloom-bice.vercel.app";
+import { APP_URL } from "@/lib/appUrl";
 
 async function sendMessageEmail(to: string, title: string, excerpt: string, linkPath: string) {
   if (!process.env.RESEND_API_KEY) return;

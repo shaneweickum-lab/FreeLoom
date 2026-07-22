@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
-
-const APP_URL = "https://freeloom-bice.vercel.app";
+import { APP_URL } from "@/lib/appUrl";
 
 export async function POST() {
   const supabase = await createClient();
@@ -24,10 +23,23 @@ export async function POST() {
   }
 
   const stripe = getStripe();
-  const session = await stripe.billingPortal.sessions.create({
-    customer: profile.stripe_customer_id,
-    return_url: `${APP_URL}/settings`,
-  });
-
-  return NextResponse.json({ url: session.url });
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: `${APP_URL}/settings`,
+    });
+    return NextResponse.json({ url: session.url });
+  } catch (err) {
+    // Same class of issue as checkout's stale-customer handling -- a
+    // stored ID that no longer resolves in the current Stripe account
+    // (e.g. STRIPE_SECRET_KEY pointed elsewhere when it was created).
+    // Unlike checkout, there's no reasonable "create a new one" recovery
+    // for the Portal specifically, so just fail cleanly instead of a raw
+    // unhandled 500.
+    console.error("Failed to create billing portal session:", err);
+    return NextResponse.json(
+      { error: "Couldn't open billing management -- please try again or contact support." },
+      { status: 500 }
+    );
+  }
 }

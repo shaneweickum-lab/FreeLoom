@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
+import Stripe from "stripe";
 
 function chain(result: unknown) {
   const builder: Record<string, unknown> = {};
@@ -91,7 +92,7 @@ describe("POST /api/billing/change-plan", () => {
     expect(res.status).toBe(400);
   });
 
-  it("updates the existing subscription in place with proration", async () => {
+  it("updates the existing subscription in place, charging immediately and clearing any pending cancellation", async () => {
     fromQueue = [ACTIVE_PRO_MONTHLY];
     const res = await POST(makeRequest({ tier: "premium", interval: "quarter" }));
     expect(res.status).toBe(200);
@@ -100,8 +101,26 @@ describe("POST /api/billing/change-plan", () => {
       "sub_1",
       expect.objectContaining({
         items: [{ id: "si_1", price: "price_premium_quarter" }],
-        proration_behavior: "create_prorations",
+        // create_prorations defers the charge to the next scheduled
+        // invoice -- always_invoice charges it now, closing a window
+        // where a customer could upgrade for instant access then switch
+        // back down before ever paying the difference.
+        proration_behavior: "always_invoice",
+        payment_behavior: "error_if_incomplete",
+        cancel_at_period_end: false,
+        cancel_at: null,
       })
     );
+  });
+
+  it("402s with a clean message when the prorated charge is declined", async () => {
+    fromQueue = [ACTIVE_PRO_MONTHLY];
+    updateSubscription.mockRejectedValueOnce(
+      new Stripe.errors.StripeCardError({ code: "card_declined", message: "Your card was declined." })
+    );
+    const res = await POST(makeRequest({ tier: "premium", interval: "quarter" }));
+    expect(res.status).toBe(402);
+    const data = await res.json();
+    expect(data.error).toMatch(/payment method/i);
   });
 });

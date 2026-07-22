@@ -57,19 +57,26 @@ describe("PATCH /api/access-requests/[id]", () => {
   const NOT_FREE = { data: { subscription_tier: "pro", subscription_status: "active", grandfathered_until: null } };
 
   it("404s when the request doesn't belong to this user (or doesn't exist)", async () => {
-    fromQueue = [NOT_FREE, { data: null, error: null }];
+    fromQueue = [NOT_FREE, { data: null }, { data: null, error: null }];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(404);
   });
 
   it("400s when the transition is invalid (trigger rejects it)", async () => {
-    fromQueue = [NOT_FREE, { data: null, error: { message: "Invalid access request transition from denied to approved" } }];
+    fromQueue = [
+      NOT_FREE,
+      { data: null }, // caller isn't an admin
+      { data: null, error: { message: "Invalid access request transition from denied to approved" } },
+    ];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(400);
   });
 
   it("400s when the caller's own account is on the Free plan", async () => {
-    fromQueue = [{ data: { subscription_tier: "free", subscription_status: null, grandfathered_until: null } }];
+    fromQueue = [
+      { data: { subscription_tier: "free", subscription_status: null, grandfathered_until: null } },
+      { data: null }, // caller isn't an admin either, so the Free-plan block still applies
+    ];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(400);
   });
@@ -77,6 +84,18 @@ describe("PATCH /api/access-requests/[id]", () => {
   it("approves the request and marks its notification read", async () => {
     fromQueue = [
       NOT_FREE,
+      { data: null }, // caller isn't an admin
+      { data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null },
+      { error: null },
+    ];
+    const res = await callWithId({ action: "approve" });
+    expect(res.status).toBe(200);
+  });
+
+  it("allows approving even on a Free plan when the caller is themselves an admin", async () => {
+    fromQueue = [
+      { data: { subscription_tier: "free", subscription_status: null, grandfathered_until: null } },
+      { data: { user_id: PARENT.id } }, // caller IS an admin -- bypasses the Free-plan block
       { data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null },
       { error: null },
     ];

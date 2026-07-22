@@ -73,6 +73,7 @@ export type SchoolProfile = {
     | "unpaid"
     | "incomplete"
     | "incomplete_expired"
+    | "paused"
     | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;

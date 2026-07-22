@@ -77,22 +77,41 @@ export default function StudentSwitcher() {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
-      const { data: profile } = await supabase
-        .from("school_profiles")
-        .select("subscription_tier, subscription_status, grandfathered_until")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
+      const [{ data: profile }, { data: adminRow }] = await Promise.all([
+        supabase
+          .from("school_profiles")
+          .select("subscription_tier, subscription_status, grandfathered_until, current_period_end")
+          .eq("user_id", data.user.id)
+          .maybeSingle(),
+        supabase.from("admin_users").select("user_id").eq("user_id", data.user.id).maybeSingle(),
+      ]);
       setCap(
         getStudentCap({
           subscription_tier: profile?.subscription_tier ?? "free",
           subscription_status: profile?.subscription_status ?? null,
           grandfathered_until: profile?.grandfathered_until ?? null,
+          current_period_end: profile?.current_period_end ?? null,
+          isAdmin: !!adminRow,
         })
       );
     });
   }, []);
 
   const atCap = cap !== null && students.length >= cap;
+  // Oldest-first, so a downgrade doesn't touch which students stay
+  // editable -- matches the DB trigger's own ranking (see
+  // enforce_student_not_locked), which is the actual enforcement; this is
+  // purely to show the same "beyond your plan" note here instead of a
+  // parent only discovering it when a save gets rejected.
+  const lockedStudentIds =
+    cap === null
+      ? new Set<string>()
+      : new Set(
+          [...students]
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            .slice(cap)
+            .map((s) => s.id)
+        );
 
   useEffect(() => {
     if (!open) return;
@@ -159,6 +178,7 @@ export default function StudentSwitcher() {
             {students.map((s) => {
               const s_stat = stats[s.id];
               const active = currentStudent?.id === s.id;
+              const locked = lockedStudentIds.has(s.id);
               return (
                 <button
                   key={s.id}
@@ -173,10 +193,19 @@ export default function StudentSwitcher() {
                 >
                   <Avatar student={s} />
                   <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-medium truncate">{s.name}</span>
+                    <span className="block text-sm font-medium truncate">
+                      {s.name}
+                      {locked && (
+                        <span className="ml-1.5 rounded-full bg-navy-line px-1.5 py-0.5 text-[10px] font-normal text-muted align-middle">
+                          Beyond plan limit
+                        </span>
+                      )}
+                    </span>
                     <span className="block text-xs text-muted truncate">
-                      {s.grade_level || "Grade level not set"}
-                      {s_stat && (
+                      {locked
+                        ? "Viewable, but no new courses or entries until you upgrade"
+                        : s.grade_level || "Grade level not set"}
+                      {!locked && s_stat && (
                         <>
                           {" "}
                           &middot; {s_stat.courseCount} course{s_stat.courseCount === 1 ? "" : "s"}

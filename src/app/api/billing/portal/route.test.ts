@@ -60,4 +60,13 @@ describe("POST /api/billing/portal", () => {
     expect(data.url).toBe("https://billing.stripe.com/portal123");
     expect(createPortalSession).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_existing" }));
   });
+
+  it("500s cleanly instead of crashing when the stored customer id doesn't resolve", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_stale" }, error: null }];
+    createPortalSession.mockRejectedValueOnce(new Error("No such customer"));
+    const res = await POST();
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data.error).toMatch(/couldn't open billing management/i);
+  });
 });

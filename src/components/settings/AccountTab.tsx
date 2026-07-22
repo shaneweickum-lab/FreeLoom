@@ -51,7 +51,15 @@ function ReadOnlyField({ label, value }: { label: string; value: string | null }
   );
 }
 
-export default function AccountTab({ userId, initialProfile }: { userId: string; initialProfile: SchoolProfile | null }) {
+export default function AccountTab({
+  userId,
+  initialProfile,
+  isAdmin,
+}: {
+  userId: string;
+  initialProfile: SchoolProfile | null;
+  isAdmin: boolean;
+}) {
   const [form, setForm] = useState(formFromProfile(initialProfile));
   // Snapshot of the last successfully-saved form -- Cancel reverts to this,
   // not the original server-rendered `initialProfile` prop, which would
@@ -70,6 +78,8 @@ export default function AccountTab({ userId, initialProfile }: { userId: string;
     subscription_tier: initialProfile?.subscription_tier ?? "free",
     subscription_status: initialProfile?.subscription_status ?? null,
     grandfathered_until: initialProfile?.grandfathered_until ?? null,
+    current_period_end: initialProfile?.current_period_end ?? null,
+    isAdmin,
   });
   const bennyLocked = tier === "free";
 

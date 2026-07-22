@@ -165,14 +165,39 @@ describe("POST /api/webhooks/stripe", () => {
   });
 
   it("inserts an in-app notification on invoice.payment_failed", async () => {
-    fromQueue = [{ data: { user_id: "user-1" }, error: null }];
+    fromQueue = [{ data: { user_id: "user-1" }, error: null }, { data: null, error: null }];
     constructEventImpl = vi.fn(() => ({
       type: "invoice.payment_failed",
-      data: { object: { customer: "cus_1" } },
+      data: { object: { id: "in_1", customer: "cus_1" } },
     }));
     const res = await POST(makeRequest("{}"));
     expect(res.status).toBe(200);
     const insertCall = fromCalls.find((c) => c.table === "notifications" && c.method === "insert");
-    expect(insertCall?.args[0]).toEqual(expect.objectContaining({ user_id: "user-1", type: "announcement" }));
+    expect(insertCall?.args[0]).toEqual(
+      expect.objectContaining({ user_id: "user-1", type: "announcement", related_id: "in_1" })
+    );
+  });
+
+  it("skips inserting a second notification when this invoice was already redelivered", async () => {
+    // Stripe documents webhook delivery as at-least-once, not exactly-once.
+    fromQueue = [{ data: { user_id: "user-1" }, error: null }, { data: { id: "existing-notif" }, error: null }];
+    constructEventImpl = vi.fn(() => ({
+      type: "invoice.payment_failed",
+      data: { object: { id: "in_1", customer: "cus_1" } },
+    }));
+    const res = await POST(makeRequest("{}"));
+    expect(res.status).toBe(200);
+    const insertCall = fromCalls.find((c) => c.table === "notifications" && c.method === "insert");
+    expect(insertCall).toBeUndefined();
+  });
+
+  it("500s instead of silently discarding a failed school_profiles sync", async () => {
+    fromQueue = [{ data: null, error: { message: "connection reset" } }];
+    constructEventImpl = vi.fn(() => ({
+      type: "customer.subscription.deleted",
+      data: { object: { metadata: { supabase_user_id: "user-1" }, customer: "cus_1" } },
+    }));
+    const res = await POST(makeRequest("{}"));
+    expect(res.status).toBe(500);
   });
 });

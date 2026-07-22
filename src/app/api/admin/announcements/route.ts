@@ -4,8 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/adminAuth";
 import { stripMarkdown } from "@/lib/markdown";
 import { buildAnnouncementNotificationEmail } from "@/lib/email/announcementNotification";
-
-const APP_URL = "https://freeloom-bice.vercel.app";
+import { APP_URL } from "@/lib/appUrl";
 
 async function sendAnnouncementEmail(to: string, title: string, excerpt: string) {
   if (!process.env.RESEND_API_KEY) return;

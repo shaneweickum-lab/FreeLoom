@@ -26,6 +26,14 @@ export async function POST(req: NextRequest) {
   }
 
   const adminClient = createAdminClient();
+  // A DB write failure here (as opposed to a business-logic issue like
+  // missing metadata, which will never resolve on retry) must NOT be
+  // swallowed into a 200 -- returning success would tell Stripe this event
+  // is fully handled and it will never retry, permanently desyncing a
+  // customer's tier from what they actually paid for. Returning 500
+  // instead lets Stripe's own retry schedule (up to 3 days) recover from
+  // what's almost always a transient outage.
+  let dbWriteFailed = false;
 
   switch (event.type) {
     case "checkout.session.completed": {
@@ -39,7 +47,7 @@ export async function POST(req: NextRequest) {
       }
 
       const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
-      await syncSubscription(adminClient, userId, subscription);
+      if (!(await syncSubscription(adminClient, userId, subscription))) dbWriteFailed = true;
       break;
     }
 
@@ -52,7 +60,7 @@ export async function POST(req: NextRequest) {
         });
         break;
       }
-      await syncSubscription(adminClient, userId, subscription);
+      if (!(await syncSubscription(adminClient, userId, subscription))) dbWriteFailed = true;
       break;
     }
 
@@ -71,7 +79,10 @@ export async function POST(req: NextRequest) {
         subscription_status: "canceled",
         cancel_at_period_end: false,
       });
-      if (error) console.error("Failed to reset school_profiles to free on cancellation:", error);
+      if (error) {
+        console.error("Failed to reset school_profiles to free on cancellation:", error);
+        dbWriteFailed = true;
+      }
       break;
     }
 
@@ -85,6 +96,18 @@ export async function POST(req: NextRequest) {
         .eq("stripe_customer_id", customerId)
         .maybeSingle();
       if (!profile) break;
+
+      // Stripe explicitly documents webhook delivery as at-least-once, not
+      // exactly-once -- a redelivered event for the same invoice must not
+      // insert a second notification for the same failed payment.
+      const { data: existing } = await adminClient
+        .from("notifications")
+        .select("id")
+        .eq("related_id", invoice.id)
+        .eq("type", "announcement")
+        .maybeSingle();
+      if (existing) break;
+
       // Best-effort, in-app only -- Stripe's own Smart Retries handle the
       // actual recovery attempts, this just lets the parent know to check.
       const { error } = await adminClient.from("notifications").insert({
@@ -93,8 +116,12 @@ export async function POST(req: NextRequest) {
         title: "A payment on your FreeLoom plan failed",
         body: "Update your payment method in Settings > Billing to keep your plan active.",
         link_path: "/settings",
+        related_id: invoice.id,
       });
-      if (error) console.error("Failed to insert payment-failed notification:", error);
+      if (error) {
+        console.error("Failed to insert payment-failed notification:", error);
+        dbWriteFailed = true;
+      }
       break;
     }
 
@@ -102,6 +129,9 @@ export async function POST(req: NextRequest) {
       break;
   }
 
+  if (dbWriteFailed) {
+    return NextResponse.json({ error: "Failed to persist webhook effects." }, { status: 500 });
+  }
   return NextResponse.json({ received: true });
 }
 
@@ -123,11 +153,14 @@ async function resolveUserId(
   return profile?.user_id ?? null;
 }
 
+/** Returns false on a DB write failure so the caller can surface a 500
+ * (see the dbWriteFailed comment in POST above) instead of silently
+ * treating a failed sync as handled. */
 async function syncSubscription(
   adminClient: ReturnType<typeof createAdminClient>,
   userId: string,
   subscription: Stripe.Subscription
-) {
+): Promise<boolean> {
   const item = subscription.items.data[0];
   const mapped = item ? tierAndIntervalForPrice(item.price.id) : null;
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
@@ -147,5 +180,9 @@ async function syncSubscription(
     cancel_at_period_end: subscription.cancel_at_period_end || !!subscription.cancel_at,
     updated_at: new Date().toISOString(),
   });
-  if (error) console.error("Failed to sync school_profiles from Stripe subscription:", error);
+  if (error) {
+    console.error("Failed to sync school_profiles from Stripe subscription:", error);
+    return false;
+  }
+  return true;
 }

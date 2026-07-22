@@ -103,7 +103,7 @@ export const WAITLIST_CONFIRMATION_HTML = `<!DOCTYPE html>
               <table role="presentation" cellpadding="0" cellspacing="0" align="center">
                 <tr>
                   <td style="border-radius:20px; background-color:#c7a252;">
-                    <a href="https://freeloom-bice.vercel.app" target="_blank" class="body-font" style="display:inline-block; padding:12px 28px; color:#0a0d1c; font-size:14px; font-weight:700; text-decoration:none; border-radius:20px;">
+                    <a href="https://www.freeloom.io" target="_blank" class="body-font" style="display:inline-block; padding:12px 28px; color:#0a0d1c; font-size:14px; font-weight:700; text-decoration:none; border-radius:20px;">
                       See how it works
                     </a>
                   </td>
