@@ -157,19 +157,27 @@ export default function MessageThread({ threadId, onCleared }: { threadId: strin
     sendTypingSignal(false);
     setSending(true);
     setError("");
-    const res = await fetch("/api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ threadId, body }),
-    });
-    const data = await res.json();
-    setSending(false);
-    if (!res.ok) {
-      setError(data.error ?? "Something went wrong.");
-      return;
+    // A network-level failure (not just a non-2xx response) must still
+    // clear `sending` -- otherwise the Send button is stuck disabled on
+    // "Sending…" forever with no way to retry.
+    try {
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId, body }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong.");
+        return;
+      }
+      setBody("");
+      load();
+    } catch {
+      setError("Couldn't reach the server -- try again.");
+    } finally {
+      setSending(false);
     }
-    setBody("");
-    load();
   }
 
   async function handleClear() {
