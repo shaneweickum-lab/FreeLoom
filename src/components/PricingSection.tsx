@@ -105,6 +105,15 @@ export default function PricingSection({ prices }: { prices: PriceTable }) {
           );
         })}
       </div>
+
+      <p className="text-center text-xs text-muted">
+        Charges are final (no refunds) -- cancel any time and keep access through the end of your paid period. See
+        our{" "}
+        <Link href="/terms" className="text-gold hover:underline">
+          Terms of Service
+        </Link>{" "}
+        for the full billing terms.
+      </p>
     </section>
   );
 }

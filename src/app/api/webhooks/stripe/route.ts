@@ -1,7 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe, tierAndIntervalForPrice } from "@/lib/stripe";
+import { buildPaymentFailedEmail } from "@/lib/email/paymentFailedNotification";
+import { APP_URL } from "@/lib/appUrl";
+
+/** Best-effort -- an email failure must never turn a successfully-recorded
+ * payment-failed notification into a 500 (Stripe would just retry the
+ * whole webhook event pointlessly), same pattern as every other
+ * Resend call site in this codebase (messages/announcements routes). */
+async function sendPaymentFailedEmail(to: string) {
+  if (!process.env.RESEND_API_KEY) return;
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "FreeLoom <onboarding@resend.dev>",
+      to,
+      subject: "We couldn't process your last payment",
+      html: buildPaymentFailedEmail({ appUrl: APP_URL }),
+    });
+  } catch (err) {
+    console.error("Failed to send payment-failed email:", err);
+  }
+}
 
 /** No authenticated user here -- Stripe calls this directly, verified via
  * HMAC signature rather than a session cookie or bearer secret (same "no
@@ -108,8 +130,13 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (existing) break;
 
-      // Best-effort, in-app only -- Stripe's own Smart Retries handle the
-      // actual recovery attempts, this just lets the parent know to check.
+      // In-app notification is best-effort visibility for someone already
+      // logged in; Stripe's own Smart Retries handle the actual recovery
+      // attempts. But a parent who ISN'T actively in the app during the
+      // grace period would otherwise get no signal at all before silently
+      // losing their tier -- so this also emails them directly, using the
+      // real Auth email (not the optional profile contact-info field,
+      // which may be blank or stale).
       const { error } = await adminClient.from("notifications").insert({
         user_id: profile.user_id,
         type: "announcement",
@@ -122,6 +149,9 @@ export async function POST(req: NextRequest) {
         console.error("Failed to insert payment-failed notification:", error);
         dbWriteFailed = true;
       }
+
+      const { data: authUser } = await adminClient.auth.admin.getUserById(profile.user_id);
+      if (authUser.user?.email) await sendPaymentFailedEmail(authUser.user.email);
       break;
     }
 

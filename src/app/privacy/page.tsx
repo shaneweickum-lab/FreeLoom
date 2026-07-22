@@ -19,12 +19,9 @@ export default function PrivacyPage() {
         <p className="text-muted text-sm mt-2">Last updated {LAST_UPDATED}.</p>
       </div>
 
-      <div className="rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 text-sm text-foreground">
-        <strong>This is a working draft, not finished legal copy.</strong>{" "}
-        It accurately describes what FreeLoom&apos;s code actually collects and stores as of the date above, but it
-        hasn&apos;t been reviewed by a lawyer. Because
-        FreeLoom holds information about children, have this reviewed by someone qualified in your jurisdiction
-        (and in student-data-specific rules, which vary a lot by state/country) before relying on it.
+      <div className="rounded-lg border border-navy-line bg-navy-soft px-4 py-3 text-sm text-muted">
+        This page describes exactly what FreeLoom&apos;s code collects and stores as of the date above. Questions
+        about anything on it are welcome any time -- see the Questions section below.
       </div>
 
       <section className="flex flex-col gap-3">
@@ -99,7 +96,13 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Billing:</strong> your subscription plan and status. Payment details themselves are collected
-            and stored by Stripe directly -- FreeLoom never receives or stores your card number.
+            and stored by Stripe directly -- FreeLoom never receives or stores your card number. Charges are final
+            (no refunds), but you can cancel any time and keep access through the end of the period you already
+            paid for -- see our{" "}
+            <Link href="/terms" className="text-gold hover:underline">
+              Terms of Service
+            </Link>{" "}
+            for the full billing terms.
           </li>
         </ul>
       </section>
@@ -152,7 +155,7 @@ export default function PrivacyPage() {
           <li>Edit or correct your account and student information any time in Settings.</li>
           <li>Hide student names/birthdates from exported transcripts and portfolios.</li>
           <li>Choose how long message threads are kept before auto-deleting (plan-dependent).</li>
-          <li>Message us to request a copy of your data, or to close your account.</li>
+          <li>Download a copy of your data, or close your account entirely, any time in Settings &gt; Account.</li>
         </ul>
       </section>
 
@@ -160,7 +163,11 @@ export default function PrivacyPage() {
         <h2 className="font-serif text-lg font-bold">Questions</h2>
         <p className="text-sm text-muted">
           The fastest way to reach us is through the Messages feature in your account, if you&apos;re signed in.
-          [Insert a dedicated privacy/legal contact email address here before publishing this page.]
+          Otherwise, email{" "}
+          <a href="mailto:shane@sowedandrooted.com" className="text-gold hover:underline">
+            shane@sowedandrooted.com
+          </a>
+          .
         </p>
       </section>
     </div>

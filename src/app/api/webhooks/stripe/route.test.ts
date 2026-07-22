@@ -15,6 +15,8 @@ function chain(result: unknown) {
 let fromQueue: unknown[];
 let fromCalls: { table: string; method: string; args: unknown[] }[];
 
+const getUserById = vi.fn(async () => ({ data: { user: { email: "parent@example.com" } }, error: null }));
+
 function makeAdminClient() {
   return {
     from: vi.fn((table: string) => {
@@ -28,6 +30,7 @@ function makeAdminClient() {
       }
       return c;
     }),
+    auth: { admin: { getUserById } },
   };
 }
 
@@ -164,7 +167,7 @@ describe("POST /api/webhooks/stripe", () => {
     );
   });
 
-  it("inserts an in-app notification on invoice.payment_failed", async () => {
+  it("inserts an in-app notification and emails the account on invoice.payment_failed", async () => {
     fromQueue = [{ data: { user_id: "user-1" }, error: null }, { data: null, error: null }];
     constructEventImpl = vi.fn(() => ({
       type: "invoice.payment_failed",
@@ -176,6 +179,12 @@ describe("POST /api/webhooks/stripe", () => {
     expect(insertCall?.args[0]).toEqual(
       expect.objectContaining({ user_id: "user-1", type: "announcement", related_id: "in_1" })
     );
+    // The in-app notification alone is invisible to a parent who isn't
+    // logged in during the grace period -- this looks up their real Auth
+    // email so sendPaymentFailedEmail (a no-op here since RESEND_API_KEY
+    // is unset in tests, same as every other email call site) has an
+    // address to send to when it's actually configured.
+    expect(getUserById).toHaveBeenCalledWith("user-1");
   });
 
   it("skips inserting a second notification when this invoice was already redelivered", async () => {

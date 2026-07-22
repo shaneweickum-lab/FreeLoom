@@ -295,6 +295,9 @@ export default async function Home() {
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 text-xs text-muted flex flex-wrap items-center justify-between gap-4">
             <span>© {new Date().getFullYear()} FreeLoom. Real learning, formally recorded.</span>
             <div className="flex items-center gap-4">
+              <Link href="/terms" className="hover:text-foreground hover:underline">
+                Terms
+              </Link>
               <Link href="/privacy" className="hover:text-foreground hover:underline">
                 Privacy &amp; Cookie Policy
               </Link>
