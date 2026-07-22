@@ -19,7 +19,7 @@ import {
   linear,
   type LayerCache,
 } from "./math";
-import { HEAD_DIM, LORA_SCALE, MLP_DIM, MODEL_CONFIG } from "./config";
+import { HEAD_DIM, LORA_SCALE, MAX_CONSECUTIVE_REPEATS, MLP_DIM, MODEL_CONFIG } from "./config";
 import { loadAdapterWeights, loadBaseWeights, type AdapterLayer, type AdapterTask, type BaseWeights, type LayerWeights } from "./weights";
 import { bosId, decode, encode, eosId } from "./tokenizer";
 
@@ -115,8 +115,20 @@ export function generate(
   const stopId = eosId();
   const generated: number[] = [];
   let position = promptIds.length;
+  let lastToken: number | null = null;
+  let repeatCount = 0;
   for (let step = 0; step < maxNewTokens; step++) {
     const nextId = argmax(lastLogits as Float32Array);
+    if (nextId === lastToken) {
+      repeatCount += 1;
+      // Greedy decoding can fall into a stable repetition loop -- stop
+      // before adding another copy rather than repeating for the rest of
+      // maxNewTokens (see MAX_CONSECUTIVE_REPEATS's own docs).
+      if (repeatCount >= MAX_CONSECUTIVE_REPEATS) break;
+    } else {
+      lastToken = nextId;
+      repeatCount = 1;
+    }
     generated.push(nextId);
     if (nextId === stopId) break;
     if (position >= MODEL_CONFIG.maxSeqLen) break;
