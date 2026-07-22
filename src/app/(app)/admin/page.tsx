@@ -6,6 +6,7 @@ import FamiliesList, { type FamilyRow } from "@/components/FamiliesList";
 import Tabs from "@/components/Tabs";
 import UsageDashboard from "@/components/UsageDashboard";
 import type { SchoolingType } from "@/lib/types";
+import { getEffectiveTier } from "@/lib/billing/tier";
 
 // Supabase's free-tier caps -- bump these once the project's plan changes
 // (e.g. Pro's 8GB base compute allowance and its autoscaling disk, or a
@@ -41,7 +42,9 @@ export default async function AdminPage() {
   const [{ data: signups, error: signupsError }, { data: admins }, { data: profiles }, usageResult] = await Promise.all([
     supabase.from("waitlist_signups").select("id, email, created_at").order("created_at", { ascending: false }),
     supabase.from("admin_users").select("user_id, email, approved_by, created_at").order("created_at", { ascending: true }),
-    supabase.from("school_profiles").select("user_id, parent_name, schooling_type"),
+    supabase
+      .from("school_profiles")
+      .select("user_id, parent_name, schooling_type, subscription_tier, subscription_status, grandfathered_until, current_period_end"),
     supabase.rpc("admin_db_usage"),
   ]);
 
@@ -57,13 +60,30 @@ export default async function AdminPage() {
   const adminClient = createAdminClient();
   const { data: usersPage } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
   const profileByUserId = new Map((profiles ?? []).map((p) => [p.user_id, p]));
+  const adminUserIds = new Set((admins ?? []).map((a) => a.user_id));
   const families: FamilyRow[] = (usersPage?.users ?? [])
-    .map((u) => ({
-      userId: u.id,
-      email: u.email ?? "",
-      parentName: profileByUserId.get(u.id)?.parent_name ?? null,
-      schoolingType: (profileByUserId.get(u.id)?.schooling_type ?? null) as SchoolingType | null,
-    }))
+    .map((u) => {
+      const profile = profileByUserId.get(u.id);
+      const isAdmin = adminUserIds.has(u.id);
+      return {
+        userId: u.id,
+        email: u.email ?? "",
+        parentName: profile?.parent_name ?? null,
+        schoolingType: (profile?.schooling_type ?? null) as SchoolingType | null,
+        isAdmin,
+        // Always computed with isAdmin: false -- the account's real
+        // subscription tier, separate from whether admin status also
+        // bypasses tier gates entirely (shown as its own "Admin" badge
+        // instead, so it isn't conflated with a genuine Premium purchase).
+        tier: getEffectiveTier({
+          subscription_tier: profile?.subscription_tier ?? "free",
+          subscription_status: profile?.subscription_status ?? null,
+          grandfathered_until: profile?.grandfathered_until ?? null,
+          current_period_end: profile?.current_period_end ?? null,
+          isAdmin: false,
+        }),
+      };
+    })
     .sort((a, b) => a.email.localeCompare(b.email));
 
   return (
