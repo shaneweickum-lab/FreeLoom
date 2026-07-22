@@ -2,6 +2,13 @@ import Link from "next/link";
 import ParallaxHero from "@/components/ParallaxHero";
 import StitchDivider from "@/components/StitchDivider";
 import WaitlistForm from "@/components/WaitlistForm";
+import { fetchPriceTable } from "@/lib/billing/prices";
+import { featuresFor, PLAN_NAMES, type SubscriptionTier } from "@/lib/billing/tier";
+
+// Render per-request rather than being statically prerendered at build time:
+// the pricing section must always show live Stripe prices ("shadow Stripe"),
+// never a build-time snapshot baked into static HTML.
+export const dynamic = "force-dynamic";
 
 const STEPS = [
   {
@@ -139,7 +146,10 @@ const FEATURES = [
   },
 ];
 
-export default function Home() {
+const PLAN_ORDER: SubscriptionTier[] = ["free", "pro", "premium"];
+
+export default async function Home() {
+  const prices = await fetchPriceTable();
   return (
     <div className="flex flex-col min-h-full">
       <ParallaxHero />
@@ -242,6 +252,53 @@ export default function Home() {
                   </span>
                   <h3 className="font-semibold text-lg mb-1 font-serif">{f.title}</h3>
                   <p className="text-muted text-sm leading-relaxed">{f.body}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section id="pricing" className="scroll-mt-24 flex flex-col gap-8">
+          <div className="text-center">
+            <h2 className="font-serif text-2xl font-bold mb-2">Plans that grow with your family</h2>
+            <p className="text-muted text-sm max-w-xl mx-auto">
+              Start free. Upgrade whenever you need more students or a longer message history -- prices shown are
+              billed monthly, with quarterly and yearly discounts available once you&apos;re in.
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-3">
+            {PLAN_ORDER.map((tier) => {
+              const price = tier === "free" ? 0 : prices[tier as "pro" | "premium"]?.month ?? null;
+              const highlighted = tier === "pro";
+              return (
+                <div
+                  key={tier}
+                  className={`rounded-lg border p-6 flex flex-col gap-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${
+                    highlighted ? "border-gold/50 bg-gold/5 shadow-sm" : "border-navy-line bg-navy-soft"
+                  }`}
+                >
+                  <div>
+                    <h3 className="font-serif text-lg font-bold">{PLAN_NAMES[tier]}</h3>
+                    <p className="text-3xl font-bold mt-1">
+                      {price === null ? "—" : `$${price.toFixed(2)}`}
+                      {tier !== "free" && price !== null && <span className="text-sm font-normal text-muted">/mo</span>}
+                    </p>
+                  </div>
+                  <ul className="flex flex-col gap-1.5 text-sm text-muted flex-1">
+                    {featuresFor(tier).map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/login"
+                    className={
+                      highlighted
+                        ? "rounded-md bg-gold px-4 py-2 text-center text-sm font-medium text-ink shadow-sm hover:bg-gold-hover transition-colors"
+                        : "rounded-md border border-navy-line px-4 py-2 text-center text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
+                    }
+                  >
+                    Get started
+                  </Link>
                 </div>
               );
             })}

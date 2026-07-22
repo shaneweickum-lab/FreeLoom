@@ -132,4 +132,34 @@ describe("POST /api/billing/checkout", () => {
     expect(res.status).toBe(200);
     expect(createSession).toHaveBeenCalled();
   });
+
+  it("defaults success/cancel redirects to Settings when no override is given", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success_url: expect.stringContaining("/settings?billing=success"),
+        cancel_url: expect.stringContaining("/settings?billing=canceled"),
+      })
+    );
+  });
+
+  it("honors a caller-supplied successPath/cancelPath override (e.g. onboarding)", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    await POST(makeRequest({ tier: "pro", interval: "month", successPath: "/dashboard", cancelPath: "/onboarding" }));
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success_url: expect.stringContaining("/dashboard?billing=success"),
+        cancel_url: expect.stringContaining("/onboarding?billing=canceled"),
+      })
+    );
+  });
+
+  it("falls back to the Settings default when successPath isn't a safe relative path", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    await POST(makeRequest({ tier: "pro", interval: "month", successPath: "//evil.example.com" }));
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ success_url: expect.stringContaining("/settings?billing=success") })
+    );
+  });
 });

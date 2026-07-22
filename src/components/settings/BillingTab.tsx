@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getEffectiveTier, STUDENT_CAP, MAX_RETENTION_DAYS } from "@/lib/billing/tier";
+import { getEffectiveTier, featuresFor, PLAN_NAMES } from "@/lib/billing/tier";
 import type { SubscriptionTier } from "@/lib/billing/tier";
 import type { PriceTable } from "@/lib/billing/prices";
 import type { SchoolProfile } from "@/lib/types";
@@ -11,23 +11,10 @@ type Interval = "month" | "quarter" | "year";
 const INTERVAL_LABEL: Record<Interval, string> = { month: "Monthly", quarter: "Quarterly", year: "Yearly" };
 
 const PLAN_META: { tier: SubscriptionTier; name: string }[] = [
-  { tier: "free", name: "Free" },
-  { tier: "pro", name: "Pro" },
-  { tier: "premium", name: "Premium" },
+  { tier: "free", name: PLAN_NAMES.free },
+  { tier: "pro", name: PLAN_NAMES.pro },
+  { tier: "premium", name: PLAN_NAMES.premium },
 ];
-
-function featuresFor(tier: SubscriptionTier): string[] {
-  const cap = STUDENT_CAP[tier];
-  const maxDays = MAX_RETENTION_DAYS[tier];
-  return [
-    `${cap} student profile${cap === 1 ? "" : "s"}`,
-    tier === "free"
-      ? "Message threads auto-delete after 7 days (fixed)"
-      : `Choose message auto-delete, up to ${maxDays} days${tier === "premium" ? " (or never)" : ""}`,
-    tier === "free" ? "Benny assistant not included" : "Benny assistant-mode chat",
-    tier === "free" ? "No admin read-only support access" : "Admin read-only support access",
-  ];
-}
 
 function daysRemaining(iso: string): number {
   return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));

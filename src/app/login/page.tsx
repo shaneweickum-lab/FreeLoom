@@ -38,10 +38,13 @@ function LoginForm() {
       router.push(next);
       router.refresh();
     } else {
+      // A brand-new account always goes through onboarding (set up profile,
+      // then pick a plan) rather than the caller-supplied `next` -- that's
+      // only meant for signin's "come back to what you were doing".
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(next)}` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/onboarding` },
       });
       if (error) {
         setError(error.message);
@@ -49,7 +52,7 @@ function LoginForm() {
         return;
       }
       if (data.session) {
-        router.push(next);
+        router.push("/onboarding");
         router.refresh();
       } else {
         setNotice("Check your email to confirm your account, then sign in.");
