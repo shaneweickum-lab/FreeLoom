@@ -335,6 +335,13 @@ def main():
     parser.add_argument("--seq-len", type=int, default=512)
     parser.add_argument("--val-fraction", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--skip-base", action="store_true",
+                         help="skip re-packing base_train.npy/base_val.npy -- that step re-tokenizes "
+                              "the full TinyStories/FineWeb-Edu corpus (millions of texts) and is by "
+                              "far the slowest part of this script. Use this when base_train.npy "
+                              "already exists and you just need to (re)build one or more adapter "
+                              "tasks' .npz files, e.g. after running a *_synthetic.py generator for "
+                              "the first time.")
     args = parser.parse_args()
 
     if not TOKENIZER_PATH.exists():
@@ -346,16 +353,19 @@ def main():
 
     # 1. Base pretraining sequences: domain corpus + (if generated) the full
     # TinyStories/FineWeb-Edu base corpus.
-    print("Packing base pretraining sequences -- millions of texts at real corpus "
-          "scale, this can take a while (progress prints below)...")
-    base_texts = itertools.chain(iter_training_texts(), iter_base_corpus_texts())
-    base_sequences = pack_base_sequences(tokenizer, args.seq_len, base_texts)
-    rng.shuffle(base_sequences)
-    n_val = max(1, int(len(base_sequences) * args.val_fraction)) if len(base_sequences) > 1 else 0
-    base_val, base_train = base_sequences[:n_val], base_sequences[n_val:]
-    np.save(OUT_DIR / "base_train.npy", base_train)
-    np.save(OUT_DIR / "base_val.npy", base_val)
-    print(f"Base pretraining: {len(base_train)} train / {len(base_val)} val sequences of length {args.seq_len}")
+    if args.skip_base:
+        print("--skip-base set: leaving base_train.npy/base_val.npy untouched.")
+    else:
+        print("Packing base pretraining sequences -- millions of texts at real corpus "
+              "scale, this can take a while (progress prints below)...")
+        base_texts = itertools.chain(iter_training_texts(), iter_base_corpus_texts())
+        base_sequences = pack_base_sequences(tokenizer, args.seq_len, base_texts)
+        rng.shuffle(base_sequences)
+        n_val = max(1, int(len(base_sequences) * args.val_fraction)) if len(base_sequences) > 1 else 0
+        base_val, base_train = base_sequences[:n_val], base_sequences[n_val:]
+        np.save(OUT_DIR / "base_train.npy", base_train)
+        np.save(OUT_DIR / "base_val.npy", base_val)
+        print(f"Base pretraining: {len(base_train)} train / {len(base_val)} val sequences of length {args.seq_len}")
 
     # 2. Entry-drafting adapter fine-tuning examples.
     examples = load_entry_examples()

@@ -22,11 +22,20 @@ completed run, it doesn't belong in this file yet.
 
 ## Base model pretraining
 
-**Status: pending.** No real base-pretraining run has completed yet as of 2026-07-22 —
-`train/prepare_dataset.py` is packing the corpus on the Mac now; `train/train_base.py`'s
-full run (56 tokens/param, ~766.6M tokens, ~13.7M params) hasn't been executed. This
-section gets its first real entry the moment that run finishes: train/val loss curve,
-tokens/sec throughput, actual wall-clock time, and the resulting checkpoint's size.
+### base pretraining — 2026-07-22
+- Config: ~13.7M-param BitNetTransformer (`BASE_CONFIG`), 56 tokens/param budget
+  (~766.6M tokens), M5 MacBook
+- Data: full packed base corpus (`base_train.npy`/`base_val.npy`), one epoch
+- Result: train_loss 2.5515, val_loss 2.2834 at epoch end — val below train, no sign
+  of overfitting at this size/budget. Loss curve was smooth and monotonically
+  decreasing the whole run (2.63 → 2.55 over the final ~6,000 batches shown), no spikes
+  despite no LR warmup/schedule or gradient clipping in the training loop.
+- Wall-clock: 37,137s (~10.3 hours) for the full epoch, ~20,600 tok/s sustained
+  throughput (~765M tokens processed, matching the configured budget almost exactly).
+- Notes: checkpoint saved to `checkpoints/base.safetensors`. First real base-model
+  result — adapter fine-tuning (entry_drafting already separately validated at 99.5%
+  against random-init weights; kb_authoring/platform_help still pending) is the next
+  step, now against an actually-pretrained base instead of random init.
 
 ## Adapter fine-tuning
 
