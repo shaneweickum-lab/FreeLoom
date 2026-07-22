@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
+import Stripe from "stripe";
 
 function chain(result: unknown) {
   const builder: Record<string, unknown> = {};
@@ -23,11 +24,15 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 const createCustomer = vi.fn(async () => ({ id: "cus_new" }));
+const retrieveCustomer = vi.fn(async () => ({ deleted: false }));
 const createSession = vi.fn(async () => ({ url: "https://checkout.stripe.com/session123" }));
 
 vi.mock("@/lib/stripe", () => ({
   getStripe: vi.fn(() => ({
-    customers: { create: (...args: Parameters<typeof createCustomer>) => createCustomer(...args) },
+    customers: {
+      create: (...args: Parameters<typeof createCustomer>) => createCustomer(...args),
+      retrieve: (...args: Parameters<typeof retrieveCustomer>) => retrieveCustomer(...args),
+    },
     checkout: { sessions: { create: (...args: Parameters<typeof createSession>) => createSession(...args) } },
   })),
   priceIdFor: vi.fn((tier: string, interval: string) =>
@@ -86,5 +91,16 @@ describe("POST /api/billing/checkout", () => {
     expect(res.status).toBe(200);
     expect(createCustomer).not.toHaveBeenCalled();
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_existing" }));
+  });
+
+  it("creates a fresh customer when the stored one doesn't exist in this Stripe account", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_stale" }, error: null }, { error: null }];
+    retrieveCustomer.mockRejectedValueOnce(
+      new Stripe.errors.StripeInvalidRequestError({ code: "resource_missing", message: "No such customer" })
+    );
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(200);
+    expect(createCustomer).toHaveBeenCalled();
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_new" }));
   });
 });
