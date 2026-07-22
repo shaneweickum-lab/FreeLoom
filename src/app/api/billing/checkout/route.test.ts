@@ -26,6 +26,7 @@ vi.mock("@/lib/supabase/server", () => ({
 const createCustomer = vi.fn(async () => ({ id: "cus_new" }));
 const retrieveCustomer = vi.fn(async () => ({ deleted: false }));
 const createSession = vi.fn(async () => ({ url: "https://checkout.stripe.com/session123" }));
+const listSubscriptions = vi.fn(async (): Promise<{ data: { id: string; status: string }[] }> => ({ data: [] }));
 
 vi.mock("@/lib/stripe", () => ({
   getStripe: vi.fn(() => ({
@@ -34,6 +35,7 @@ vi.mock("@/lib/stripe", () => ({
       retrieve: (...args: Parameters<typeof retrieveCustomer>) => retrieveCustomer(...args),
     },
     checkout: { sessions: { create: (...args: Parameters<typeof createSession>) => createSession(...args) } },
+    subscriptions: { list: (...args: Parameters<typeof listSubscriptions>) => listSubscriptions(...args) },
   })),
   priceIdFor: vi.fn((tier: string, interval: string) =>
     tier === "pro" && interval === "month" ? "price_pro_month" : undefined
@@ -102,5 +104,13 @@ describe("POST /api/billing/checkout", () => {
     expect(res.status).toBe(200);
     expect(createCustomer).toHaveBeenCalled();
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_new" }));
+  });
+
+  it("400s instead of double-subscribing when Stripe already shows an active subscription for this customer", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    listSubscriptions.mockResolvedValueOnce({ data: [{ id: "sub_1", status: "active" }] });
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(400);
+    expect(createSession).not.toHaveBeenCalled();
   });
 });

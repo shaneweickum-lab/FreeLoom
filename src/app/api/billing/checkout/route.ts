@@ -72,6 +72,24 @@ export async function POST(req: NextRequest) {
     if (error) console.error("Failed to save new Stripe customer id to school_profiles:", error);
   }
 
+  // Authoritative guard against ever ending up with two active
+  // subscriptions on the same account -- checked live against Stripe
+  // (not just school_profiles' cached subscription_status) since that
+  // column could in principle be stale if a webhook delivery lagged or
+  // failed. A real subscriber should switch tier/interval through
+  // /api/billing/change-plan, which updates this same subscription
+  // in place, not by starting a second one here.
+  const existingSubscriptions = await stripe.subscriptions.list({ customer: customerId, limit: 10 });
+  const hasActiveSubscription = existingSubscriptions.data.some(
+    (s) => s.status === "active" || s.status === "trialing"
+  );
+  if (hasActiveSubscription) {
+    return NextResponse.json(
+      { error: "You already have an active subscription -- use Switch plan or Manage billing instead." },
+      { status: 400 }
+    );
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
