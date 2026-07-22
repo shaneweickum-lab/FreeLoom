@@ -2,10 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
 import { WAITLIST_CONFIRMATION_HTML } from "@/lib/email/waitlistConfirmation";
+import { getClientIp, isRateLimited } from "@/lib/rateLimit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
+  // Public, unauthenticated, and sends a real email per success -- with no
+  // limit at all this is an easy way to spam arbitrary inboxes via
+  // FreeLoom's own Resend account, or just to flood waitlist_signups.
+  const ip = getClientIp(req);
+  if (isRateLimited(`waitlist:${ip}`, 5, 60_000)) {
+    return NextResponse.json({ error: "Too many requests -- try again in a minute." }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => null);
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
 

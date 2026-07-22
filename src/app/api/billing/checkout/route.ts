@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdFor, type BillingTier, type BillingInterval } from "@/lib/stripe";
 import { APP_URL } from "@/lib/appUrl";
+import { isRateLimited } from "@/lib/rateLimit";
 
 const VALID_TIERS: BillingTier[] = ["pro", "premium"];
 const VALID_INTERVALS: BillingInterval[] = ["month", "quarter", "year"];
@@ -23,6 +24,14 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // Signed in, so a random script can't hit this at scale the way it could
+  // an anonymous route -- but it still calls out to Stripe multiple times
+  // per request, so a buggy client-side retry loop or a compromised
+  // session shouldn't be able to hammer it unbounded.
+  if (isRateLimited(`checkout:${user.id}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Too many requests -- try again in a minute." }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);

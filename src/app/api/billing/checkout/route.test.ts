@@ -42,6 +42,11 @@ vi.mock("@/lib/stripe", () => ({
   ),
 }));
 
+const isRateLimitedMock = vi.fn(() => false);
+vi.mock("@/lib/rateLimit", () => ({
+  isRateLimited: () => isRateLimitedMock(),
+}));
+
 import { POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -55,12 +60,20 @@ describe("POST /api/billing/checkout", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: USER } };
     fromQueue = [];
+    isRateLimitedMock.mockReturnValue(false);
   });
 
   it("rejects when signed out", async () => {
     getUserResult = { data: { user: null } };
     const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
     expect(res.status).toBe(401);
+  });
+
+  it("429s once the rate limit is hit", async () => {
+    isRateLimitedMock.mockReturnValue(true);
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(429);
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid tier/interval", async () => {
