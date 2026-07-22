@@ -19,6 +19,10 @@ const PLANS: {
   { tier: "premium", name: "Premium", prices: { month: 39.99, quarter: 101.97, year: 374.31 } },
 ];
 
+// Index = rank -- higher is a more expensive/capable plan. Used to tell a
+// downgrade attempt (blocked below) apart from an upgrade.
+const TIER_ORDER: SubscriptionTier[] = ["free", "pro", "premium"];
+
 function featuresFor(tier: SubscriptionTier): string[] {
   const cap = STUDENT_CAP[tier];
   const maxDays = MAX_RETENTION_DAYS[tier];
@@ -65,6 +69,15 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
   // subscription (and this account's tier gates) active through the end
   // of the period already paid for, it just won't renew afterward.
   const cancelPending = !!initialProfile?.cancel_at_period_end && !!initialProfile?.current_period_end;
+  // A real, currently-billing subscription -- distinct from `tier` above,
+  // which also counts a temporary grandfather window as "premium." Only a
+  // real subscription can conflict with a new one, so grandfathered/free
+  // accounts should still see every paid plan as subscribable.
+  const realSubscribedTier =
+    initialProfile?.stripe_subscription_id &&
+    (initialProfile?.subscription_status === "active" || initialProfile?.subscription_status === "trialing")
+      ? initialProfile.subscription_tier
+      : null;
 
   async function handleSubscribe(planTier: "pro" | "premium") {
     setLoadingTier(planTier);
@@ -150,7 +163,18 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
 
       <div className="grid gap-3 sm:grid-cols-3">
         {PLANS.map((plan) => {
-          const isCurrent = tier === plan.tier;
+          // Free has no interval to match against; a paid plan is only
+          // "current" when both the tier AND the toggled interval match
+          // the real subscription (or there's no real interval yet, i.e.
+          // a grandfathered account with no Stripe subscription at all).
+          const isCurrent =
+            tier === plan.tier &&
+            (plan.tier === "free" || !initialProfile?.billing_interval || initialProfile.billing_interval === billingInterval);
+          const isDowngrade =
+            !!realSubscribedTier &&
+            plan.tier !== "free" &&
+            plan.tier !== realSubscribedTier &&
+            TIER_ORDER.indexOf(plan.tier) < TIER_ORDER.indexOf(realSubscribedTier);
           return (
             <div
               key={plan.tier}
@@ -178,6 +202,10 @@ export default function BillingTab({ initialProfile }: { userId: string; initial
               {plan.tier !== "free" &&
                 (isCurrent ? (
                   <span className="text-xs text-gold font-medium">Current plan</span>
+                ) : isDowngrade ? (
+                  <span className="text-xs text-muted">
+                    Included in your {realSubscribedTier} plan -- cancel via Manage billing first to switch down.
+                  </span>
                 ) : (
                   <button
                     onClick={() => handleSubscribe(plan.tier as "pro" | "premium")}
