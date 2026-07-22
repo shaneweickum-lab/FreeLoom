@@ -46,7 +46,25 @@ export function StudentProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     const supabase = createClient();
-    const { data, error } = await supabase.from("students").select("*").order("created_at", { ascending: true });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setStudents([]);
+      setLoading(false);
+      return;
+    }
+    // Every other page in the app scopes its own queries to
+    // currentStudent.id trusting that this list only ever contains the
+    // signed-in parent's own students -- RLS already guarantees that, but
+    // this explicit filter is a second, defense-in-depth backstop rather
+    // than relying on RLS alone for the one query the rest of the app is
+    // built on top of.
+    const { data, error } = await supabase
+      .from("students")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
     if (!error && data) {
       setStudents(data);
       setCurrentId((prev) => {
@@ -156,7 +174,17 @@ export function StudentProvider({ children }: { children: ReactNode }) {
 
   const updateStudent = useCallback(async (id: string, patch: Partial<Student>) => {
     const supabase = createClient();
-    const { data, error } = await supabase.from("students").update(patch).eq("id", id).select().single();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await supabase
+      .from("students")
+      .update(patch)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
     if (error || !data) return null;
     setStudents((prev) => prev.map((s) => (s.id === id ? data : s)));
     return data;
@@ -164,7 +192,11 @@ export function StudentProvider({ children }: { children: ReactNode }) {
 
   const deleteStudent = useCallback(async (id: string) => {
     const supabase = createClient();
-    const { error } = await supabase.from("students").delete().eq("id", id);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return false;
+    const { error } = await supabase.from("students").delete().eq("id", id).eq("user_id", user.id);
     if (error) return false;
     setStudents((prev) => {
       const next = prev.filter((s) => s.id !== id);
