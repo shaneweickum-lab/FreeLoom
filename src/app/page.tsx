@@ -3,7 +3,7 @@ import ParallaxHero from "@/components/ParallaxHero";
 import StitchDivider from "@/components/StitchDivider";
 import WaitlistForm from "@/components/WaitlistForm";
 import { fetchPriceTable } from "@/lib/billing/prices";
-import { featuresFor, PLAN_NAMES, type SubscriptionTier } from "@/lib/billing/tier";
+import PricingSection from "@/components/PricingSection";
 
 // Render per-request rather than being statically prerendered at build time:
 // the pricing section must always show live Stripe prices ("shadow Stripe"),
@@ -93,6 +93,15 @@ function IconBell(props: { className?: string }) {
   );
 }
 
+function IconChip(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+      <rect x="7" y="7" width="10" height="10" rx="1.5" />
+      <path d="M9.5 7V4M14.5 7V4M9.5 20v-3M14.5 20v-3M7 9.5H4M7 14.5H4M20 9.5h-3M20 14.5h-3" />
+    </svg>
+  );
+}
+
 function IconTarget(props: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className={props.className}>
@@ -144,9 +153,12 @@ const FEATURES = [
     body: "Tell us if your family homeschools, unschools, or wildschools, and we'll only send you the announcements that are actually relevant.",
     icon: IconTarget,
   },
+  {
+    title: "Benny, a sovereign SLM",
+    body: "FreeLoom's built-in assistant runs on a small language model trained entirely in-house for this platform -- not a rented third-party API -- so your family's questions and data never have to leave FreeLoom to get an answer.",
+    icon: IconChip,
+  },
 ];
-
-const PLAN_ORDER: SubscriptionTier[] = ["free", "pro", "premium"];
 
 export default async function Home() {
   const prices = await fetchPriceTable();
@@ -258,52 +270,7 @@ export default async function Home() {
           </div>
         </section>
 
-        <section id="pricing" className="scroll-mt-24 flex flex-col gap-8">
-          <div className="text-center">
-            <h2 className="font-serif text-2xl font-bold mb-2">Plans that grow with your family</h2>
-            <p className="text-muted text-sm max-w-xl mx-auto">
-              Start free. Upgrade whenever you need more students or a longer message history -- prices shown are
-              billed monthly, with quarterly and yearly discounts available once you&apos;re in.
-            </p>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-3">
-            {PLAN_ORDER.map((tier) => {
-              const price = tier === "free" ? 0 : prices[tier as "pro" | "premium"]?.month ?? null;
-              const highlighted = tier === "pro";
-              return (
-                <div
-                  key={tier}
-                  className={`rounded-lg border p-6 flex flex-col gap-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${
-                    highlighted ? "border-gold/50 bg-gold/5 shadow-sm" : "border-navy-line bg-navy-soft"
-                  }`}
-                >
-                  <div>
-                    <h3 className="font-serif text-lg font-bold">{PLAN_NAMES[tier]}</h3>
-                    <p className="text-3xl font-bold mt-1">
-                      {price === null ? "—" : `$${price.toFixed(2)}`}
-                      {tier !== "free" && price !== null && <span className="text-sm font-normal text-muted">/mo</span>}
-                    </p>
-                  </div>
-                  <ul className="flex flex-col gap-1.5 text-sm text-muted flex-1">
-                    {featuresFor(tier).map((f) => (
-                      <li key={f}>{f}</li>
-                    ))}
-                  </ul>
-                  <Link
-                    href="/login"
-                    className={
-                      highlighted
-                        ? "rounded-md bg-gold px-4 py-2 text-center text-sm font-medium text-ink shadow-sm hover:bg-gold-hover transition-colors"
-                        : "rounded-md border border-navy-line px-4 py-2 text-center text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
-                    }
-                  >
-                    Get started
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <PricingSection prices={prices} />
 
         <section className="relative rounded-xl border border-gold/30 bg-navy-soft p-10 shadow-lg overflow-hidden text-center flex flex-col items-center gap-4">
           <div
