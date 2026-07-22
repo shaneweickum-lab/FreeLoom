@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { useBennyPanel } from "@/lib/bennyPanelContext";
@@ -12,6 +12,7 @@ import LogoMark from "@/components/LogoMark";
 import NotificationBell from "@/components/NotificationBell";
 import AdminAccessIndicator from "@/components/AdminAccessIndicator";
 import type { User } from "@supabase/supabase-js";
+import type { SchoolProfile } from "@/lib/types";
 
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
@@ -48,41 +49,82 @@ function ChatIcon() {
   );
 }
 
+type BennyGateProfile = Pick<
+  SchoolProfile,
+  "benny_assistant_enabled" | "subscription_tier" | "subscription_status" | "grandfathered_until" | "current_period_end"
+>;
+
 /** Only renders once the signed-in user has opted into Benny assistant mode
  * (Settings > Account) -- fetches its own enabled state the same
  * self-contained way AdminAccessIndicator/NotificationBell do, so it can be
  * dropped into both the desktop rail and the mobile top bar with no prop
  * drilling. Toggling the panel is all this does -- the actual drawer lives
- * at the AppShell level, see BennyPanel.tsx. */
+ * at the AppShell level, see BennyPanel.tsx.
+ *
+ * Stays live via a postgres_changes subscription on this user's own
+ * school_profiles row (same pattern as useNotifications.ts) -- flipping the
+ * toggle in Settings, or a plan change taking effect, should make the chat
+ * icon appear/disappear immediately in every open tab, not just after the
+ * next full page load. */
 function BennyTriggerButton() {
   const { toggle } = useBennyPanel();
   const [enabled, setEnabled] = useState(false);
+  // Two instances render at once (desktop rail + mobile top bar, one just
+  // CSS-hidden) -- see useNotifications.ts's instanceId comment for why each
+  // needs its own realtime channel topic.
+  const instanceId = useId();
 
   useEffect(() => {
     const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
     supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
+      const userId = data.user?.id;
+      if (!userId || cancelled) return;
+
       const [{ data: profile }, { data: adminRow }] = await Promise.all([
         supabase
           .from("school_profiles")
           .select("benny_assistant_enabled, subscription_tier, subscription_status, grandfathered_until, current_period_end")
-          .eq("user_id", data.user.id)
+          .eq("user_id", userId)
           .maybeSingle(),
-        supabase.from("admin_users").select("user_id").eq("user_id", data.user.id).maybeSingle(),
+        supabase.from("admin_users").select("user_id").eq("user_id", userId).maybeSingle(),
       ]);
+      const isAdmin = !!adminRow;
+
       // Free tier never sees Benny at all, regardless of the toggle --
       // see AccountTab.tsx, where the toggle itself is also gated so a
       // Free-tier parent can't even turn this on to find it hidden anyway.
-      const tier = getEffectiveTier({
-        subscription_tier: profile?.subscription_tier ?? "free",
-        subscription_status: profile?.subscription_status ?? null,
-        grandfathered_until: profile?.grandfathered_until ?? null,
-        current_period_end: profile?.current_period_end ?? null,
-        isAdmin: !!adminRow,
-      });
-      setEnabled(!!profile?.benny_assistant_enabled && tier !== "free");
+      function computeEnabled(p: BennyGateProfile | null) {
+        const tier = getEffectiveTier({
+          subscription_tier: p?.subscription_tier ?? "free",
+          subscription_status: p?.subscription_status ?? null,
+          grandfathered_until: p?.grandfathered_until ?? null,
+          current_period_end: p?.current_period_end ?? null,
+          isAdmin,
+        });
+        return !!p?.benny_assistant_enabled && tier !== "free";
+      }
+
+      if (cancelled) return;
+      setEnabled(computeEnabled(profile));
+
+      channel = supabase
+        .channel(`benny-enabled:${userId}:${instanceId}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "school_profiles", filter: `user_id=eq.${userId}` },
+          (payload) => setEnabled(computeEnabled(payload.new as BennyGateProfile))
+        )
+        .subscribe();
     });
-  }, []);
+
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [instanceId]);
 
   if (!enabled) return null;
 
