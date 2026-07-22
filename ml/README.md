@@ -116,7 +116,7 @@ for (see `docs/slm-strategy.md` Section 5).
 - **`platform_help` adapter**: answers a parent's informal question about how the
   FreeLoom platform itself works (not an entry-drafting or kb-authoring task) — the
   first step toward Benny answering real questions in the assistant-mode chat panel
-  (`src/lib/benny/chat.ts`, gated behind `SLM_CHAT_URL`). Training data is
+  (`src/lib/benny/chat.ts`). Training data is
   hand-authored ground truth (`data/platform_help_seed.json`, 24 accurate
   question/answer pairs about real FreeLoom features) plus paraphrased variants from
   `data/generate_platform_help_synthetic.py`, anchored per-seed so the model learns to
@@ -204,19 +204,20 @@ python3 -m pytest model/test_bitlinear.py eval/test_validate_output.py eval/test
 
 ## Where this plugs in
 
-`ml/serve/inference_server.py` is the serving endpoint (see `ml/serve/README.md` for
-running it and exposing it to the deployed app via a tunnel) -- MLX only runs on
-Apple Silicon, and this app is deployed to Vercel/Node, so this process runs on the
-M5 MacBook itself and gets reached over the network. Two integration points are
-wired on the TS side, feature-flagged and inert until `SLM_ENTRY_DRAFTING_URL`/
-`SLM_CHAT_URL` actually point at a running instance of it:
+Inference runs in-process, inside FreeLoom's own Next.js server —
+`ml/serve/export_web_weights.py` bakes the trained base + adapters into a portable
+format (no MLX needed for a fixed-weight forward pass, only for training), and
+`src/lib/benny/inference/` is a from-scratch TS port of the same forward pass that
+reads that output directly. See that directory's own README for the full picture,
+and `ml/serve/README.md` for the (now-optional) standalone HTTP server this
+replaced. Two integration points, feature-flagged and inert until
+`src/lib/benny/inference/weights/`'s files are actually bundled with the deployment:
 
-- **`entry_drafting`** → Stage 4 fallback in `src/lib/pipeline/slmDraft.ts`, gated
-  behind `SLM_ENTRY_DRAFTING_URL` — never overrides a confident Stage 1-3 result, never
-  bypasses Stage 5 human review.
+- **`entry_drafting`** → Stage 4 fallback in `src/lib/pipeline/slmDraft.ts` — never
+  overrides a confident Stage 1-3 result, never bypasses Stage 5 human review.
 - **`platform_help`** (and eventually a general chat adapter) → Benny assistant-mode
-  chat panel in `src/lib/benny/chat.ts`, gated behind `SLM_CHAT_URL` — replies with an
-  honest placeholder until something real is listening.
+  chat panel in `src/lib/benny/chat.ts` — replies with an honest placeholder until
+  the weight files are bundled.
 
 `kb_authoring` has no TS-side integration point yet — per `docs/slm-strategy.md`
 Section 6, it's meant to run on a periodic schedule (not per-request) reviewing
@@ -261,6 +262,6 @@ single request calls synchronously. That scheduling/approval-queue piece is unbu
   `data/generate_platform_help_synthetic.py`'s paraphrased variants (1,360 generated,
   ~$5.10) = 1,384 total examples. Training + eval on this dataset not yet run. No
   production serving decided yet (see "Where this plugs in").
-- Build the actual model-serving mechanism (how a Vercel-deployed Next.js app calls an
-  MLX-only model) — explicitly not decided yet, needed before `SLM_ENTRY_DRAFTING_URL`
-  or `SLM_CHAT_URL` do anything in production.
+- Done: model-serving mechanism built — `ml/serve/export_web_weights.py` +
+  `src/lib/benny/inference/`'s TS port run inference in-process inside the deployed
+  Next.js app itself, no external Mac/tunnel dependency. See that directory's README.

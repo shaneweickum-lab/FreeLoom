@@ -212,10 +212,11 @@ function LogPageInner() {
       if (!result.confident) {
         // Stage 4 → 5: hold the word dump here rather than writing anything
         // yet. The entry only gets created once the parent resolves it below.
-        // A draftCandidate (Stage 4 SLM fallback, only ever present when
-        // SLM_ENTRY_DRAFTING_URL is configured) pre-fills the same manual
-        // form a parent would otherwise start blank -- still fully editable,
-        // still requires their own Save click, never auto-submitted.
+        // A draftCandidate (Stage 4 SLM fallback, only ever present once
+        // its weight files are bundled -- see isSlmEntryDraftingEnabled())
+        // pre-fills the same manual form a parent would otherwise start
+        // blank -- still fully editable, still requires their own Save
+        // click, never auto-submitted.
         const draft = result.draftCandidate;
         setNeedsReview({ result, rawWordDump: form.rawWordDump });
         setManualForm(

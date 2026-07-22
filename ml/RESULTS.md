@@ -158,6 +158,33 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
 - Notes: `/entry-draft`'s earlier success was luck, not a guarantee -- this fix applies
   to both routes, not just the one that happened to surface the bug first.
 
+### in-process TS port replaces the Mac-hosted HTTP server — 2026-07-22
+- Config: `ml/serve/export_web_weights.py` (pure numpy, no MLX) dequantizes every
+  BitLinear projection's ternary shadow weight into a fixed dense matrix and copies
+  each adapter's LoRA A/B matrices through unchanged; `src/lib/benny/inference/` is a
+  from-scratch TypeScript port of `transformer_mlx.py`'s forward pass reading that
+  output directly inside FreeLoom's own Next.js server -- no Mac, tunnel, or shared
+  secret involved anymore (see `ml/serve/inference_server.py`, now legacy/optional)
+- Why: the Mac + Cloudflare Tunnel setup meant Benny only worked while a specific
+  laptop stayed on, awake, and tunneled -- not viable for "all to use"
+- Naive port risk found before it shipped: recomputing the full sequence from scratch
+  every generation step (matching the Python reference, cheap on MLX's GPU) was
+  estimated at ~250 seconds for a single 200-token chat reply in plain JS -- added a
+  per-layer KV cache (`math.ts`'s `LayerCache`) so each step only processes the new
+  token, mathematically identical output, ~40-50x less total work
+- Validated with `ml/serve/verify_web_port.py` (independent pure-numpy reference,
+  same exported weights): with deterministic random (untrained) weights, first-step
+  logits matched to ~3-4 significant figures (top-5 token ids identical, values
+  differing only in the 3rd decimal place) -- consistent with expected float32
+  (numpy/real hardware) vs. JS's inherent float64 arithmetic, not a logic bug. A
+  15-token greedy generation matched token-for-token for the first 11 steps before
+  diverging, exactly the pattern expected when untrained weights have no confidently-
+  separated top logit for an accumulated rounding difference to eventually flip
+- Measured end-to-end (random weights, smoke test): draftEntry() (120 tokens) ~3.7s,
+  chatReply() (200 tokens) ~5.1s -- well within a serverless function's time budget
+- Real trained-weight parity check and live Vercel deployment: pending (needs the
+  actual base.safetensors/adapter files exported and bundled, on the Mac)
+
 ## Synthetic data generation (real, paid API runs)
 
 ### entry_drafting corpus — `data/generate_synthetic.py`

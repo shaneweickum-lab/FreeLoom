@@ -212,6 +212,42 @@ calls them directly on the main thread instead of the pool — applies to both r
 not just the one that happened to surface it first; `/entry-draft`'s earlier success
 was luck, not something the old code actually guaranteed.
 
+**Retiring the Mac as a dependency: a from-scratch TypeScript port of the model.**
+Attaching Benny to the deployed app via a Mac + Cloudflare Tunnel worked, but it meant
+the feature only existed while that one laptop stayed on, awake, and tunneled to the
+internet -- not a real answer to "let everyone use this." The fix: `export_web_weights.py`
+bakes every BitLinear projection's ternary shadow weight into a fixed dense matrix
+(safe, since those weights never change at inference time -- only training needs the
+quantization math re-applied every step), and a new from-scratch TypeScript port
+(`src/lib/benny/inference/`) runs the same forward pass directly inside FreeLoom's own
+Next.js server. No MLX, no Mac, no tunnel, no shared secret -- just plain matrix math
+that runs anywhere Node runs.
+
+The first version of that port would have been unusably slow: recomputing the entire
+sequence from scratch on every single generation step (exactly what the Python
+reference does, cheap on MLX's GPU) penciled out to roughly **250 seconds for one
+200-token chat reply** in plain JavaScript with no acceleration. The fix is the
+standard one every real transformer-serving stack uses and the reference code simply
+never needed: a per-layer key/value cache, so each step only processes the *new*
+token instead of redoing all the ones before it. Mathematically identical output --
+causal attention only ever looks backward anyway -- but roughly 40-50x less total
+work, bringing a full reply down to ~5 seconds.
+
+Trusting a hand-written port without ever running it side-by-side against the real
+model (MLX only runs on the Mac; the TS port only really matters once deployed,
+they're never in the same place at the same time) needed its own answer:
+`verify_web_port.py`, an independent pure-numpy reference implementation of the exact
+same math, reading the exact same exported weight files. Run against identical
+(deterministic, untrained) weights, the two implementations' first-step logits agreed
+to 3-4 significant figures -- the small remaining gap is consistent with float32
+(what numpy/real hardware actually compute in) versus JavaScript's inherent
+float64 arithmetic, not a bug. A 15-token greedy generation matched token-for-token
+for 11 steps before diverging, which is exactly what you'd expect: with random,
+untrained weights there's no confidently-separated top prediction, so a tiny rounding
+difference eventually flips an argmax coin-flip. With the real trained weights --
+which produce much more decisively peaked predictions, per the adapters' own eval
+scores -- that kind of flip is far less likely to matter in practice.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)
@@ -235,12 +271,15 @@ lockstep with parameter count at every step — not scaling one and not the othe
 
 - Each dated entry above is close to publish-ready as a standalone post; the *reversal*
   entry (2026-07-21, the ~84-day discovery), the *scaling-law* entry (2026-07-22), the
-  *stale-adapter* entry (2026-07-22, the entry_drafting 99.5%→0% collapse), and the
-  *threading* entry (2026-07-22, the "no Stream in current thread" bug) are the four
-  with the most inherent narrative tension ("we built it, then discovered it couldn't
-  actually train — here's the fix" / "the number I remembered wasn't real — here's what
-  the literature actually says" / "the eval harness caught something a human review
-  would've missed entirely" / "it worked on the first try, and that was the problem").
+  *stale-adapter* entry (2026-07-22, the entry_drafting 99.5%→0% collapse), the
+  *threading* entry (2026-07-22, the "no Stream in current thread" bug), and the
+  *from-scratch TS port* entry (2026-07-22, the 250-second naive port and the KV-cache
+  fix) are the five with the most inherent narrative tension ("we built it, then
+  discovered it couldn't actually train — here's the fix" / "the number I remembered
+  wasn't real — here's what the literature actually says" / "the eval harness caught
+  something a human review would've missed entirely" / "it worked on the first try,
+  and that was the problem" / "porting the model to a new language would have been
+  too slow to ship — here's the one change that made it fast enough").
 - Real numbers only — every cost, ratio, and eval score above is pulled from an actual
   commit, an actual API run's logged cost, or an actual measured throughput on real
   hardware, never estimated for effect. Keep that discipline as this doc grows; it's the

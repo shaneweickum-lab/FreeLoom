@@ -1,9 +1,20 @@
-# Serving Benny to the deployed app
+# Serving Benny to the deployed app (legacy: standalone HTTP server)
+
+**This is no longer how the deployed app actually reaches Benny.** FreeLoom now runs
+inference in-process, inside its own Next.js server -- see
+`src/lib/benny/inference/README.md` and `export_web_weights.py` in this directory.
+That approach doesn't need a Mac or a tunnel staying up at all.
+
+This file (and `inference_server.py`) is kept as a standalone way to run/test the
+model over plain HTTP -- useful for manual debugging, or if the in-process path ever
+needs a fallback -- but nothing in `src/` calls out to it anymore.
+
+---
 
 `inference_server.py` is what turns the trained checkpoints in `ml/checkpoints/`
-into something FreeLoom's deployed app (on Vercel) can actually call. MLX only runs
-on Apple Silicon, so this process has to run on the M5 MacBook itself -- there's no
-way around that today (see `ml/README.md`).
+into something reachable over HTTP. MLX only runs on Apple Silicon, so this process
+has to run on the M5 MacBook itself -- there's no way around that today (see
+`ml/README.md`).
 
 Everything in `src/` that would call this (`src/lib/pipeline/slmDraft.ts`,
 `src/lib/benny/chat.ts`) already degrades gracefully when it's not reachable --
