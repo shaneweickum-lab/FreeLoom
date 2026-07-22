@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, IBM_Plex_Mono, Inter } from "next/font/google";
+import { APP_URL } from "@/lib/appUrl";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,9 +21,29 @@ const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
 });
 
+const TITLE = "FreeLoom — Homeschool Transcript Builder";
+const DESCRIPTION = "Real learning, formally recorded.";
+
 export const metadata: Metadata = {
-  title: "FreeLoom — Homeschool Transcript Builder",
-  description: "Real learning, formally recorded.",
+  // Required to resolve the file-convention opengraph-image/icon routes
+  // (see opengraph-image.tsx) into absolute URLs for og:image/twitter:image
+  // -- without this, link previews (iMessage, Slack, X, Safari/Arc hover
+  // previews) have nothing to show.
+  metadataBase: new URL(APP_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    siteName: "FreeLoom",
+    url: APP_URL,
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
