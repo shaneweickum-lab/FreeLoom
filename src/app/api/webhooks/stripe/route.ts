@@ -65,9 +65,12 @@ export async function POST(req: NextRequest) {
         });
         break;
       }
-      const { error } = await adminClient
-        .from("school_profiles")
-        .upsert({ user_id: userId, subscription_tier: "free", subscription_status: "canceled" });
+      const { error } = await adminClient.from("school_profiles").upsert({
+        user_id: userId,
+        subscription_tier: "free",
+        subscription_status: "canceled",
+        cancel_at_period_end: false,
+      });
       if (error) console.error("Failed to reset school_profiles to free on cancellation:", error);
       break;
     }
@@ -137,6 +140,7 @@ async function syncSubscription(
     subscription_status: subscription.status,
     billing_interval: mapped?.interval ?? null,
     current_period_end: item ? new Date(item.current_period_end * 1000).toISOString() : null,
+    cancel_at_period_end: subscription.cancel_at_period_end,
     updated_at: new Date().toISOString(),
   });
   if (error) console.error("Failed to sync school_profiles from Stripe subscription:", error);

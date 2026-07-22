@@ -78,6 +78,12 @@ export type SchoolProfile = {
   stripe_subscription_id: string | null;
   billing_interval: "month" | "quarter" | "year" | null;
   current_period_end: string | null;
+  /** True once the parent has canceled through the Stripe Customer Portal
+   * but the current paid period hasn't ended yet -- Stripe keeps
+   * subscription_status "active" (so tier gates stay unlocked) until the
+   * period actually ends. Only drives the "ends on {current_period_end}"
+   * notice in BillingTab.tsx; effective tier is unaffected by this field. */
+  cancel_at_period_end: boolean;
   /** One-time migration backfill: existing accounts get temporary Premium
    * access through this timestamp regardless of subscription_tier, so
    * nobody's real usage breaks the moment tiers went live. Null for any
