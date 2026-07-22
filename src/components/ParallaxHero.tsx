@@ -133,7 +133,6 @@ export default function ParallaxHero() {
             See how it works
           </a>
         </div>
-        <p className="text-xs text-muted">No credit card required — just a parent account and two minutes.</p>
       </section>
     </>
   );
