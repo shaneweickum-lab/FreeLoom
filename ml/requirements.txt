@@ -18,3 +18,9 @@ anthropic>=0.40
 # Requires real network access to huggingface.co -- not needed for
 # anything else in this directory.
 datasets>=2.19
+
+# Only needed to run ml/serve/inference_server.py -- the HTTP server that
+# src/lib/pipeline/slmDraft.ts (SLM_ENTRY_DRAFTING_URL) and
+# src/lib/benny/chat.ts (SLM_CHAT_URL) call out to.
+fastapi>=0.115
+uvicorn>=0.30

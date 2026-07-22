@@ -204,10 +204,12 @@ python3 -m pytest model/test_bitlinear.py eval/test_validate_output.py eval/test
 
 ## Where this plugs in
 
-Nothing in `src/` calls into `ml/` yet (no serving endpoint exists -- MLX only runs on
-Apple Silicon, and this app is deployed to Vercel/Node). Two integration points are
-already fully wired on the TS side, feature-flagged and inert until a real endpoint
-exists to point at:
+`ml/serve/inference_server.py` is the serving endpoint (see `ml/serve/README.md` for
+running it and exposing it to the deployed app via a tunnel) -- MLX only runs on
+Apple Silicon, and this app is deployed to Vercel/Node, so this process runs on the
+M5 MacBook itself and gets reached over the network. Two integration points are
+wired on the TS side, feature-flagged and inert until `SLM_ENTRY_DRAFTING_URL`/
+`SLM_CHAT_URL` actually point at a running instance of it:
 
 - **`entry_drafting`** → Stage 4 fallback in `src/lib/pipeline/slmDraft.ts`, gated
   behind `SLM_ENTRY_DRAFTING_URL` — never overrides a confident Stage 1-3 result, never
