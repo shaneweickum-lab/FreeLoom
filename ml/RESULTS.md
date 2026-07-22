@@ -130,6 +130,34 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
   kb_authoring entry above) and isn't a reliable description of what actually happened
   here -- go by the epoch-by-epoch numbers above, not that message.
 
+## Serving (real, live-traffic runs)
+
+### inference_server.py attached to deployed FreeLoom — 2026-07-22
+- Config: `ml/serve/inference_server.py` (FastAPI/uvicorn) on the M5 MacBook, both
+  `entry_drafting` and `platform_help` adapters loaded against the current base;
+  exposed via a Cloudflare Tunnel quick-tunnel; Vercel env vars
+  (`SLM_ENTRY_DRAFTING_URL`, `SLM_CHAT_URL`, `SLM_SHARED_SECRET`) pointed at it
+- Result: `POST /entry-draft` confirmed working end-to-end on the first real attempt --
+  a genuine word dump ("Spent an afternoon learning to solder a broken guitar pedal
+  circuit board.") produced a correctly-parsed, correctly-displayed draft (Music /
+  Applied Music Studies / 0.10cr) in the Learning Log UI. `POST /chat` failed on every
+  attempt with a generic client-side "having trouble" reply.
+- Bug found: `RuntimeError: There is no Stream(cpu, 1) in current thread` on the
+  `/chat` route only. Root cause -- both routes were plain `def` handlers, which
+  FastAPI/Starlette offloads to a worker-thread pool (`run_in_threadpool`) rather than
+  running on the main thread; MLX's array/stream context is thread-local and is only
+  reliably set up on the thread the models were loaded on (main, at server startup).
+  `/entry-draft` happened to land on an already-initialized worker thread on its first
+  real test; `/chat`'s `platform_help` model had never run inference on any thread
+  before that request and landed on one MLX had never touched.
+- Fix: changed both `entry_draft` and `chat` route handlers from `def` to `async def`,
+  which makes FastAPI call them directly on the event-loop thread (the same one
+  `Models(...)` was constructed on at startup) instead of offloading to the thread
+  pool -- removes the thread-choice variable entirely rather than working around one
+  specific unlucky thread pick.
+- Notes: `/entry-draft`'s earlier success was luck, not a guarantee -- this fix applies
+  to both routes, not just the one that happened to surface the bug first.
+
 ## Synthetic data generation (real, paid API runs)
 
 ### entry_drafting corpus — `data/generate_synthetic.py`

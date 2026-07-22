@@ -191,6 +191,27 @@ base/adapter pairing causing the total failure. All three adapters now have a re
 current-base-paired result: `entry_drafting` 100%, `kb_authoring` 100% (n=38),
 `platform_help` un-scored (qualitative eval by design — see its own entry above).
 
+**Benny actually attached to the deployed app, and a real threading bug caught in the
+process.** Built `ml/serve/inference_server.py` (FastAPI/uvicorn) to serve both trained
+adapters over HTTP, exposed it from the M5 MacBook to the internet with a Cloudflare
+Tunnel, and pointed FreeLoom's Vercel deployment at it with a shared-secret header as
+the only thing standing between the tunnel URL and anyone who found it. `/entry-draft`
+worked end-to-end on the very first real attempt — a genuinely obscure word dump about
+soldering a guitar pedal circuit board came back as a correctly-parsed Music course
+draft, pre-filled right in the Learning Log UI. `/chat` failed on every attempt.
+
+The failure turned out to be a real, worth-knowing MLX/FastAPI interaction rather than
+anything wrong with the model or the tunnel: FastAPI runs plain `def` route handlers on
+a background thread pool by default, but MLX's array/stream context is thread-local and
+only reliably initialized on the thread the models were actually loaded on. `/entry-draft`
+happened to land on a worker thread MLX had already touched; `/chat`'s `platform_help`
+model had never run a single inference before that request and drew a thread MLX had
+never seen, and crashed with `RuntimeError: There is no Stream(cpu, 1) in current
+thread`. The fix — making both route handlers `async def` instead of `def` so FastAPI
+calls them directly on the main thread instead of the pool — applies to both routes,
+not just the one that happened to surface it first; `/entry-draft`'s earlier success
+was luck, not something the old code actually guaranteed.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)
@@ -213,12 +234,13 @@ lockstep with parameter count at every step — not scaling one and not the othe
 ## Notes for turning this into posts
 
 - Each dated entry above is close to publish-ready as a standalone post; the *reversal*
-  entry (2026-07-21, the ~84-day discovery), the *scaling-law* entry (2026-07-22), and
-  the *stale-adapter* entry (2026-07-22, the entry_drafting 99.5%→0% collapse) are the
-  three with the most inherent narrative tension ("we built it, then discovered it
-  couldn't actually train — here's the fix" / "the number I remembered wasn't real —
-  here's what the literature actually says" / "the eval harness caught something a
-  human review would've missed entirely").
+  entry (2026-07-21, the ~84-day discovery), the *scaling-law* entry (2026-07-22), the
+  *stale-adapter* entry (2026-07-22, the entry_drafting 99.5%→0% collapse), and the
+  *threading* entry (2026-07-22, the "no Stream in current thread" bug) are the four
+  with the most inherent narrative tension ("we built it, then discovered it couldn't
+  actually train — here's the fix" / "the number I remembered wasn't real — here's what
+  the literature actually says" / "the eval harness caught something a human review
+  would've missed entirely" / "it worked on the first try, and that was the problem").
 - Real numbers only — every cost, ratio, and eval score above is pulled from an actual
   commit, an actual API run's logged cost, or an actual measured throughput on real
   hardware, never estimated for effect. Keep that discipline as this doc grows; it's the
