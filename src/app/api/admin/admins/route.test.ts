@@ -6,7 +6,7 @@ import type { NextRequest } from "next/server";
  * awaits after .maybeSingle(), a bare .select(), or a bare .eq()/.insert(). */
 function chain(result: unknown) {
   const builder: Record<string, unknown> = {};
-  for (const method of ["select", "eq", "insert", "delete"]) {
+  for (const method of ["select", "eq", "neq", "insert", "delete"]) {
     builder[method] = vi.fn(() => builder);
   }
   builder.maybeSingle = vi.fn(async () => result);
@@ -17,11 +17,20 @@ function chain(result: unknown) {
 
 let getUserResult: { data: { user: { id: string; email: string } | null } };
 let fromQueue: unknown[];
+let fromCalls: { table: string; method: string; args: unknown[] }[];
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
     auth: { getUser: vi.fn(async () => getUserResult) },
-    from: vi.fn(() => chain(fromQueue.shift() ?? { data: null, error: null })),
+    from: vi.fn((table: string) => {
+      const c = chain(fromQueue.shift() ?? { data: null, error: null });
+      const original = c.insert as (...a: unknown[]) => unknown;
+      c.insert = (...args: unknown[]) => {
+        fromCalls.push({ table, method: "insert", args });
+        return original(...args);
+      };
+      return c;
+    }),
   })),
 }));
 
@@ -46,6 +55,7 @@ describe("POST /api/admin/admins", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: ADMIN } };
     fromQueue = [];
+    fromCalls = [];
   });
 
   it("rejects when signed out", async () => {
@@ -87,6 +97,42 @@ describe("POST /api/admin/admins", () => {
 
   it("treats an already-admin unique violation as success", async () => {
     fromQueue = [{ data: { user_id: ADMIN.id } }, { error: { code: "23505" } }];
+    listUsersMock.mockResolvedValue({
+      data: { users: [{ id: "user-3", email: "parent@example.com" }] },
+      error: null,
+    });
+    const res = await POST(makeRequest({ email: "parent@example.com" }));
+    expect(res.status).toBe(200);
+    expect(fromCalls.find((c) => c.table === "notifications")).toBeUndefined();
+  });
+
+  it("notifies every other existing admin when a new one is granted", async () => {
+    fromQueue = [
+      { data: { user_id: ADMIN.id } }, // requireAdmin lookup
+      { error: null }, // admin_users insert
+      { data: [{ user_id: "admin-2" }, { user_id: "admin-3" }], error: null }, // other admins lookup
+      { error: null }, // notifications insert
+    ];
+    listUsersMock.mockResolvedValue({
+      data: { users: [{ id: "user-3", email: "parent@example.com" }] },
+      error: null,
+    });
+    const res = await POST(makeRequest({ email: "parent@example.com" }));
+    expect(res.status).toBe(200);
+    const notifyCall = fromCalls.find((c) => c.table === "notifications");
+    expect(notifyCall?.args[0]).toEqual([
+      expect.objectContaining({ user_id: "admin-2", type: "announcement" }),
+      expect.objectContaining({ user_id: "admin-3", type: "announcement" }),
+    ]);
+  });
+
+  it("doesn't fail the request if notifying other admins errors", async () => {
+    fromQueue = [
+      { data: { user_id: ADMIN.id } },
+      { error: null },
+      { data: [{ user_id: "admin-2" }], error: null },
+      { error: { message: "boom" } },
+    ];
     listUsersMock.mockResolvedValue({
       data: { users: [{ id: "user-3", email: "parent@example.com" }] },
       error: null,

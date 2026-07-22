@@ -40,6 +40,17 @@ export function useNotifications(limit: number) {
   }, [load]);
 
   useEffect(() => {
+    // Backstop for the realtime subscription below -- a dropped websocket
+    // (a flaky connection, a background tab the browser throttled, a
+    // server-side realtime hiccup) currently has no visible indication at
+    // all, so a stale notification list would just look like "nothing
+    // new" forever. A quiet periodic re-fetch bounds staleness to this
+    // interval regardless of the socket's actual state.
+    const interval = setInterval(load, 45_000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  useEffect(() => {
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;

@@ -15,16 +15,33 @@ vi.mock("resend", () => ({
   },
 }));
 
+const isRateLimitedMock = vi.fn(() => false);
+vi.mock("@/lib/rateLimit", () => ({
+  isRateLimited: () => isRateLimitedMock(),
+  getClientIp: () => "1.2.3.4",
+}));
+
 import { POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
-  return { json: async () => body } as unknown as NextRequest;
+  return {
+    json: async () => body,
+    headers: { get: () => null },
+  } as unknown as NextRequest;
 }
 
 describe("POST /api/waitlist", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.RESEND_API_KEY;
+    isRateLimitedMock.mockReturnValue(false);
+  });
+
+  it("429s once the rate limit is hit", async () => {
+    isRateLimitedMock.mockReturnValue(true);
+    const res = await POST(makeRequest({ email: "parent@example.com" }));
+    expect(res.status).toBe(429);
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid email without touching the database", async () => {

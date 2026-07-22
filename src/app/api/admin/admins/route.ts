@@ -41,6 +41,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't add that admin. Please try again." }, { status: 500 });
   }
 
+  // Granting admin access to an account is significant enough that every
+  // other admin should find out, not just whoever clicked the button --
+  // otherwise a compromised or careless admin action could go unnoticed by
+  // the rest of the team indefinitely. Best-effort: a failed notification
+  // must not undo the admin grant that already succeeded above.
+  if (!insertError) {
+    const { data: otherAdmins } = await supabase
+      .from("admin_users")
+      .select("user_id")
+      .neq("user_id", user.id)
+      .neq("user_id", target.id);
+    if (otherAdmins && otherAdmins.length > 0) {
+      const { error: notifyError } = await supabase.from("notifications").insert(
+        otherAdmins.map((admin) => ({
+          user_id: admin.user_id,
+          type: "announcement" as const,
+          title: "A new admin was added",
+          body: `${target.email} was granted admin access.`,
+          link_path: "/admin",
+        }))
+      );
+      if (notifyError) console.error("Failed to notify other admins of a new admin grant:", notifyError);
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
 

@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdFor, type BillingTier, type BillingInterval } from "@/lib/stripe";
 import { APP_URL } from "@/lib/appUrl";
+import { isRateLimited } from "@/lib/rateLimit";
 
 const VALID_TIERS: BillingTier[] = ["pro", "premium"];
 const VALID_INTERVALS: BillingInterval[] = ["month", "quarter", "year"];
@@ -23,6 +24,14 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // Signed in, so a random script can't hit this at scale the way it could
+  // an anonymous route -- but it still calls out to Stripe multiple times
+  // per request, so a buggy client-side retry loop or a compromised
+  // session shouldn't be able to hammer it unbounded.
+  if (isRateLimited(`checkout:${user.id}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Too many requests -- try again in a minute." }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);
@@ -110,6 +119,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "You already have an active subscription -- use Switch plan or Manage billing instead." },
         { status: 400 }
+      );
+    }
+
+    // Closes the double-tab race the subscription check above can't: two
+    // tabs can both pass hasBlockingSubscription (neither has completed
+    // payment yet, so Stripe has no Subscription object for either one) and
+    // both go on to create a session, ending in two live subscriptions if
+    // both get paid. Checked live against Stripe's own open Checkout
+    // Sessions for this customer, same "authoritative, not just our cached
+    // state" approach as the subscription check above.
+    const openSessions = await stripe.checkout.sessions.list({ customer: customerId, status: "open", limit: 1 });
+    if (openSessions.data.length > 0) {
+      return NextResponse.json(
+        { error: "A checkout is already in progress -- finish or close that tab, then try again." },
+        { status: 409 }
       );
     }
 

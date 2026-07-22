@@ -67,6 +67,14 @@ export default function MessageThread({ threadId, onCleared }: { threadId: strin
   }, [load]);
 
   useEffect(() => {
+    // Same reasoning as useNotifications.ts -- a dropped websocket here has
+    // no visible sign at all, and would just look like "the other person
+    // hasn't replied yet." A quiet periodic re-fetch bounds staleness.
+    const interval = setInterval(load, 45_000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;

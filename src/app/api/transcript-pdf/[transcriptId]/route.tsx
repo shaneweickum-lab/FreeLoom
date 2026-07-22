@@ -2,11 +2,20 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { TranscriptDocument } from "@/lib/TranscriptDocument";
+import { getClientIp, isRateLimited } from "@/lib/rateLimit";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ transcriptId: string }> }
 ) {
+  // This route is fully public (the whole point of a share link) and does
+  // real work per request (react-pdf rendering) -- with no auth to gate it,
+  // it's an easy target to hammer for free compute or to scrape.
+  const ip = getClientIp(req);
+  if (isRateLimited(`transcript-pdf:${ip}`, 20, 60_000)) {
+    return NextResponse.json({ error: "Too many requests -- try again in a minute." }, { status: 429 });
+  }
+
   const { transcriptId } = await params;
   const supabase = await createClient();
 
@@ -20,6 +29,14 @@ export async function GET(
   }
   if (!data) {
     return NextResponse.json({ error: "Transcript not found" }, { status: 404 });
+  }
+
+  // Same revoke check as the /share page -- this endpoint is reachable
+  // directly (not just by clicking through the share page first), so a
+  // revoked link must be blocked here independently, not only in the UI.
+  const { data: revoked } = await supabase.rpc("is_transcript_share_revoked", { p_transcript_id: transcriptId });
+  if (revoked) {
+    return NextResponse.json({ error: "This share link has been revoked." }, { status: 404 });
   }
 
   const shared = data as {

@@ -27,6 +27,7 @@ const createCustomer = vi.fn(async () => ({ id: "cus_new" }));
 const retrieveCustomer = vi.fn(async () => ({ deleted: false }));
 const createSession = vi.fn(async () => ({ url: "https://checkout.stripe.com/session123" }));
 const listSubscriptions = vi.fn(async (): Promise<{ data: { id: string; status: string }[] }> => ({ data: [] }));
+const listCheckoutSessions = vi.fn(async (): Promise<{ data: { id: string }[] }> => ({ data: [] }));
 
 vi.mock("@/lib/stripe", () => ({
   getStripe: vi.fn(() => ({
@@ -34,12 +35,22 @@ vi.mock("@/lib/stripe", () => ({
       create: (...args: Parameters<typeof createCustomer>) => createCustomer(...args),
       retrieve: (...args: Parameters<typeof retrieveCustomer>) => retrieveCustomer(...args),
     },
-    checkout: { sessions: { create: (...args: Parameters<typeof createSession>) => createSession(...args) } },
+    checkout: {
+      sessions: {
+        create: (...args: Parameters<typeof createSession>) => createSession(...args),
+        list: (...args: Parameters<typeof listCheckoutSessions>) => listCheckoutSessions(...args),
+      },
+    },
     subscriptions: { list: (...args: Parameters<typeof listSubscriptions>) => listSubscriptions(...args) },
   })),
   priceIdFor: vi.fn((tier: string, interval: string) =>
     tier === "pro" && interval === "month" ? "price_pro_month" : undefined
   ),
+}));
+
+const isRateLimitedMock = vi.fn(() => false);
+vi.mock("@/lib/rateLimit", () => ({
+  isRateLimited: () => isRateLimitedMock(),
 }));
 
 import { POST } from "./route";
@@ -55,12 +66,20 @@ describe("POST /api/billing/checkout", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: USER } };
     fromQueue = [];
+    isRateLimitedMock.mockReturnValue(false);
   });
 
   it("rejects when signed out", async () => {
     getUserResult = { data: { user: null } };
     const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
     expect(res.status).toBe(401);
+  });
+
+  it("429s once the rate limit is hit", async () => {
+    isRateLimitedMock.mockReturnValue(true);
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(429);
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid tier/interval", async () => {
@@ -161,6 +180,14 @@ describe("POST /api/billing/checkout", () => {
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({ success_url: expect.stringContaining("/settings?billing=success") })
     );
+  });
+
+  it("409s instead of creating a second session when one is already open for this customer", async () => {
+    fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
+    listCheckoutSessions.mockResolvedValueOnce({ data: [{ id: "cs_already_open" }] });
+    const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
+    expect(res.status).toBe(409);
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it("500s cleanly instead of throwing when Stripe itself errors mid-checkout", async () => {
