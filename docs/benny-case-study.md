@@ -143,6 +143,17 @@ this one hadn't plateaued yet by the last epoch, meaning 1.2486 is probably not 
 adapter's real ceiling. Worth a re-run at more epochs before treating that number as
 final. `platform_help` fine-tuning is running next.
 
+**`platform_help` adapter fine-tuned** — same base checkpoint, same day. A visibly
+different curve shape than `kb_authoring`: train_loss dropped smoothly the entire run
+(1.4865 → 0.2249), but val_loss fell sharply only through epoch 5 (0.5988 → 0.3525),
+then plateaued with small noise (a slight uptick at epochs 6 and 9) before landing at
+its lowest point, 0.3331, at epoch 10. Train loss still falling while val loss holds
+roughly flat is the early signature of overfitting starting to set in, even though val
+hasn't turned upward in a clear trend yet — worth watching if this adapter gets
+retrained with more data or more epochs, unlike `kb_authoring`'s run, which was still
+cleanly improving. All three adapters now have a real fine-tuning result against the
+actual pretrained base — see `ml/RESULTS.md` for the full numbers on each.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)

@@ -67,9 +67,22 @@ completed run, it doesn't belong in this file yet.
   at its real optimum — worth a re-run with more epochs (e.g. `--epochs 20`) to see
   where it actually levels off, before treating 1.2486 as this adapter's ceiling.
 
-### platform_help — pending
-No real fine-tuning run yet — synthetic training data exists (see below) but the
-adapter hasn't been trained on it.
+### platform_help — 2026-07-22
+- Config: real pretrained base (`checkpoints/base.safetensors`) + LoRA (rank 8, alpha
+  16), M5 MacBook, default 10 epochs/batch-size 8/lr 1e-3
+- Data: 1,246 train / 138 val (hand-authored seed + paraphrased variants) examples
+- Result: train_loss decreased smoothly and monotonically the whole run (1.4865 →
+  0.2249). val_loss dropped sharply through epoch 5 (0.5988 → 0.3525), then plateaued
+  with small noise (upticking slightly at epochs 6 and 9) before landing at its lowest
+  point, 0.3331, at epoch 10 -- a different shape than kb_authoring's clean monotonic
+  curve: this one looks converged/plateaued rather than still clearly improving, with
+  train_loss continuing to drop while val holds roughly flat being the early signature
+  of overfitting starting, even though val hasn't turned upward in a clear trend yet.
+- Wall-clock: ~55s/epoch, ~550s total
+- Notes: saved checkpoint's own log line said "later epochs overfit and were
+  discarded," which was printed by the pre-fix version of train_adapter.py (see the
+  kb_authoring entry above) and isn't a reliable description of what actually happened
+  here -- go by the epoch-by-epoch numbers above, not that message.
 
 ## Synthetic data generation (real, paid API runs)
 
