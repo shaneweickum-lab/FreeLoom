@@ -39,6 +39,33 @@ completed run, it doesn't belong in this file yet.
 
 ## Adapter fine-tuning
 
+### entry_drafting — eval regression, 2026-07-22
+Re-ran `eval/run_eval.py` against the *current* `checkpoints/base.safetensors` (the
+real pretrained base that finished 2026-07-22) using the existing
+`entry_drafting_adapter.safetensors` from 2026-07-21's fine-tuning run below. Result:
+**0/207 (0.0%) format-valid** — every single generation failed to parse, a total
+collapse from the 99.5% originally measured.
+
+Diagnosis (not yet independently confirmed by a controlled test, but the only
+explanation consistent with `kb_authoring`/`platform_help` scoring normally against
+this same current base): `entry_drafting`'s adapter was fine-tuned on 2026-07-21
+against *whatever* `base.safetensors` existed at that time — necessarily a different,
+earlier checkpoint than the one saved by 2026-07-22's full pretraining run, since that
+run overwrites the same filename. A LoRA adapter's low-rank matrices are fit as a
+correction on top of one specific set of base weights; swapping in a same-shaped but
+differently-trained base underneath it doesn't error (no shape mismatch — architecture
+is unchanged) but produces the adapter composing with weights it was never actually
+fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
+*today*, after the current base finished, which is why they don't show this problem.
+- **Action needed**: re-run `train_adapter.py --task entry_drafting --base-checkpoint
+  ../checkpoints/base.safetensors` to retrain fresh against the current base, then
+  re-eval, before trusting any entry_drafting number going forward.
+- **Lesson for the process**: a LoRA checkpoint is only valid paired with the exact
+  base checkpoint it was trained against — the two need to be versioned/tracked
+  together, not treated as independently reusable artifacts. Worth enforcing later
+  (e.g. embedding a hash of the base checkpoint into the adapter's saved file), not
+  just remembered.
+
 ### entry_drafting — 2026-07-21
 - Config: ~13.7M-param frozen base + LoRA (rank 8, alpha 16), M5 MacBook
 - Data: 2,060 synthetic (activity → course_title/subject_area/credit_value/rationale)
@@ -66,6 +93,9 @@ completed run, it doesn't belong in this file yet.
 - Notes: since val_loss hadn't plateaued, this run is likely undertrained rather than
   at its real optimum — worth a re-run with more epochs (e.g. `--epochs 20`) to see
   where it actually levels off, before treating 1.2486 as this adapter's ceiling.
+- Eval: **38/38 (100%) format-valid** via `eval/run_eval_kb_authoring.py` against this
+  same adapter/base pairing (trained and evaluated the same day, unlike entry_drafting
+  above) — small sample (n=38) so treat as encouraging, not conclusive.
 
 ### platform_help — 2026-07-22
 - Config: real pretrained base (`checkpoints/base.safetensors`) + LoRA (rank 8, alpha
