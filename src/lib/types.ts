@@ -17,7 +17,12 @@ export type Student = {
 
 export type LayoutStyle = "formal" | "casual";
 
-export type SchoolingType = "homeschooling" | "unschooling" | "wildschooling";
+export type SchoolingType =
+  | "homeschooling"
+  | "unschooling"
+  | "wildschooling"
+  | "alternative_schooling"
+  | "private_schooling";
 
 export type SchoolProfile = {
   user_id: string;

@@ -8,6 +8,8 @@ const AUDIENCE_OPTIONS = [
   { value: "homeschooling", label: "Homeschooling families" },
   { value: "unschooling", label: "Unschooling families" },
   { value: "wildschooling", label: "Wildschooling families" },
+  { value: "alternative_schooling", label: "Alternative schooling families" },
+  { value: "private_schooling", label: "Private schooling families" },
 ] as const;
 
 export default function AnnouncementComposer() {
