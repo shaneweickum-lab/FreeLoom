@@ -209,6 +209,12 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
   (kept in sync); deliberately **not** applied to `run_eval.py`/
   `run_eval_platform_help.py`, since those need to keep measuring raw greedy-decoding
   behavior unchanged for eval numbers to stay comparable across retrains.
+- Confirmed live in the deployed app after both fixes: the same repetition-prone
+  question now stops at 2 repeated tokens ("EveryEvery") instead of running to
+  `max_new_tokens`, and a second out-of-distribution question got the honest "I'm not
+  sure how to answer that one yet" fallback instead of broken output. Both Benny chat
+  and Stage 4 entry-drafting now run entirely inside the Vercel deployment -- no Mac,
+  tunnel, or shared secret involved at request time.
 
 ## Synthetic data generation (real, paid API runs)
 
