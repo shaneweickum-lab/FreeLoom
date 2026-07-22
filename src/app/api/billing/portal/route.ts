@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
-
-const APP_URL = "https://freeloom-bice.vercel.app";
+import { APP_URL } from "@/lib/appUrl";
 
 export async function POST() {
   const supabase = await createClient();

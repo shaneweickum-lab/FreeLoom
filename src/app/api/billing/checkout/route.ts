@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdFor, type BillingTier, type BillingInterval } from "@/lib/stripe";
-
-const APP_URL = "https://freeloom-bice.vercel.app";
+import { APP_URL } from "@/lib/appUrl";
 
 const VALID_TIERS: BillingTier[] = ["pro", "premium"];
 const VALID_INTERVALS: BillingInterval[] = ["month", "quarter", "year"];
