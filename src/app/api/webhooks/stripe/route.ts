@@ -140,7 +140,11 @@ async function syncSubscription(
     subscription_status: subscription.status,
     billing_interval: mapped?.interval ?? null,
     current_period_end: item ? new Date(item.current_period_end * 1000).toISOString() : null,
-    cancel_at_period_end: subscription.cancel_at_period_end,
+    // Stripe has two independent ways to schedule a future cancellation:
+    // the classic cancel_at_period_end boolean, and a cancel_at timestamp
+    // (what the Customer Portal's default cancel flow actually sets, at
+    // least on this API version) -- either one means "this is ending."
+    cancel_at_period_end: subscription.cancel_at_period_end || !!subscription.cancel_at,
     updated_at: new Date().toISOString(),
   });
   if (error) console.error("Failed to sync school_profiles from Stripe subscription:", error);
