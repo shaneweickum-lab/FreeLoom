@@ -209,6 +209,20 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
   (kept in sync); deliberately **not** applied to `run_eval.py`/
   `run_eval_platform_help.py`, since those need to keep measuring raw greedy-decoding
   behavior unchanged for eval numbers to stay comparable across retrains.
+- Confirmed live in the deployed app after both fixes: the same repetition-prone
+  question now stops at 2 repeated tokens ("EveryEvery") instead of running to
+  `max_new_tokens`, and a second out-of-distribution question got the honest "I'm not
+  sure how to answer that one yet" fallback instead of broken output. Both Benny chat
+  and Stage 4 entry-drafting now run entirely inside the Vercel deployment -- no Mac,
+  tunnel, or shared secret involved at request time.
+- A third, smaller issue surfaced immediately after: a reply rendered as a lone
+  replacement-character glyph (`�`) followed by stray punctuation. Root cause: the
+  byte-level BPE decoder (`@huggingface/tokenizers`'s `TextDecoder("utf-8", {fatal:
+  false})`) substitutes U+FFFD for any incomplete/invalid UTF-8 byte sequence --
+  generation stopping (the new repetition guard, or just hitting `max_new_tokens`)
+  partway through a multi-byte character's constituent tokens produces exactly that.
+  Never legitimate model output, so `model.ts`/`inference_server.py` now strip any
+  `�` from the final decoded text before returning it.
 
 ## Synthetic data generation (real, paid API runs)
 
