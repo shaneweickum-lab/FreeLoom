@@ -18,6 +18,12 @@ running prepare_dataset.py):
     python3 train_base.py --tiny                 # pipeline sanity check
     python3 train_base.py                        # full-config run
     python3 train_base.py --resume base_ckpt.safetensors
+
+A full run saves 5 checkpoints evenly spaced across the whole run by default
+(--num-checkpoints), not just one at the end -- a multi-day single process
+with no intermediate save loses everything on a crash/interruption. Each
+mid-run save also overwrites the canonical base.safetensors, so --resume
+always has a recent checkpoint to load.
 """
 
 import argparse
@@ -109,11 +115,18 @@ def main():
                               "repeated 4x when the corpus was assembled), so one epoch over it hits "
                               "that budget exactly; each additional epoch here multiplies the effective "
                               "token count on top of that, not for free")
-    parser.add_argument("--batch-size", type=int, default=64,
-                         help="was 8 -- a very conservative default for a 24GB-unified-memory Mac and "
-                              "an ~81M-param model. Bigger batches don't reduce total FLOPs, but they "
-                              "trade many small matmuls for fewer, bigger ones, which usually improves "
-                              "real MLX/Metal throughput. Lower this if you hit a memory error.")
+    parser.add_argument("--batch-size", type=int, default=16,
+                         help="was 64 at v0.6's 512/7/8 (~26.1M param) config, real M5 runs measured "
+                              "only ~829 tok/s -- a swap-triggering memory bottleneck confirmed by a "
+                              "clean single-variable test (identical model, only batch size changed): "
+                              "batch=64 gave ~829 tok/s, batch=16 gave ~15,200 tok/s on the same "
+                              "hardware and same full corpus (ml/RESULTS.md, 2026-07-23). Bigger "
+                              "batches don't reduce total FLOPs, and trade many small matmuls for "
+                              "fewer, bigger ones -- normally a good trade for MLX/Metal throughput, "
+                              "but only once the model's total activation/gradient memory at that "
+                              "batch size actually fits without swapping. Raise this if you have "
+                              "memory headroom to spare (more unified memory, or a smaller model); "
+                              "lower it further if you still hit a memory error.")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--eval-every", type=int, default=1)
     parser.add_argument("--resume", type=str, default=None)
@@ -139,6 +152,17 @@ def main():
     parser.add_argument("--full-corpus", action="store_true",
                          help="skip the --target-tokens cap and train on every packed sequence "
                               "regardless of cfg's token budget")
+    parser.add_argument("--num-checkpoints", type=int, default=5,
+                         help="save this many checkpoints evenly spaced across the whole planned run "
+                              "(in addition to the final save at the end), not just one at the very "
+                              "end -- v0.6's full run is projected at ~1.9 days in one process "
+                              "(docs/slm-strategy.md Section 5), and a crash/interruption with no "
+                              "intermediate save loses all of it. Each is saved as "
+                              "base_checkpoint_<N>.safetensors (N = total batches done so far) AND "
+                              "overwrites the canonical base.safetensors/base_tiny.safetensors path, "
+                              "so --resume always has a recent one to load regardless of which "
+                              "numbered file you'd reference. Set to 0 to disable and only save at "
+                              "the end, matching the old behavior.")
     args = parser.parse_args()
     if args.epochs is None:
         args.epochs = 20 if args.tiny else 1
@@ -218,6 +242,17 @@ def main():
 
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
     ckpt_name = "base_tiny.safetensors" if args.tiny else "base.safetensors"
+    ckpt_prefix = "tiny_checkpoint" if args.tiny else "base_checkpoint"
+
+    def save_checkpoint(batches_done_total: int, final: bool = False):
+        canonical_path = CKPT_DIR / ckpt_name
+        model.save_weights(str(canonical_path))
+        if final:
+            print(f"Saved base checkpoint to {canonical_path}")
+        else:
+            numbered_path = CKPT_DIR / f"{ckpt_prefix}_{batches_done_total}.safetensors"
+            model.save_weights(str(numbered_path))
+            print(f"  ...checkpoint saved: {numbered_path} (also updated {canonical_path})")
 
     print(f"Training {'TINY' if args.tiny else 'BASE'} config: "
           f"d_model={cfg.d_model} n_layers={cfg.n_layers} vocab={cfg.vocab_size}")
@@ -228,6 +263,9 @@ def main():
     batches_per_epoch = max(0, (len(train_sequences) - args.batch_size) // args.batch_size + 1) \
         if len(train_sequences) >= args.batch_size else 0
     total_batches_planned = batches_per_epoch * args.epochs
+    # Evenly spaced intervals across the whole planned run -- 0 disables
+    # mid-run checkpointing (matching the old behavior of one save at the end).
+    checkpoint_interval = max(1, total_batches_planned // args.num_checkpoints) if args.num_checkpoints > 0 else 0
     # Target-side tokens per batch (inputs/targets are each seq_len-1 long,
     # since one position is shifted off for next-token prediction) -- the
     # standard "tokens/sec" convention for LM training throughput.
@@ -248,6 +286,10 @@ def main():
             epoch_losses.append(float(loss))
             batches_done += 1
             total_batches_done += 1
+
+            if checkpoint_interval and total_batches_done % checkpoint_interval == 0 \
+                    and total_batches_done < total_batches_planned:
+                save_checkpoint(total_batches_done)
 
             # A full run can spend many minutes-to-hours per epoch (hundreds
             # of thousands of batches at the base config) with the loop above
@@ -282,9 +324,7 @@ def main():
             msg += f"  val_loss={val_loss:.4f}"
         print(msg)
 
-    save_path = CKPT_DIR / ckpt_name
-    model.save_weights(str(save_path))
-    print(f"Saved base checkpoint to {save_path}")
+    save_checkpoint(total_batches_done, final=True)
 
 
 if __name__ == "__main__":

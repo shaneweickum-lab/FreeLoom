@@ -22,6 +22,44 @@ completed run, it doesn't belong in this file yet.
 
 ## Base model pretraining
 
+### v0.6 sizing attempt #3 — batch size was the real bottleneck, 2026-07-23
+- After the mmap/chunked-shuffle data-loading fix (attempt #2 below) still didn't fully
+  explain the slowdown, real hands-on bisection across many M5 runs (hand-run by the
+  user, one variable changed at a time) mapped out the actual shape of the problem:
+
+  | d_model | n_layers | n_heads | batch_size | params | tok/s |
+  |---|---|---|---|---|---|
+  | 256 | 4 | 16 | 64 | ~5.2M | 27,000 |
+  | 256 | 7 | 8 | 64 | ~7.6M | ~22,500 |
+  | 512 | 3 | 4 | 64 | ~13.5M | 36,000 |
+  | 512 | 5 | 8 | 64 | ~19.8M | 5,600 |
+  | 384 | 6 (original 13.7M) | 6 | 64 | ~13.7M | 20,600 |
+  | 384 | 12 | 6 | 64 | ~24.3M | 1,132 |
+  | 512 | 7 | 8 | 64 | ~26.1M | 829 |
+  | 464 | 9 | 8 | 64 | ~27.0M | 506 |
+  | **384** | **12** | **6** | **16** | **~24.3M** | **11,300** |
+  | 512 | 7 | 8 (mlp_ratio=2) | 16 | ~18.8M | 18,200 |
+  | **512** | **7** | **8** | **16** | **~26.1M** | **15,200** |
+
+  The `d_model=384, n_layers=12` row (batch=64 vs. batch=16, everything else identical)
+  was the decisive single-variable test: same architecture, same head_dim=64, same full
+  corpus -- only batch size changed, and throughput went from 1,132 to 11,300 tok/s (a
+  10x jump). That ruled out d_model width, head_dim alignment, and total layer count as
+  the root cause (all had been suspected in turn across attempts #1-2) -- it was batch
+  size the whole time, confirmed a second time at the actual v0.6 target architecture
+  (512/7/8/mlp_ratio=4): batch=64 -> 829 tok/s, batch=16 -> **15,200 tok/s**, identical
+  hardware, identical full corpus.
+- Mechanism: at this model's total size, `batch_size=64`'s activation/gradient memory
+  (held across all layers simultaneously for backprop) pushes the M5's 24GB unified
+  memory into swap. Smaller models/fewer layers stayed under that threshold at
+  batch=64 (rows above the decisive one), which is why earlier single-config tests
+  looked like an architecture-shape problem rather than a memory one.
+- Fix: `train/train_base.py`'s default `--batch-size` changed from 64 to 16.
+- **Final v0.6 config, confirmed real**: 512 d_model / 7 layers / 8 heads / mlp_ratio=4
+  (head_dim=64, mlp_dim=2048, ~26,116,096 params), batch_size=16, 94 tokens/param
+  budget (~2.45B tokens) -- **~15,200 tok/s measured**, projecting to ~45 hours (~1.9
+  days) for the full epoch. Real training run not yet started.
+
 ### v0.6 sizing attempt #2 — full-corpus memory pressure, 2026-07-23
 - Config: corrected 512/7/8 config (head_dim=64, alignment fix below) actually run on
   the M5 -- `4,322,992 train sequences` (essentially the entire packed corpus, no

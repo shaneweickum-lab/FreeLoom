@@ -212,17 +212,23 @@ split:
   matmul/attention kernels have well-documented fast paths for aligned tile sizes
   (multiples of 32/64) and fall back to much slower generic paths otherwise. **Corrected
   to 512/7/8** (head_dim=64, mlp_dim=2048, all powers of two again) — see Section 3.
-- **v0.6 (512/7/8, ~26.1M params) throughput — projected, not yet measured**: compute
-  scales roughly linearly with parameter count for a dense-transformer-shaped forward
-  pass (this projection assumes the corrected config's alignment actually restores
-  fast-path performance — treat it as a hypothesis the next real run either confirms or
-  refutes, same as the 506 tok/s surprise refuted the first projection), and v0.6 has
-  ~1.91x the 13.7M config's params, so naively scaling the real 20,600 tok/s measurement
-  down projects to **~10,800 tok/s**, or roughly **63 hours (~2.6 days)** for one full
-  epoch over the ~2.45B-token budget (Section 3). Replace with the actual measured
-  throughput in `ml/RESULTS.md` once v0.6 actually trains — and if it's still far below
-  this projection, the alignment diagnosis above was wrong and needs revisiting rather
-  than assumed correct.
+- **The alignment fix alone wasn't enough either**: 512/7/8 on the *full* packed corpus,
+  still at `train_base.py`'s then-default `--batch-size 64`, measured only **~829
+  tok/s** — barely better than the misaligned config, and nowhere near the ~10,800 tok/s
+  a linear projection from the 13.7M config predicted. Real hands-on bisection across
+  many M5 runs (varying d_model, n_layers, and finally batch size, one variable at a
+  time — full log in `ml/RESULTS.md`) traced the actual cause to batch size: at this
+  model's total size, `batch_size=64`'s activation/gradient memory pushes the M5's 24GB
+  unified memory into swap, and *that* swap — not the model's architecture at all — was
+  the real bottleneck the whole time. A clean, single-variable confirmation (identical
+  512/7/8/mlp_ratio=4 architecture, only batch size changed) nailed it down:
+  `batch_size=64` → ~829 tok/s, `batch_size=16` → **~15,200 tok/s**, same hardware, same
+  full corpus. `train_base.py`'s default `--batch-size` is now 16 to match.
+- **v0.6 (512/7/8, ~26.1M params, batch_size=16) — real measured throughput: ~15,200
+  tok/s**, or roughly **45 hours (~1.9 days)** for one full epoch over the ~2.45B-token
+  budget (Section 3). A real number now, not a projection — see `ml/RESULTS.md`,
+  2026-07-23, for the complete bisection log across every architecture and batch-size
+  variant tried along the way.
 - **Validate the pipeline at tiny scale first**: `train/train_base.py --tiny` uses a
   deliberately small model (d_model=128, 2 layers) on a small data subsample (minutes,
   not hours) to confirm the tokenizer, data loading, BitLinear layer, and loss curve all
