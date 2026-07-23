@@ -17,7 +17,7 @@ class ModelConfig:
                             # -- train_base.py asserts these stay in sync, since a
                             # mismatch here means a real token id the tokenizer can
                             # produce falls outside the model's embedding table).
-    d_model: int = 512      # v0.6: the first deliberate step up the staged-growth
+    d_model: int = 256      # v0.6: the first deliberate step up the staged-growth
                             # staircase (docs/benny-case-study.md's "long-term vision"),
                             # not another compute-driven shrink. Sizing history: 876
                             # (~80.7M) -> shrunk to 384 (~13.7M) once the first real M5
@@ -52,7 +52,7 @@ class ModelConfig:
     n_layers: int = 7
     n_heads: int = 8        # head_dim = 512/8 = 64, a clean power of 2 again.
     mlp_ratio: int = 8
-    max_seq_len: int = 512
+    max_seq_len: int = 256
     dropout: float = 0.1
 
     @property
