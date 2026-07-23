@@ -17,7 +17,7 @@ class ModelConfig:
                             # -- train_base.py asserts these stay in sync, since a
                             # mismatch here means a real token id the tokenizer can
                             # produce falls outside the model's embedding table).
-    d_model: int = 464      # v0.6: the first deliberate step up the staged-growth
+    d_model: int = 512      # v0.6: the first deliberate step up the staged-growth
                             # staircase (docs/benny-case-study.md's "long-term vision"),
                             # not another compute-driven shrink. Sizing history: 876
                             # (~80.7M) -> shrunk to 384 (~13.7M) once the first real M5
@@ -32,18 +32,25 @@ class ModelConfig:
                             # ~10.3 hours for a full 766.6M-token epoch (ml/RESULTS.md,
                             # 2026-07-22) -- far faster than the old 876-config's
                             # measured ~305 tok/s, since compute scales with param count.
-                            # That headroom is what this step spends: now 464/9/8
-                            # (~27.0M params, see estimate_param_count()), still
-                            # comfortably inside the well-evidenced 100K-48M-param
-                            # small-scale BitNet research range cited in
-                            # docs/slm-strategy.md Section 3, and sized so this size's
-                            # own deliberate-overtraining budget (see
-                            # TRAIN_TOKENS_PER_PARAM below) lands almost exactly on the
-                            # ~2.46B tokens already packed by train/prepare_dataset.py's
-                            # first real run -- no new corpus pull/pack needed, unlike
-                            # every previous size change.
-    n_layers: int = 9
-    n_heads: int = 8        # head_dim = 464/8 = 58.
+                            # That headroom is what this step spends. FIRST ATTEMPT at
+                            # this size was 464/9/8 (head_dim=58) -- picked to land as
+                            # close as possible to a round ~27.0M params, but a real M5
+                            # run measured only ~506 tok/s, a ~40x regression nothing in
+                            # the param-count math predicts. head_dim=58 (and d_model=464
+                            # itself) aren't multiples of 32, unlike the 13.7M config's
+                            # own head_dim=64 -- its doc comment already called that out
+                            # as "a clean power of 2", deliberately, and Metal's
+                            # matmul/attention kernels have well-known fast paths for
+                            # aligned tile sizes (multiples of 32/64) with much slower
+                            # generic fallbacks otherwise. 512/7/8 (head_dim=64,
+                            # mlp_dim=2048) restores that alignment throughout -- d_model,
+                            # head_dim, and mlp_dim are all powers of two again, same
+                            # property the 13.7M config relied on -- while landing at
+                            # ~26.1M params, still comfortably inside the well-evidenced
+                            # 100K-48M-param small-scale BitNet research range cited in
+                            # docs/slm-strategy.md Section 3.
+    n_layers: int = 7
+    n_heads: int = 8        # head_dim = 512/8 = 64, a clean power of 2 again.
     mlp_ratio: int = 4
     max_seq_len: int = 512
     dropout: float = 0.1
@@ -100,14 +107,14 @@ def estimate_lora_param_count(cfg: ModelConfig, rank: int = LORA_RANK) -> int:
 # tokens cheap to come by, so deliberately overtraining well past
 # compute-optimal trades cheap extra pretraining compute for a smaller,
 # cheaper model at a given quality bar, same trade LLaMA made. Bumped from 56
-# to 91 for v0.6's 464/9/8 (~27.0M param) config specifically so this size's
+# to 94 for v0.6's 512/7/8 (~26.1M param) config specifically so this size's
 # own deliberate-overtraining budget lands almost exactly on the ~2.46B
 # tokens train/prepare_dataset.py already packed (sized at the time for an
 # earlier, larger config) -- the full already-packed corpus becomes exactly
 # what this size calls for, rather than most of it being discarded by
 # train_base.py's budget-based subsampling the way smaller configs required.
 CHINCHILLA_TOKENS_PER_PARAM = 20
-TRAIN_TOKENS_PER_PARAM = 91
+TRAIN_TOKENS_PER_PARAM = 94
 
 
 def estimate_token_budget(param_count: int, tokens_per_param: int = TRAIN_TOKENS_PER_PARAM) -> int:

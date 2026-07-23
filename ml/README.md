@@ -1,7 +1,7 @@
 # FreeLoom SLM — `ml/`
 
 Implementation of the architecture in [`docs/slm-strategy.md`](../docs/slm-strategy.md):
-one shared ~27.0M-parameter (v0.6) native BitNet b1.58 base model, trained from scratch,
+one shared ~26.1M-parameter (v0.6) native BitNet b1.58 base model, trained from scratch,
 with three LoRA adapters on top (entry-drafting, knowledge-base-authoring, platform-help).
 This directory is a separate Python subproject from the Next.js app in `src/` — it has
 no shared test runner or build step with the TS app, and nothing here is imported by
@@ -54,8 +54,8 @@ for (see `docs/slm-strategy.md` Section 5).
   proof-of-concept corpus — byte-level BPE ran out of distinct merges to learn at that
   size). `model/config.py`'s `vocab_size` must match this exactly (`train_base.py`
   asserts it at startup) — already updated.
-- **Model sizing**: `model/config.py` computes ~27.0M base params (464 d_model, 9
-  layers, 8 heads, head_dim=58, vocab_size=8000) — v0.6, the first deliberate step up
+- **Model sizing**: `model/config.py` computes ~26.1M base params (512 d_model, 7
+  layers, 8 heads, head_dim=64, vocab_size=8000) — v0.6, the first deliberate step up
   from an earlier ~13.7M (384/6/6), which itself was shrunk from ~80.7M (876/8/12)
   after the first real training run on the M5 measured native BitNet QAT training as
   compute-heavier per step than a plain dense model the same size (every `BitLinear`
@@ -64,14 +64,18 @@ for (see `docs/slm-strategy.md` Section 5).
   only exists at inference time with truly packed low-bit weights, not during
   training). At ~80.7M params, the measured ~305 tok/s projected to ~84 days for one
   epoch -- untenable. The 13.7M config then actually ran on the M5 at ~20,600 tok/s,
-  ~10.3 hours/epoch (`RESULTS.md`, 2026-07-22) -- real headroom v0.6 spends to roughly
-  double capacity while staying well inside the well-evidenced small-BitNet-research
-  range. See `docs/slm-strategy.md` Section 5 for the full story.
-- **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 91
+  ~10.3 hours/epoch (`RESULTS.md`, 2026-07-22) -- real headroom v0.6 spends. **v0.6's
+  first sizing attempt (464/9/8, head_dim=58) measured only ~506 tok/s on a real M5
+  run** -- a ~40x regression the param-count math doesn't explain, diagnosed as a
+  dimension-alignment problem (head_dim=58 isn't a multiple of 32, unlike the 13.7M
+  config's own head_dim=64, and Metal's matmul/attention kernels have well-known fast
+  paths for aligned tile sizes). Corrected to 512/7/8 (head_dim=64, mlp_dim=2048, all
+  powers of two again). See `docs/slm-strategy.md` Section 5 for the full story.
+- **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 94
   tokens/parameter — well past Chinchilla's ~20 compute-optimal ratio, a deliberate
   overtraining budget (same rationale as LLaMA training past compute-optimal for a
   cheaper-to-run model, pushed further here since Benny's base model is unusually
-  small and TinyStories/FineWeb-Edu make extra tokens cheap). At v0.6's ~27.0M params
+  small and TinyStories/FineWeb-Edu make extra tokens cheap). At v0.6's ~26.1M params
   that's **~2.45 billion training tokens** — bumped up from the 13.7M config's 56
   tokens/param specifically so this size's own budget lands almost exactly on the full
   ~2.46B tokens already packed (below), rather than most of it being discarded by
@@ -250,8 +254,8 @@ single request calls synchronously. That scheduling/approval-queue piece is unbu
 - Done: tokenizer retrained at a real 8,000-token production vocab against the base
   corpus sample, `model/config.py` updated to match.
 - Once real revenue funds a much larger custom-generated corpus (discussed but not
-  committed to yet): a 30B-token target is still well past this ~27.0M-parameter (v0.6)
-  model's deliberate-overtraining budget (~1,110 tokens/param vs. the 91 target) — that
+  committed to yet): a 30B-token target is still well past this ~26.1M-parameter (v0.6)
+  model's deliberate-overtraining budget (~1,150 tokens/param vs. the 94 target) — that
   scale of spend is better matched to a genuinely bigger model than to overtraining
   Benny as currently sized, or to reusing the corpus across several small models rather
   than one.
