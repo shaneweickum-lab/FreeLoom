@@ -38,7 +38,10 @@ export function encode(text: string): number[] {
 }
 
 export function decode(ids: number[]): string {
-  return getTokenizer().decode(ids);
+  // Explicit rather than relying on the library default -- generate()'s
+  // output includes the <eos> id when generation stopped naturally, and
+  // that control token should never appear in text shown to a user.
+  return getTokenizer().decode(ids, { skip_special_tokens: true });
 }
 
 export function bosId(): number {
