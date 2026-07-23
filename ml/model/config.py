@@ -48,6 +48,7 @@ class ModelConfig:
                             # property the 13.7M config relied on -- while landing at
                             # ~26.1M params, still comfortably inside the well-evidenced
                             # 100K-48M-param small-scale BitNet research range cited in
+
                             # docs/slm-strategy.md Section 3. Alignment alone still wasn't
                             # enough, though: this exact 512/7/8 config, on the *full*
                             # packed corpus, still only measured ~829 tok/s. Real hands-on
