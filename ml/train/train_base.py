@@ -41,7 +41,7 @@ CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
 
 # A deliberately small config for --tiny: fast enough to sanity-check the
 # whole pipeline (tokenizer, data loading, BitLinear, loss curve) in
-# minutes rather than committing to the full ~81M run untested.
+# minutes rather than committing to the full BASE_CONFIG run untested.
 TINY_CONFIG = ModelConfig(d_model=128, n_layers=2, n_heads=4, max_seq_len=512)
 
 
