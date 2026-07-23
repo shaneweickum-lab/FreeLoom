@@ -49,8 +49,8 @@ class ModelConfig:
                             # ~26.1M params, still comfortably inside the well-evidenced
                             # 100K-48M-param small-scale BitNet research range cited in
                             # docs/slm-strategy.md Section 3.
-    n_layers: int = 5
-    n_heads: int = 12        # head_dim = 512/8 = 64, a clean power of 2 again.
+    n_layers: int = 7
+    n_heads: int = 16        # head_dim = 512/8 = 64, a clean power of 2 again.
     mlp_ratio: int = 2
     max_seq_len: int = 512
     dropout: float = 0.1
