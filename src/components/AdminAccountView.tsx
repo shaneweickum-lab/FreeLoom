@@ -94,27 +94,29 @@ function ProfileTab({ student, note }: { student: Student | null; note: ProfileN
         <textarea className="input min-h-32 opacity-70 cursor-not-allowed" value={note?.content ?? ""} disabled readOnly />
       </label>
 
-      {!!note?.ai_suggested_tracks?.length && (
+      {!!note?.ai_suggested_tracks?.some((t) => t.status !== "dismissed") && (
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold text-sm">Suggested classes</h2>
-          {note.ai_suggested_tracks.map((track, i) => (
-            <div
-              key={i}
-              className={`rounded-lg border p-4 flex items-start justify-between gap-4 ${
-                track.status === "accepted"
-                  ? "border-gold bg-surface"
-                  : track.status === "dismissed"
-                  ? "border-navy-line bg-surface/40 opacity-50"
-                  : "border-navy-line bg-surface"
-              }`}
-            >
-              <div>
-                <div className="font-medium text-sm">{track.subject}</div>
-                <div className="text-sm text-muted">{track.rationale}</div>
+          {note.ai_suggested_tracks.map((track, i) => {
+            // Dismissed suggestions are removed from the array entirely
+            // going forward (see profile/page.tsx's dismissTrack()) -- this
+            // guards against any already-dismissed entry from older data.
+            if (track.status === "dismissed") return null;
+            return (
+              <div
+                key={i}
+                className={`rounded-lg border p-4 flex items-start justify-between gap-4 ${
+                  track.status === "accepted" ? "border-gold bg-surface" : "border-navy-line bg-surface"
+                }`}
+              >
+                <div>
+                  <div className="font-medium text-sm">{track.subject}</div>
+                  <div className="text-sm text-muted">{track.rationale}</div>
+                </div>
+                <span className="text-xs text-muted shrink-0 capitalize">{track.status}</span>
               </div>
-              <span className="text-xs text-muted shrink-0 capitalize">{track.status}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
