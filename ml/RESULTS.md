@@ -22,6 +22,32 @@ completed run, it doesn't belong in this file yet.
 
 ## Base model pretraining
 
+### v0.6 sizing attempt #2 — full-corpus memory pressure, 2026-07-23
+- Config: corrected 512/7/8 config (head_dim=64, alignment fix below) actually run on
+  the M5 -- `4,322,992 train sequences` (essentially the entire packed corpus, no
+  subsampling, since v0.6's own token budget was deliberately tuned to match it)
+- Result: **~829 tok/s sustained** -- only a 1.64x improvement over attempt #1's 506
+  tok/s, nowhere near the ~10,800 tok/s the alignment fix alone predicted. Real
+  per-batch heartbeat timings (batch 1: 40s, batches 2-5: 36s/41s/38s/43s) show this is
+  genuine steady state, not `mx.compile`'s one-time trace/compile cost still being
+  amortized -- ruling out the most likely "it just needs more warmup" explanation.
+- Diagnosis: training on the full corpus (no subsampling) means `train_sequences` is an
+  ~8.85GB resident array (4,322,992 x 512 tokens x 4 bytes) for the whole run, versus
+  the ~3GB subsample the working 13.7M run used (that run's smaller token budget meant
+  `train_base.py` subsampled down to ~1.50M sequences). `iterate_batches()` shuffled via
+  one full random permutation over the entire array, gathering scattered,
+  non-contiguous rows every single batch -- on a large enough array this is a
+  scattered-read/page-fault storm rather than a handful of sequential reads, and
+  plausibly pushes the M5's 24GB unified memory into swap/compression, which would
+  produce exactly this kind of flat, non-decaying slowdown.
+- Fix: `train/train_base.py` now `mmap`s `base_train.npy`/`base_val.npy` instead of
+  eagerly loading them whole, and `iterate_batches()` shuffles in contiguous chunks
+  (chunk order randomized, each chunk shuffled internally) instead of one full-array
+  permutation -- one sequential read per chunk instead of scattered per-batch reads.
+  Verified the new indexing logic in pure numpy (no MLX needed): full coverage, no
+  duplicates, no out-of-range indices, same expected small remainder-drop as the old
+  per-epoch math. Real throughput on this fix not yet measured.
+
 ### v0.6 sizing attempt #1 — dimension-misalignment throughput regression, 2026-07-23
 - Config: first v0.6 attempt, 464 d_model / 9 layers / 8 heads (head_dim=58,
   mlp_dim=1856), ~27.0M params, 91 tokens/param budget (~2.45B tokens), M5 MacBook

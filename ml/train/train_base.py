@@ -50,12 +50,28 @@ def loss_fn(model: BitNetTransformer, inputs: mx.array, targets: mx.array) -> mx
     return nn.losses.cross_entropy(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1), reduction="mean")
 
 
-def iterate_batches(sequences: np.ndarray, batch_size: int, rng: np.random.Generator):
-    order = rng.permutation(len(sequences))
-    for start in range(0, len(order) - batch_size + 1, batch_size):
-        idx = order[start: start + batch_size]
-        batch = mx.array(sequences[idx])
-        yield batch[:, :-1], batch[:, 1:]
+def iterate_batches(sequences: np.ndarray, batch_size: int, rng: np.random.Generator, chunk_size: int = None):
+    """Shuffles in contiguous chunks rather than one full random permutation
+    over the whole array. A full permutation forces every batch to gather
+    scattered, non-contiguous rows -- fine for a small array fully resident
+    in RAM, but brutal once `sequences` is memory-mapped (or just large
+    enough to create real memory pressure): every batch turns into a
+    scattered-read/page-fault storm instead of one sequential read per
+    chunk. Chunk order is randomized and each chunk is shuffled internally,
+    so batches are still well-mixed across an epoch -- just not gathered
+    from arbitrary points across the entire corpus on every single step."""
+    n = len(sequences)
+    chunk_size = chunk_size or max(batch_size * 64, batch_size)
+    chunk_starts = list(range(0, n, chunk_size))
+    rng.shuffle(chunk_starts)
+    for chunk_start in chunk_starts:
+        chunk_end = min(chunk_start + chunk_size, n)
+        chunk = np.array(sequences[chunk_start:chunk_end])  # one contiguous read, materializes out of any mmap
+        order = rng.permutation(len(chunk))
+        for start in range(0, len(order) - batch_size + 1, batch_size):
+            idx = order[start: start + batch_size]
+            batch = mx.array(chunk[idx])
+            yield batch[:, :-1], batch[:, 1:]
 
 
 def format_duration(seconds: float) -> str:
@@ -128,8 +144,15 @@ def main():
         args.epochs = 20 if args.tiny else 1
 
     cfg = TINY_CONFIG if args.tiny else BASE_CONFIG
-    train_sequences = np.load(DATA_DIR / "base_train.npy")
-    val_sequences = np.load(DATA_DIR / "base_val.npy")
+    # mmap rather than a full eager load -- at v0.6's sizing, the token
+    # budget covers essentially the entire packed corpus (~4.3M sequences,
+    # ~8.85GB as plain int32), so this stays resident in RAM for the whole
+    # run unless subsampled below. mmap keeps it disk-backed and paged in on
+    # demand instead of forcing the whole thing into the M5's 24GB unified
+    # memory up front; iterate_batches' chunked-shuffle access pattern below
+    # is what actually makes that mmap cheap to read from during training.
+    train_sequences = np.load(DATA_DIR / "base_train.npy", mmap_mode="r")
+    val_sequences = np.load(DATA_DIR / "base_val.npy", mmap_mode="r")
 
     if args.tiny:
         tiny_rng = np.random.default_rng(0)
