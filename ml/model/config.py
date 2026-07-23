@@ -50,7 +50,7 @@ class ModelConfig:
                             # 100K-48M-param small-scale BitNet research range cited in
                             # docs/slm-strategy.md Section 3.
     n_layers: int = 5
-    n_heads: int = 3        # head_dim = 512/8 = 64, a clean power of 2 again.
+    n_heads: int = 5        # head_dim = 512/8 = 64, a clean power of 2 again.
     mlp_ratio: int = 4
     max_seq_len: int = 512
     dropout: float = 0.1
