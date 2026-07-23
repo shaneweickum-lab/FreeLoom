@@ -17,26 +17,33 @@ class ModelConfig:
                             # -- train_base.py asserts these stay in sync, since a
                             # mismatch here means a real token id the tokenizer can
                             # produce falls outside the model's embedding table).
-    d_model: int = 384      # shrunk from 876 (~80.7M params) after the first real
-                            # training run on the M5 showed native BitNet QAT training
-                            # is compute-heavier per step than a plain dense model of
-                            # the same size (every BitLinear forward re-quantizes its
-                            # full-precision shadow weights via the straight-through
-                            # estimator, on top of an otherwise-ordinary matmul -- the
-                            # famous BitNet speed/memory win only exists at inference
-                            # time with truly packed low-bit weights, not during
-                            # training). At the observed ~305 tok/s, 876/8-layer sizing
-                            # projected to ~84 days for one epoch of its own 2.42B-token
-                            # budget. This size's deliberate-overtraining budget (see
-                            # below) is ~766.6M tokens -- the token budget scales with
-                            # param count too, so shrinking the model compounds: both
-                            # less compute per token AND fewer total tokens needed,
-                            # projecting to roughly 4 days instead of ~84. Comfortably inside the
-                            # well-evidenced 100K-48M-param small-scale BitNet research
-                            # range cited in docs/slm-strategy.md Section 3 -- more so
-                            # than the previous 80.7M size was.
-    n_layers: int = 6
-    n_heads: int = 6        # head_dim = 384/6 = 64, a clean power of 2.
+    d_model: int = 464      # v0.6: the first deliberate step up the staged-growth
+                            # staircase (docs/benny-case-study.md's "long-term vision"),
+                            # not another compute-driven shrink. Sizing history: 876
+                            # (~80.7M) -> shrunk to 384 (~13.7M) once the first real M5
+                            # run showed native BitNet QAT training is compute-heavier
+                            # per step than a plain dense model the same size (every
+                            # BitLinear forward re-quantizes its full-precision shadow
+                            # weights via the straight-through estimator on top of an
+                            # otherwise-ordinary matmul -- the famous BitNet speed/memory
+                            # win only exists at inference time with truly packed
+                            # low-bit weights, not during training). That 13.7M config
+                            # then actually trained on the M5: ~20,600 tok/s sustained,
+                            # ~10.3 hours for a full 766.6M-token epoch (ml/RESULTS.md,
+                            # 2026-07-22) -- far faster than the old 876-config's
+                            # measured ~305 tok/s, since compute scales with param count.
+                            # That headroom is what this step spends: now 464/9/8
+                            # (~27.0M params, see estimate_param_count()), still
+                            # comfortably inside the well-evidenced 100K-48M-param
+                            # small-scale BitNet research range cited in
+                            # docs/slm-strategy.md Section 3, and sized so this size's
+                            # own deliberate-overtraining budget (see
+                            # TRAIN_TOKENS_PER_PARAM below) lands almost exactly on the
+                            # ~2.46B tokens already packed by train/prepare_dataset.py's
+                            # first real run -- no new corpus pull/pack needed, unlike
+                            # every previous size change.
+    n_layers: int = 9
+    n_heads: int = 8        # head_dim = 464/8 = 58.
     mlp_ratio: int = 4
     max_seq_len: int = 512
     dropout: float = 0.1
@@ -91,11 +98,16 @@ def estimate_lora_param_count(cfg: ModelConfig, rank: int = LORA_RANK) -> int:
 # this reason). Pushed further here than a modest +10 margin -- Benny's base
 # model is unusually small and the TinyStories/FineWeb-Edu corpus makes extra
 # tokens cheap to come by, so deliberately overtraining well past
-# compute-optimal (56 tokens/param, ~766.6M tokens at this config's ~13.7M
-# params) trades cheap extra pretraining compute for a smaller, cheaper
-# model at a given quality bar, same trade LLaMA made.
+# compute-optimal trades cheap extra pretraining compute for a smaller,
+# cheaper model at a given quality bar, same trade LLaMA made. Bumped from 56
+# to 91 for v0.6's 464/9/8 (~27.0M param) config specifically so this size's
+# own deliberate-overtraining budget lands almost exactly on the ~2.46B
+# tokens train/prepare_dataset.py already packed (sized at the time for an
+# earlier, larger config) -- the full already-packed corpus becomes exactly
+# what this size calls for, rather than most of it being discarded by
+# train_base.py's budget-based subsampling the way smaller configs required.
 CHINCHILLA_TOKENS_PER_PARAM = 20
-TRAIN_TOKENS_PER_PARAM = 56
+TRAIN_TOKENS_PER_PARAM = 91
 
 
 def estimate_token_budget(param_count: int, tokens_per_param: int = TRAIN_TOKENS_PER_PARAM) -> int:

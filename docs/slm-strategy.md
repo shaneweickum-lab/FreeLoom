@@ -56,24 +56,33 @@ negative-transfer failure mode that a naive shared-head design would risk. The
 application code — which already knows which job it needs — swaps in the right adapter.
 No learned gate, no ambiguity to resolve at inference time.
 
-## 3. Size and architecture: ~13.7M parameters, native BitNet b1.58
+## 3. Size and architecture: v0.6, ~27.0M parameters, native BitNet b1.58
 
-- **~13.7M ternary parameters** (384 d_model, 6 layers, 6 heads, vocab_size=8000 — see
+- **~27.0M ternary parameters** (464 d_model, 9 layers, 8 heads, vocab_size=8000 — see
   `ml/model/config.py`), trained natively at 1.58 bits (BitNet's `BitLinear` layer, not
   post-hoc quantization of an existing model). Sizing history: 60M for the MVP, then
   ~75M once the tokenizer was retrained at a real 8,000-token vocab (it was 1,477,
   sized for the original 76-example proof-of-concept corpus — the embedding table's own
-  size scales with vocab_size), then **shrunk to ~13.7M** after the first real training
-  run on the M5 measured native BitNet QAT training as compute-heavier per step than a
+  size scales with vocab_size), then shrunk to ~13.7M after the first real training run
+  on the M5 measured native BitNet QAT training as compute-heavier per step than a
   plain dense model of the same size (every `BitLinear` forward re-quantizes its
   full-precision shadow weights via the straight-through estimator, on top of an
   otherwise-ordinary matmul — BitNet's famous speed/memory win only exists at
   *inference* time with truly packed low-bit weights, not during training). At ~81M
-  params and the observed ~305 tok/s, one epoch projected to ~84 days; shrinking the
-  model compounds two effects at once (less compute per token, and a smaller
-  deliberate-overtraining token budget to match — Section 4), projecting to roughly 4
-  days instead. Comfortably inside the well-evidenced small-BitNet-research range below —
-  more centrally so than the previous 80.7M size was.
+  params and the observed ~305 tok/s, one epoch projected to ~84 days; shrinking to
+  ~13.7M compounded two effects at once (less compute per token, and a smaller
+  deliberate-overtraining token budget to match — Section 4), and the actual real run
+  came in even better than projected: **~20,600 tok/s sustained, ~10.3 hours for a full
+  766.6M-token epoch** (`ml/RESULTS.md`, 2026-07-22) — both base pretraining and all
+  three adapters trained clean, coherent, correctly-formatted output on top of it.
+  **v0.6 is the first deliberate step up** that same staircase
+  (`docs/benny-case-study.md`'s "long-term vision" section — keep a competent Benny in
+  production while a bigger one trains in the background, never shipping an untested
+  size), not another compute-driven shrink: the
+  13.7M config's real headroom (far faster than the old 84-day projection that drove
+  the original shrink) supports roughly doubling capacity to 464/9/8 while staying
+  comfortably inside the well-evidenced small-BitNet-research range below — still well
+  under its ~48M ceiling, just less centrally than the 13.7M size was.
 - This size range is unusually well-evidenced for BitNet specifically: published
   small-scale BitNet research ("BitNet b1.58 Reloaded") tested ternary models in the
   100K–48M parameter range — the closest real precedent available, well short of
@@ -89,23 +98,24 @@ No learned gate, no ambiguity to resolve at inference time.
   understanding the standard dense-transformer training loop before layering ternary
   weights on top — reading and adapting working reference code is the standard way this
   is actually learned, not a shortcut around learning it.
-- **Training token budget**: 56 tokens/parameter — well past Chinchilla's ~20
+- **Training token budget**: 91 tokens/parameter — well past Chinchilla's ~20
   compute-optimal ratio, a deliberate overtraining budget (same trade LLaMA made to get
   a cheaper-to-run model at the cost of extra training compute, pushed further here
   since this base model is unusually small and TinyStories/FineWeb-Edu make extra
-  tokens cheap) — **~766.6M tokens** at ~13.7M params (`ml/model/config.py`'s
-  `estimate_token_budget()`). Section 4's TinyStories/FineWeb-Edu pull already packed
-  ~2.46B tokens (sized for the earlier ~81M config) -- `train/train_base.py`'s full run
-  now subsamples that corpus down to roughly this size's own budget (~1.50M of the
-  packed 4.3M sequences) rather than training on all of it, since the extra tokens
-  beyond this deliberate-overtraining target don't add anything the ratio says is worth
-  having, just extra wall-clock time.
+  tokens cheap) — **~2.45B tokens** at v0.6's ~27.0M params (`ml/model/config.py`'s
+  `estimate_token_budget()`). Deliberately bumped up from the 13.7M config's 56 (which
+  gave ~766.6M tokens) specifically so this larger size's own budget lands almost
+  exactly on the ~2.46B tokens Section 4's TinyStories/FineWeb-Edu pull already packed
+  (sized at the time for an even earlier, larger ~81M config) -- `train/train_base.py`'s
+  full run now trains on essentially the entire packed corpus rather than subsampling
+  most of it away the way the smaller 13.7M size required.
 
 ## 4. Training data: two separate pools for two separate jobs
 
-At ~13.7M parameters, the base model's job (general English + broad academic register)
-and the adapters' job (FreeLoom's exact output format) call for genuinely different
-data — conflating them was the original open question here; the settled split:
+At v0.6's ~27.0M parameters, the base model's job (general English + broad academic
+register) and the adapters' job (FreeLoom's exact output format) call for genuinely
+different data — conflating them was the original open question here; the settled
+split:
 
 - **Base-pretraining pool — ~2.4B tokens, from already-generated open datasets, not a
   custom scrape**: `ml/data/prepare_base_corpus.py` streams **TinyStories**
@@ -124,12 +134,14 @@ data — conflating them was the original open question here; the settled split:
   intent below and the original TinyStories paper's own precedent (it trained small
   models over several epochs of this same small corpus). FineWeb-Edu hit its 500M target
   in a single pass and isn't repeated. `train/prepare_dataset.py`'s first real run
-  packed ~2.46B tokens total -- sized for the ~81M-param config in place at the time,
-  since packing/tokenizing this much data is itself hours of work not worth repeating
-  every time the model's own budget changes. `train/train_base.py`'s full run now
-  subsamples that packed corpus down to whatever the *current* config's own
-  deliberate-overtraining budget calls for (Section 3), rather than assuming the two
-  always match. TinyStories still gets the larger effective share
+  packed ~2.46B tokens total -- sized at the time for an even earlier ~81M-param
+  config, since packing/tokenizing this much data is itself hours of work not worth
+  repeating every time the model's own budget changes. `train/train_base.py`'s full
+  run subsamples that packed corpus down to whatever the *current* config's own
+  deliberate-overtraining budget calls for (Section 3) -- at v0.6's 464/9/8 sizing,
+  that budget (~2.45B tokens) is close enough to the full packed corpus that no
+  meaningful subsampling actually happens, unlike the smaller 13.7M config this
+  replaces. TinyStories still gets the larger effective share
   deliberately — its own research finding is that narrow, simple data is what makes
   small-model coherence achievable, so it should dominate, with FineWeb-Edu mixed in for
   vocabulary breadth rather than given equal weight. Deliberately **not** a custom scrape
@@ -156,12 +168,12 @@ data — conflating them was the original open question here; the settled split:
   it in the near term.
 - **Future scale-up, not yet committed to**: once real revenue funds a much larger
   custom-generated corpus (on the order of tens of billions of tokens), that scale
-  overshoots this 13.7M-parameter model's deliberate-overtraining budget by roughly two
-  orders of magnitude (~56 tokens/param target vs. ~2,190 tokens/param at 30B tokens) —
+  overshoots this ~27.0M-parameter model's deliberate-overtraining budget by roughly an
+  order of magnitude (~91 tokens/param target vs. ~1,110 tokens/param at 30B tokens) —
   spent on Benny as currently sized, most of it would go to waste. The two honest paths
   at that point are scaling the model up to match (this budget's own ratio at that
-  token count implies something on the order of 500-600M params, a genuinely bigger
-  model) or reusing that corpus across several smaller specialized models instead of
+  token count implies something on the order of 300M params, a genuinely bigger model)
+  or reusing that corpus across several smaller specialized models instead of
   overtraining one. Decide deliberately when the budget is real, not now.
 
 ## 5. Training plan on the actual hardware (MacBook Pro, M5, 24GB unified memory)
@@ -177,8 +189,18 @@ data — conflating them was the original open question here; the settled split:
   speed/memory win only exists at *inference* time with truly packed low-bit weights.
   The original ~81M-param config measured **~305 tokens/sec** on the base M5 (`mx.compile`
   + batch_size=64), projecting to ~84 days for one epoch of its own 2.42B-token budget —
-  untenable. Section 3's resize to ~13.7M params is the direct response: both less
-  compute per token and a smaller token budget to match, projecting to roughly 4 days.
+  untenable. The resize to ~13.7M params was the direct response, and its real run
+  (`ml/RESULTS.md`, 2026-07-22) measured **~20,600 tokens/sec**, ~10.3 hours for the full
+  766.6M-token epoch — far better than a naive linear projection from the 81M number
+  would have suggested, and the real headroom v0.6's step-up spends.
+- **v0.6 (464/9/8, ~27.0M params) throughput — projected, not yet measured**: compute
+  scales roughly linearly with parameter count for a dense-transformer-shaped forward
+  pass, and v0.6 has ~1.97x the 13.7M config's params, so naively scaling the real
+  20,600 tok/s measurement down projects to **~10,500 tok/s**, or roughly **65 hours
+  (~2.7 days)** for one full epoch over the ~2.45B-token budget (Section 3). Treat this
+  as a planning estimate only, same as the original ~305 tok/s number was before its own
+  real run corrected it — replace with the actual measured throughput in `ml/RESULTS.md`
+  once v0.6 actually trains.
 - **Validate the pipeline at tiny scale first**: `train/train_base.py --tiny` uses a
   deliberately small model (d_model=128, 2 layers) on a small data subsample (minutes,
   not hours) to confirm the tokenizer, data loading, BitLinear layer, and loss curve all
@@ -186,8 +208,9 @@ data — conflating them was the original open question here; the settled split:
   shortcut — catches a pipeline bug in an
   hour instead of after days of training. `train/train_base.py`'s full run
   automatically subsamples the already-packed corpus down to whatever the current
-  config's own ~766.6M-token deliberate-overtraining budget calls for (Section 4) —
-  the tiny-scale check validates the pipeline, not the data volume.
+  config's own deliberate-overtraining budget calls for (Section 4) — at v0.6's sizing
+  that's ~2.45B of the ~2.46B packed tokens, effectively no subsampling — the
+  tiny-scale check validates the pipeline, not the data volume.
 
 ## 6. Where it plugs into the pipeline
 
