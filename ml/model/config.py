@@ -51,7 +51,7 @@ class ModelConfig:
                             # docs/slm-strategy.md Section 3.
     n_layers: int = 7
     n_heads: int = 8        # head_dim = 512/8 = 64, a clean power of 2 again.
-    mlp_ratio: int = 2
+    mlp_ratio: int = 4
     max_seq_len: int = 512
     dropout: float = 0.1
 
