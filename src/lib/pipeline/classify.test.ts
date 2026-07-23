@@ -92,4 +92,28 @@ describe("classifyWordDump", () => {
       expect(result.tags[0].quotedPhrase).toContain("Factorio");
     });
   });
+
+  describe("keyword-latching guard", () => {
+    it("prefers a specific multi-word technical phrase over an incidental single-word match", () => {
+      // "guitar" alone would match the Music cluster, but the activity
+      // described is soldering, not playing music -- "circuit board" is a
+      // more specific, technical signal and should win outright.
+      const result = classifyWordDump({
+        rawWordDump: "Spent an afternoon learning to solder a broken guitar pedal circuit board",
+      });
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      const subjects = result.tags.map((t) => t.subjectArea);
+      expect(subjects).toEqual(["Engineering / Design"]);
+      expect(subjects).not.toContain("Music");
+    });
+
+    it("keeps both tags when two clusters match with equal specificity (genuine multi-subject case)", () => {
+      const result = classifyWordDump({ rawWordDump: "Practiced piano and did some coding" });
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      const subjects = result.tags.map((t) => t.subjectArea).sort();
+      expect(subjects).toEqual(["Computer Science", "Music"].sort());
+    });
+  });
 });
