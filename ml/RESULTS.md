@@ -22,6 +22,24 @@ completed run, it doesn't belong in this file yet.
 
 ## Base model pretraining
 
+### v0.6 sizing attempt #1 — dimension-misalignment throughput regression, 2026-07-23
+- Config: first v0.6 attempt, 464 d_model / 9 layers / 8 heads (head_dim=58,
+  mlp_dim=1856), ~27.0M params, 91 tokens/param budget (~2.45B tokens), M5 MacBook
+- Result: **~506 tok/s sustained** on a real training run -- a ~40x regression from the
+  13.7M config's ~20,600 tok/s that plain param-count scaling doesn't explain (1.9x
+  more params predicts roughly half the throughput, ~10,500 tok/s, not a 40x cliff)
+- Diagnosis: head_dim=58 (464/8) and d_model=464 itself aren't multiples of 32, unlike
+  the 13.7M config's own head_dim=64 -- Metal's matmul/attention kernels have
+  well-documented fast paths for aligned tile sizes (multiples of 32/64) and fall back
+  to much slower generic paths otherwise. This config was picked purely to land as
+  close as possible to a round ~27.0M params, without checking for that alignment.
+- Fix: resized to 512 d_model / 7 layers / 8 heads (head_dim=64, mlp_dim=2048, all
+  powers of two again) -- ~26.1M params, 94 tokens/param budget (~2.45B tokens). See
+  `docs/slm-strategy.md` Section 3/5 and `ml/model/config.py`'s doc comments for the
+  full reasoning. Real throughput at this corrected config not yet measured -- the
+  ~10,800 tok/s / ~2.6-day projection in `docs/slm-strategy.md` is a hypothesis the
+  next real run either confirms or refutes, not a settled number.
+
 ### base pretraining — 2026-07-22
 - Config: ~13.7M-param BitNetTransformer (`BASE_CONFIG`), 56 tokens/param budget
   (~766.6M tokens), M5 MacBook
