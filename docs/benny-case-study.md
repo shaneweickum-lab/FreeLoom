@@ -275,6 +275,24 @@ generating once a token has repeated three times in a row, applied to every serv
 path but *not* to the eval scripts, which need to keep measuring raw model behavior
 unchanged for retrain-to-retrain comparisons to mean anything.
 
+**A real misclassification turned out to be the simple rule-based layer's mistake, not
+the SLM's.** A parent's actual entry — "Spent an afternoon learning to solder a broken
+guitar pedal circuit board" — got tagged Music instead of Engineering. The instinctive
+suspect was Benny's entry-drafting model, the fancy new part. It wasn't: Stage 1's
+plain keyword classifier (`classifyWordDump`, no model involved at all) already had a
+"guitar" keyword mapped to Music, and it was confident enough that the SLM (Stage 4)
+never even ran — Stage 4 only fires when Stage 1 comes up empty. The knowledge base had
+no Engineering/Electronics entry at all, so nothing could counter-suggest the actual
+subject. The fix generalizes past this one word: when more than one keyword cluster
+matches the same activity on different subjects, a generic single word ("guitar") now
+loses to a longer, more specific technical phrase ("circuit board") appearing in the
+same description, rather than both — or the wrong one alone — getting tagged. Genuinely
+multi-subject activities (practicing piano *and* coding, say) are unaffected, since
+neither keyword there is more specific than the other. The lesson: the fanciest
+component in a pipeline isn't automatically where a wrong answer came from — the plain
+rule-based first pass, exactly the kind of code with no model and no randomness to hide
+behind, produced this one.
+
 ---
 
 ## The long-term vision (the part worth telling as a story on its own)

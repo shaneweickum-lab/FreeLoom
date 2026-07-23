@@ -256,6 +256,47 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
   entry that..." -- a near-exact match to the real MLX model's own output for the
   same question. Bug fully resolved.
 
+### Stage 1 heuristic-cluster keyword latching, plus a general specificity guard — 2026-07-23
+- Real live-traffic entry: "Spent an afternoon learning to solder a broken guitar pedal
+  circuit board" was tagged Music / "Applied Music Studies" instead of the actual
+  activity (soldering electronics).
+- Root cause was **not** the entry_drafting SLM (Stage 4) as first suspected --
+  `classifyWordDump`'s Stage 1 heuristic-cluster matcher already had a Music cluster
+  keyed on the single word "guitar", and `route.ts`'s Stage 4 fallback only ever runs
+  when Stage 1 returns `confident: false`. Stage 1's own generic keyword match on
+  "guitar" was confident enough to short-circuit before Stage 4 was invoked at all.
+  Also confirmed via `knowledgeBase.ts`: no Engineering/Electronics entry existed
+  anywhere (curated knowledge base or heuristic clusters) for solder/circuit
+  board/electronics/wiring -- so even had Stage 4 run, nothing upstream could have
+  offered "Engineering / Design" as a competing signal.
+- Fix, in `src/lib/pipeline/classify.ts`:
+  1. Added solder/soldering/circuit board/circuit boards/breadboard/electronics/
+     wiring/resistor/capacitor/multimeter keywords to the existing "Engineering /
+     Design" heuristic cluster, so the missing subject area is representable at all.
+  2. Added a general (not word-specific) `preferMostSpecificClusterMatch` guard: when
+     more than one heuristic cluster matches the same word dump on different
+     subjects, a single generic word (e.g. "guitar", one word) is much weaker
+     evidence than a longer, domain-specific phrase (e.g. "circuit board", two words)
+     matched elsewhere in the same text -- the more specific match wins outright
+     rather than both being tagged. When every match is equally specific (e.g.
+     "practiced piano and did some coding" -- two single common words), there's no
+     basis to prefer one, so both are kept; this is what keeps genuine multi-subject
+     word dumps working unchanged.
+  3. Also fixed a related ordering bug this surfaced: `findKeywordMatch` returns the
+     first of a cluster's *own* keywords to match in array-declaration order, not the
+     most specific one actually present in the text -- a cluster listing "solder"
+     before "circuit board" would report "solder" even when "circuit board" also
+     matched. Added `findMostSpecificKeywordMatch` so a cluster's own match is always
+     its most specific one before it's weighed against a rival cluster.
+- Verified: the exact reported sentence now tags only "Engineering / Design"; the
+  existing multi-tag tests (redstone + Minecraft, Minecraft + Stationeers) and a new
+  "practiced piano and did some coding" case still tag both subjects correctly. Full
+  suite (204 tests), `tsc --noEmit`, and `eslint` all clean.
+- This is a heuristic guard against one *class* of mistake (a short generic word
+  losing to a longer specific phrase) — it does not require, and is not a substitute
+  for, retraining entry_drafting itself; no additional training data was added this
+  pass.
+
 ## Synthetic data generation (real, paid API runs)
 
 ### entry_drafting corpus — `data/generate_synthetic.py`

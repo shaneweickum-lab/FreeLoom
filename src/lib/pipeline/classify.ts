@@ -98,7 +98,28 @@ type HeuristicCluster = {
 const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
   { keywords: ["budget", "money", "sold", "selling", "business", "profit", "invest"], subjectArea: "Economics / Life Skills", courseTitle: "Applied Personal Finance" },
   { keywords: ["measure", "recipe", "bake", "cook", "kitchen"], subjectArea: "Family & Consumer Science", courseTitle: "Applied Kitchen Science" },
-  { keywords: ["build", "design", "construct", "engineer", "prototype", "lego"], subjectArea: "Engineering / Design", courseTitle: "Applied Design & Engineering" },
+  {
+    keywords: [
+      "build",
+      "design",
+      "construct",
+      "engineer",
+      "prototype",
+      "lego",
+      "solder",
+      "soldering",
+      "circuit board",
+      "circuit boards",
+      "breadboard",
+      "electronics",
+      "wiring",
+      "resistor",
+      "capacitor",
+      "multimeter",
+    ],
+    subjectArea: "Engineering / Design",
+    courseTitle: "Applied Design & Engineering",
+  },
   { keywords: ["plant", "garden", "grow", "seed"], subjectArea: "Science", courseTitle: "Applied Environmental Science" },
   { keywords: ["animal", "animals", "wildlife", "zoo", "aquarium", "pet", "pets", "creature"], subjectArea: "Biology", courseTitle: "Applied Biology & Animal Studies" },
   { keywords: ["write", "wrote", "story", "journal", "poem", "essay"], subjectArea: "Language Arts", courseTitle: "Creative & Expository Writing" },
@@ -115,13 +136,56 @@ const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
 
 type HeuristicClusterMatch = { cluster: HeuristicCluster; matchedKeyword: string; matchIndex: number };
 
+/**
+ * findKeywordMatch returns the first of a cluster's keywords that matches,
+ * in array-declaration order -- not necessarily the most specific one
+ * present in the text. A cluster listing both "solder" and "circuit board"
+ * would report "solder" just because it comes first in the array, even
+ * when "circuit board" (a stronger signal) also appears. Checking every
+ * keyword and keeping the one with the most words avoids that ordering
+ * trap, and is what preferMostSpecificClusterMatch below relies on to
+ * weigh clusters against each other fairly.
+ */
+function findMostSpecificKeywordMatch(description: string, keywords: string[]) {
+  let best: { keyword: string; index: number } | null = null;
+  for (const keyword of keywords) {
+    const match = findKeywordMatch(description, [keyword]);
+    if (!match) continue;
+    const bestSpecificity = best?.keyword.trim().split(/\s+/).length ?? -1;
+    if (match.keyword.trim().split(/\s+/).length > bestSpecificity) best = match;
+  }
+  return best;
+}
+
 function findAllHeuristicClusters(description: string): HeuristicClusterMatch[] {
   const matches: HeuristicClusterMatch[] = [];
   for (const cluster of HEURISTIC_CLUSTERS) {
-    const match = findKeywordMatch(description, cluster.keywords);
+    const match = findMostSpecificKeywordMatch(description, cluster.keywords);
     if (match) matches.push({ cluster, matchedKeyword: match.keyword, matchIndex: match.index });
   }
   return matches;
+}
+
+/**
+ * Guards against keyword-latching: a generic single word (e.g. "guitar",
+ * which fires on any mention of the instrument, including as an object
+ * being repaired rather than played) is much weaker evidence of a subject
+ * than a longer, domain-specific phrase (e.g. "circuit board") matching
+ * elsewhere in the same description -- this is exactly how a description
+ * of soldering a guitar pedal's circuit board got tagged as Music instead
+ * of Engineering. When cluster matches disagree on subject, keep only the
+ * most specific (most words) match(es) rather than tagging both -- a
+ * one-word match loses to a multi-word one. When every match is equally
+ * specific (e.g. two single common words, as in "practiced piano and did
+ * some coding"), there's no basis to prefer one over the other, so all are
+ * kept -- that's a genuine multi-subject case, not a collision.
+ */
+function preferMostSpecificClusterMatch(matches: HeuristicClusterMatch[]): HeuristicClusterMatch[] {
+  if (matches.length <= 1) return matches;
+  const specificity = (match: HeuristicClusterMatch) => match.matchedKeyword.trim().split(/\s+/).length;
+  const maxSpecificity = Math.max(...matches.map(specificity));
+  if (matches.every((match) => specificity(match) === maxSpecificity)) return matches;
+  return matches.filter((match) => specificity(match) === maxSpecificity);
 }
 
 /**
@@ -190,9 +254,8 @@ export function classifyWordDump(input: WordDumpInput): ClassifyResult {
     };
   }
 
-  const clusterMatches = dedupeBySubject(
-    findAllHeuristicClusters(input.rawWordDump),
-    (m) => m.cluster.subjectArea
+  const clusterMatches = preferMostSpecificClusterMatch(
+    dedupeBySubject(findAllHeuristicClusters(input.rawWordDump), (m) => m.cluster.subjectArea)
   );
   if (clusterMatches.length > 0) {
     return {

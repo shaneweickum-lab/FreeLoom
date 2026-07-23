@@ -118,6 +118,26 @@ export default function ProfilePage() {
     else if (data) setNote(data);
   }
 
+  /** Dismissing drops the suggestion from the array entirely rather than
+   * just flagging it -- unlike accepting (a real decision worth keeping a
+   * record of), a dismissed suggestion isn't something anyone needs to see
+   * again, and nothing else in this pipeline dedupes against dismissed
+   * entries staying in the array (suggestTracks() below always just
+   * appends fresh ones). */
+  async function dismissTrack(index: number) {
+    if (!note) return;
+    const updated = note.ai_suggested_tracks.filter((_, i) => i !== index);
+    const supabase = createClient();
+    const { data, error: updateError } = await supabase
+      .from("profile_notes")
+      .update({ ai_suggested_tracks: updated })
+      .eq("id", note.id)
+      .select()
+      .single();
+    if (updateError) setError(`Couldn't dismiss that class: ${updateError.message}`);
+    else if (data) setNote(data);
+  }
+
   /** Accepting a suggested class hands off to the Learning Log to add the specific
    * activity, rather than leaving an accepted-but-empty class sitting here. */
   async function acceptTrack(index: number) {
@@ -172,44 +192,42 @@ export default function ProfilePage() {
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
 
-      {!!note?.ai_suggested_tracks?.length && (
+      {!!note?.ai_suggested_tracks?.some((t) => t.status !== "dismissed") && (
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold">Suggested classes</h2>
-          {note.ai_suggested_tracks.map((track, i) => (
-            <div
-              key={i}
-              className={`rounded-lg border p-4 shadow-sm flex items-start justify-between gap-4 ${
-                track.status === "accepted"
-                  ? "border-gold bg-surface"
-                  : track.status === "dismissed"
-                  ? "border-border bg-surface/40 opacity-50"
-                  : "border-border bg-surface"
-              }`}
-            >
-              <div>
-                <div className="font-medium">{track.subject}</div>
-                <div className="text-sm text-muted">{track.rationale}</div>
+          {note.ai_suggested_tracks.map((track, i) => {
+            // Defensive filter, not the primary mechanism -- dismissTrack()
+            // below removes a dismissed suggestion from the array outright,
+            // this just guards against any already-dismissed entry from
+            // before that existing in older data.
+            if (track.status === "dismissed") return null;
+            return (
+              <div
+                key={i}
+                className={`rounded-lg border p-4 shadow-sm flex items-start justify-between gap-4 ${
+                  track.status === "accepted" ? "border-gold bg-surface" : "border-border bg-surface"
+                }`}
+              >
+                <div>
+                  <div className="font-medium">{track.subject}</div>
+                  <div className="text-sm text-muted">{track.rationale}</div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => acceptTrack(i)}
+                    className={`text-xs px-2 py-1 rounded ${
+                      track.status === "accepted" ? "bg-gold text-ink" : "hover:bg-surface-hover"
+                    }`}
+                  >
+                    Accept
+                  </button>
+                  <button onClick={() => dismissTrack(i)} className="text-xs px-2 py-1 rounded hover:bg-surface-hover">
+                    Dismiss
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => acceptTrack(i)}
-                  className={`text-xs px-2 py-1 rounded ${
-                    track.status === "accepted" ? "bg-gold text-ink" : "hover:bg-surface-hover"
-                  }`}
-                >
-                  Accept
-                </button>
-                <button
-                  onClick={() => setTrackStatus(i, "dismissed")}
-                  className={`text-xs px-2 py-1 rounded ${
-                    track.status === "dismissed" ? "bg-border" : "hover:bg-surface-hover"
-                  }`}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
