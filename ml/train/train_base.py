@@ -109,11 +109,18 @@ def main():
                               "repeated 4x when the corpus was assembled), so one epoch over it hits "
                               "that budget exactly; each additional epoch here multiplies the effective "
                               "token count on top of that, not for free")
-    parser.add_argument("--batch-size", type=int, default=64,
-                         help="was 8 -- a very conservative default for a 24GB-unified-memory Mac and "
-                              "an ~81M-param model. Bigger batches don't reduce total FLOPs, but they "
-                              "trade many small matmuls for fewer, bigger ones, which usually improves "
-                              "real MLX/Metal throughput. Lower this if you hit a memory error.")
+    parser.add_argument("--batch-size", type=int, default=16,
+                         help="was 64 at v0.6's 512/7/8 (~26.1M param) config, real M5 runs measured "
+                              "only ~829 tok/s -- a swap-triggering memory bottleneck confirmed by a "
+                              "clean single-variable test (identical model, only batch size changed): "
+                              "batch=64 gave ~829 tok/s, batch=16 gave ~15,200 tok/s on the same "
+                              "hardware and same full corpus (ml/RESULTS.md, 2026-07-23). Bigger "
+                              "batches don't reduce total FLOPs, and trade many small matmuls for "
+                              "fewer, bigger ones -- normally a good trade for MLX/Metal throughput, "
+                              "but only once the model's total activation/gradient memory at that "
+                              "batch size actually fits without swapping. Raise this if you have "
+                              "memory headroom to spare (more unified memory, or a smaller model); "
+                              "lower it further if you still hit a memory error.")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--eval-every", type=int, default=1)
     parser.add_argument("--resume", type=str, default=None)

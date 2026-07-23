@@ -48,7 +48,21 @@ class ModelConfig:
                             # property the 13.7M config relied on -- while landing at
                             # ~26.1M params, still comfortably inside the well-evidenced
                             # 100K-48M-param small-scale BitNet research range cited in
-                            # docs/slm-strategy.md Section 3.
+                            # docs/slm-strategy.md Section 3. Alignment alone still wasn't
+                            # enough, though: this exact 512/7/8 config, on the *full*
+                            # packed corpus, still only measured ~829 tok/s. Real hands-on
+                            # bisection (varying d_model, n_layers, and batch size one at a
+                            # time across many real M5 runs -- see ml/RESULTS.md for the
+                            # full log) traced the actual cause to `--batch-size` (train_
+                            # base.py's default was 64): at this model's total size,
+                            # batch=64's activation/gradient memory pushes the M5's 24GB
+                            # unified memory into swap, and that swap -- not the model's
+                            # architecture at all -- was the real bottleneck. A clean,
+                            # single-variable test (identical 512/7/8/mlp_ratio=4
+                            # architecture, only batch size changed) confirmed it:
+                            # batch=64 -> ~829 tok/s, batch=16 -> ~15,200 tok/s on the same
+                            # hardware, same full corpus. train_base.py's default
+                            # --batch-size is now 16 to match.
     n_layers: int = 7
     n_heads: int = 8        # head_dim = 512/8 = 64, a clean power of 2 again.
     mlp_ratio: int = 4

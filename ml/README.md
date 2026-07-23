@@ -70,7 +70,15 @@ for (see `docs/slm-strategy.md` Section 5).
   dimension-alignment problem (head_dim=58 isn't a multiple of 32, unlike the 13.7M
   config's own head_dim=64, and Metal's matmul/attention kernels have well-known fast
   paths for aligned tile sizes). Corrected to 512/7/8 (head_dim=64, mlp_dim=2048, all
-  powers of two again). See `docs/slm-strategy.md` Section 5 for the full story.
+  powers of two again) -- but that alone still only measured ~829 tok/s on the full
+  corpus at `train_base.py`'s then-default `batch_size=64`. Real bisection across many
+  M5 runs (varying d_model, n_layers, then batch size, one variable at a time) traced
+  it to batch size: at this model's total size, batch=64's activation/gradient memory
+  pushes the M5's 24GB unified memory into swap. A clean single-variable test
+  confirmed it -- same 512/7/8 architecture, only batch size changed: batch=64 gave
+  ~829 tok/s, **batch=16 gave ~15,200 tok/s**. `train_base.py`'s default `--batch-size`
+  is now 16. See `docs/slm-strategy.md` Section 5 and `RESULTS.md` (2026-07-23) for the
+  full bisection log.
 - **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 94
   tokens/parameter — well past Chinchilla's ~20 compute-optimal ratio, a deliberate
   overtraining budget (same rationale as LLaMA training past compute-optimal for a
@@ -172,7 +180,10 @@ python3 train/train_base.py --tiny
 # 4. Full base pretrain (once the tiny run's loss curve looks sane).
 #    Automatically subsamples the packed corpus down to this config's own
 #    ~2.45B-token deliberate-overtraining budget -- at v0.6's sizing that's
-#    effectively the whole packed corpus, not a meaningful subsample:
+#    effectively the whole packed corpus, not a meaningful subsample. Default
+#    --batch-size is 16 -- v0.6's real M5 runs measured ~829 tok/s at the old
+#    default of 64 (a swap-triggering memory bottleneck) vs. ~15,200 tok/s at
+#    16, see RESULTS.md 2026-07-23:
 python3 train/train_base.py
 
 # 5. Fine-tune the entry-drafting adapter on the frozen base:
