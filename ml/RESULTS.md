@@ -224,6 +224,33 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
   Never legitimate model output, so `model.ts`/`inference_server.py` now strip any
   `�` from the final decoded text before returning it.
 
+### the real bug: lm_head_weight silently diverges from token_emb during training — 2026-07-23
+- Symptom, after both fixes above landed on the correct branch: the deployed app and
+  `verify_web_port.py` (numpy, real weights) both produced the exact same degenerate
+  single token from the very first prediction, for every prompt -- including a
+  question copied verbatim from the platform_help training data.
+- Isolating step: ran the *real* MLX model directly (`inference_server.py`, bypassing
+  export/numpy entirely) for that same verbatim training question. It produced a
+  correct, coherent, near-exact match to the real answer -- proving the checkpoints
+  and tokenizer were both fine, and the bug was specific to the export/port path.
+- Root cause: `transformer_mlx.py`'s `self.lm_head_weight = self.token_emb.weight`
+  only aliases the two arrays at construction time. MLX's parameter tree treats them
+  as independent leaves by attribute path, so each accumulates its own gradient
+  during training (the embedding *lookup* usage vs. the final output-*projection*
+  usage) and they drift apart over the course of training despite the "tied
+  embeddings" framing in the code's own comment. Confirmed directly on the real
+  checkpoint: `token_emb.weight` and `lm_head_weight` differ by up to 0.56 in
+  absolute value -- nowhere near identical.
+- `export_web_weights.py` never captured `lm_head_weight` as its own tensor, so
+  every port (the TS runtime, the numpy reference) ran the final output projection
+  against `token_emb.weight` instead -- the wrong matrix, from the very first
+  generated token, on every single prompt.
+- Fix: export `lm_head_weight` as its own tensor; `model.ts`/`verify_web_port.py`
+  now use it (not `token_emb.weight`) for the final projection. Verified the
+  plumbing with synthetic checkpoints using a deliberately different
+  `lm_head_weight` -- loads and runs correctly. Needs a fresh real export + redeploy
+  to confirm the actual fix end-to-end.
+
 ## Synthetic data generation (real, paid API runs)
 
 ### entry_drafting corpus — `data/generate_synthetic.py`
