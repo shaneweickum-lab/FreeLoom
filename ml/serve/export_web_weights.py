@@ -75,6 +75,15 @@ def export_base(base_checkpoint: Path) -> dict[str, np.ndarray]:
     out: dict[str, np.ndarray] = {
         "token_emb.weight": _require(raw, "token_emb.weight"),
         "pos_emb.weight": _require(raw, "pos_emb.weight"),
+        # NOT the same array as token_emb.weight by the time training
+        # finishes, despite transformer_mlx.py's `self.lm_head_weight =
+        # self.token_emb.weight` aliasing them at construction time -- MLX's
+        # parameter tree treats them as two independent leaves by attribute
+        # path, so each accumulates its own gradient (from the embedding
+        # lookup vs. the output-projection usage) and they drift apart
+        # during training. Using token_emb.weight for both here would silently
+        # run inference against the wrong output head.
+        "lm_head_weight": _require(raw, "lm_head_weight"),
         "ln_f.weight": _require(raw, "ln_f.weight"),
         "ln_f.bias": _require(raw, "ln_f.bias"),
     }
