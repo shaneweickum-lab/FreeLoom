@@ -11,6 +11,7 @@ import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
 import CaptureCard, { type CaptureForm } from "@/components/CaptureCard";
 import RecordCard, { type EntryWithTags } from "@/components/RecordCard";
+import VoiceInputButton from "@/components/VoiceInputButton";
 
 type TagInput = {
   subjectArea: string;
@@ -520,13 +521,21 @@ function LogPageInner() {
             Accepted from the Discovery notes on the Profile page — describe the specific activity below to
             log the first entry for this class.
           </p>
-          <textarea
-            className="input min-h-20"
-            placeholder="What did they actually do?"
-            value={quickAdd.rawWordDump}
-            onChange={(e) => setQuickAdd({ ...quickAdd, rawWordDump: e.target.value })}
-            required
-          />
+          <div className="relative">
+            <textarea
+              className="input min-h-20 pr-10"
+              placeholder="What did they actually do?"
+              value={quickAdd.rawWordDump}
+              onChange={(e) => setQuickAdd({ ...quickAdd, rawWordDump: e.target.value })}
+              required
+            />
+            <VoiceInputButton
+              className="absolute bottom-2 right-2"
+              onTranscript={(text) =>
+                setQuickAdd({ ...quickAdd, rawWordDump: quickAdd.rawWordDump ? `${quickAdd.rawWordDump} ${text}` : text })
+              }
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               className="input"
