@@ -1,6 +1,7 @@
 "use client";
 
 import { ACTIVITY_TYPES, type ActivityType } from "@/lib/types";
+import VoiceInputButton from "@/components/VoiceInputButton";
 
 export type CaptureForm = { rawWordDump: string; activityType: ActivityType; sourcePlatform: string; minutes: string };
 
@@ -24,12 +25,18 @@ export default function CaptureCard({
 }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4">
-      <textarea
-        className="input min-h-24"
-        placeholder="e.g. Spent the afternoon building automated factories in Factorio, wiring up circuit logic for the first time"
-        value={form.rawWordDump}
-        onChange={(e) => onChange({ ...form, rawWordDump: e.target.value })}
-      />
+      <div className="relative">
+        <textarea
+          className="input min-h-24 pr-10"
+          placeholder="e.g. Spent the afternoon building automated factories in Factorio, wiring up circuit logic for the first time"
+          value={form.rawWordDump}
+          onChange={(e) => onChange({ ...form, rawWordDump: e.target.value })}
+        />
+        <VoiceInputButton
+          className="absolute bottom-2 right-2"
+          onTranscript={(text) => onChange({ ...form, rawWordDump: form.rawWordDump ? `${form.rawWordDump} ${text}` : text })}
+        />
+      </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-muted">Activity type</span>

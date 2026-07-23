@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import type { ProfileNote, SuggestedTrack } from "@/lib/types";
+import VoiceInputButton from "@/components/VoiceInputButton";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -144,13 +145,19 @@ export default function ProfilePage() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <textarea
-          className="input min-h-32"
-          placeholder="e.g. obsessed with dinosaurs, loves drawing, plays a lot of Minecraft, curious and hands-on, needs movement breaks, learns best by teaching someone else what they figured out"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onBlur={() => saveContent()}
-        />
+        <div className="relative">
+          <textarea
+            className="input min-h-32 pr-10"
+            placeholder="e.g. obsessed with dinosaurs, loves drawing, plays a lot of Minecraft, curious and hands-on, needs movement breaks, learns best by teaching someone else what they figured out"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onBlur={() => saveContent()}
+          />
+          <VoiceInputButton
+            className="absolute bottom-2 right-2"
+            onTranscript={(text) => setContent((prev) => (prev ? `${prev} ${text}` : text))}
+          />
+        </div>
         <div className="flex items-center gap-3">
           <button onClick={() => saveContent()} className="btn-secondary" disabled={saving}>
             {saving ? "Saving…" : "Save notes"}
