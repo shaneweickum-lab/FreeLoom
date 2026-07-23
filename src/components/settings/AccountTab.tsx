@@ -299,14 +299,17 @@ export default function AccountTab({
             onChange={(e) => saveBennyEnabled(e.target.checked)}
           />
           <span className="font-medium">Benny (AI Assistant)</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold font-mono">
+            Beta
+          </span>
         </label>
         <span className="text-muted/70 text-[11px]">
           {bennyLocked ? (
             <>Available on Pro and Premium plans -- see the Billing tab to upgrade.</>
           ) : (
             <>
-              Adds a chat icon to the app for asking Benny, FreeLoom&apos;s in-progress assistant, questions. Benny is
-              still early -- expect a placeholder reply for now while the assistant itself is being trained.
+              Adds a chat icon to the app for asking Benny, FreeLoom&apos;s in-house assistant, questions. Benny is AI
+              and can make mistakes.
             </>
           )}
         </span>

@@ -39,7 +39,12 @@ export default function BennyPanel() {
       <div aria-hidden onClick={close} className="fixed inset-0 z-40 bg-navy-deep/70" />
       <aside className="fixed inset-y-0 right-0 z-50 w-full sm:w-[36rem] max-w-full border-l border-border bg-surface flex flex-col p-4 gap-3 shadow-2xl">
         <div className="flex items-center justify-between gap-2 border-b border-border pb-3">
-          <h2 className="font-serif text-lg">Benny</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-serif text-lg">Benny</h2>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold font-mono">
+              Beta
+            </span>
+          </div>
           <button
             onClick={close}
             aria-label="Close Benny"

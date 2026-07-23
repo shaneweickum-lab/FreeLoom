@@ -111,6 +111,7 @@ export default function BennyChat({ conversationId }: { conversationId: string }
         </button>
       </form>
       {error && <p className="text-xs text-red-400">{error}</p>}
+      <p className="text-[11px] text-muted/70 text-center">Benny is AI and can make mistakes.</p>
     </div>
   );
 }
