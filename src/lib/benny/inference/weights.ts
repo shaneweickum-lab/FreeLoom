@@ -29,6 +29,12 @@ export interface LayerWeights {
 export interface BaseWeights {
   tokenEmb: Float32Array;
   posEmb: Float32Array;
+  // NOT the same values as tokenEmb by the time training finishes -- MLX's
+  // `self.lm_head_weight = self.token_emb.weight` only aliases them at
+  // construction; each accumulates its own gradient during training and
+  // they drift apart. Always use this for the final output projection, not
+  // tokenEmb, despite the "tied embeddings" framing in transformer_mlx.py.
+  lmHeadWeight: Float32Array;
   lnFGamma: Float32Array;
   lnFBeta: Float32Array;
   layers: LayerWeights[];
@@ -75,6 +81,7 @@ export function loadBaseWeights(): BaseWeights {
   cachedBase = {
     tokenEmb: requireTensor(raw, "token_emb.weight").data,
     posEmb: requireTensor(raw, "pos_emb.weight").data,
+    lmHeadWeight: requireTensor(raw, "lm_head_weight").data,
     lnFGamma: requireTensor(raw, "ln_f.weight").data,
     lnFBeta: requireTensor(raw, "ln_f.bias").data,
     layers,

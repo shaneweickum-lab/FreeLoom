@@ -115,7 +115,7 @@ def forward(token_ids: list[int], base: dict, adapter: dict) -> np.ndarray:
         x = x + mlp_out
 
     x = layer_norm(x, base["ln_f.weight"], base["ln_f.bias"])
-    return x @ base["token_emb.weight"].T
+    return x @ base["lm_head_weight"].T
 
 
 # Greedy decoding can fall into a stable repetition loop on some prompts --

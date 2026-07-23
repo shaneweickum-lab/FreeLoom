@@ -62,7 +62,7 @@ function forwardStep(
   }
 
   const normed = layerNorm(x, 1, D, base.lnFGamma, base.lnFBeta);
-  return linear(normed, 1, D, base.tokenEmb, MODEL_CONFIG.vocabSize);
+  return linear(normed, 1, D, base.lmHeadWeight, MODEL_CONFIG.vocabSize);
 }
 
 /** Mirrors inference_server.py's generate(): greedy decode, stops at
