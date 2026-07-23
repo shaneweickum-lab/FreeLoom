@@ -248,8 +248,13 @@ fit against, i.e. noise. `kb_authoring` and `platform_help` were both fine-tuned
 - Fix: export `lm_head_weight` as its own tensor; `model.ts`/`verify_web_port.py`
   now use it (not `token_emb.weight`) for the final projection. Verified the
   plumbing with synthetic checkpoints using a deliberately different
-  `lm_head_weight` -- loads and runs correctly. Needs a fresh real export + redeploy
-  to confirm the actual fix end-to-end.
+  `lm_head_weight` -- loads and runs correctly.
+- Confirmed with a fresh real export: `verify_web_port.py` on "What is FreeLoom?"
+  now produces "answer: FreeLoom is a record-keeping app made for homeschooling,
+  unschooling, and wildschooling families. You just describe in plain, everyday
+  language what your kid did, and FreeLoom converts that description into a class
+  entry that..." -- a near-exact match to the real MLX model's own output for the
+  same question. Bug fully resolved.
 
 ## Synthetic data generation (real, paid API runs)
 
