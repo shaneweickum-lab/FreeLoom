@@ -28,6 +28,7 @@ const retrieveCustomer = vi.fn(async () => ({ deleted: false }));
 const createSession = vi.fn(async () => ({ url: "https://checkout.stripe.com/session123" }));
 const listSubscriptions = vi.fn(async (): Promise<{ data: { id: string; status: string }[] }> => ({ data: [] }));
 const listCheckoutSessions = vi.fn(async (): Promise<{ data: { id: string }[] }> => ({ data: [] }));
+const expireSession = vi.fn(async () => ({ id: "cs_already_open", status: "expired" }));
 
 vi.mock("@/lib/stripe", () => ({
   getStripe: vi.fn(() => ({
@@ -39,6 +40,7 @@ vi.mock("@/lib/stripe", () => ({
       sessions: {
         create: (...args: Parameters<typeof createSession>) => createSession(...args),
         list: (...args: Parameters<typeof listCheckoutSessions>) => listCheckoutSessions(...args),
+        expire: (...args: Parameters<typeof expireSession>) => expireSession(...args),
       },
     },
     subscriptions: { list: (...args: Parameters<typeof listSubscriptions>) => listSubscriptions(...args) },
@@ -194,12 +196,13 @@ describe("POST /api/billing/checkout", () => {
     );
   });
 
-  it("409s instead of creating a second session when one is already open for this customer", async () => {
+  it("expires a stale open session for this customer instead of blocking the new checkout", async () => {
     fromQueue = [{ data: { stripe_customer_id: "cus_existing" }, error: null }];
     listCheckoutSessions.mockResolvedValueOnce({ data: [{ id: "cs_already_open" }] });
     const res = await POST(makeRequest({ tier: "pro", interval: "month" }));
-    expect(res.status).toBe(409);
-    expect(createSession).not.toHaveBeenCalled();
+    expect(expireSession).toHaveBeenCalledWith("cs_already_open");
+    expect(res.status).toBe(200);
+    expect(createSession).toHaveBeenCalled();
   });
 
   it("500s cleanly instead of throwing when Stripe itself errors mid-checkout", async () => {

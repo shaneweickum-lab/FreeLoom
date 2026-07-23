@@ -129,12 +129,18 @@ export async function POST(req: NextRequest) {
     // both get paid. Checked live against Stripe's own open Checkout
     // Sessions for this customer, same "authoritative, not just our cached
     // state" approach as the subscription check above.
+    //
+    // Rather than just blocking on a match, expire it and proceed -- a
+    // Checkout Session stays "open" for up to 24h even after a declined
+    // card or an abandoned tab, and the user starting a new checkout here
+    // is the clearest possible signal the old one is dead, not a second
+    // concurrent attempt. This still closes the actual race: a genuinely
+    // still-open second tab would find its own session invalidated the
+    // moment it tries to complete, so at most one checkout can ever
+    // succeed, without permanently locking a normal retry out for a day.
     const openSessions = await stripe.checkout.sessions.list({ customer: customerId, status: "open", limit: 1 });
     if (openSessions.data.length > 0) {
-      return NextResponse.json(
-        { error: "A checkout is already in progress -- finish or close that tab, then try again." },
-        { status: 409 }
-      );
+      await stripe.checkout.sessions.expire(openSessions.data[0].id);
     }
 
     const session = await stripe.checkout.sessions.create({
