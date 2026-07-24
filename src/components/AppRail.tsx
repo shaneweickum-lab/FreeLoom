@@ -6,7 +6,7 @@ import { useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { useBennyPanel } from "@/lib/bennyPanelContext";
-import { getEffectiveTier } from "@/lib/billing/tier";
+import { isBennyAvailable } from "@/lib/billing/tier";
 import StudentSwitcher from "@/components/StudentSwitcher";
 import LogoMark from "@/components/LogoMark";
 import NotificationBell from "@/components/NotificationBell";
@@ -51,7 +51,12 @@ function ChatIcon() {
 
 type BennyGateProfile = Pick<
   SchoolProfile,
-  "benny_assistant_enabled" | "subscription_tier" | "subscription_status" | "grandfathered_until" | "current_period_end"
+  | "benny_assistant_enabled"
+  | "subscription_tier"
+  | "subscription_status"
+  | "grandfathered_until"
+  | "current_period_end"
+  | "benny_trial_ends_at"
 >;
 
 /** Only renders once the signed-in user has opted into Benny assistant mode
@@ -86,25 +91,29 @@ function BennyTriggerButton() {
       const [{ data: profile }, { data: adminRow }] = await Promise.all([
         supabase
           .from("school_profiles")
-          .select("benny_assistant_enabled, subscription_tier, subscription_status, grandfathered_until, current_period_end")
+          .select(
+            "benny_assistant_enabled, subscription_tier, subscription_status, grandfathered_until, current_period_end, benny_trial_ends_at"
+          )
           .eq("user_id", userId)
           .maybeSingle(),
         supabase.from("admin_users").select("user_id").eq("user_id", userId).maybeSingle(),
       ]);
       const isAdmin = !!adminRow;
 
-      // Free tier never sees Benny at all, regardless of the toggle --
-      // see AccountTab.tsx, where the toggle itself is also gated so a
-      // Free-tier parent can't even turn this on to find it hidden anyway.
+      // Free tier never sees Benny at all unless still inside its one-time
+      // trial window (isBennyAvailable) -- see AccountTab.tsx, where the
+      // toggle itself is also gated so a locked-out parent can't even turn
+      // this on to find it hidden anyway.
       function computeEnabled(p: BennyGateProfile | null) {
-        const tier = getEffectiveTier({
+        const available = isBennyAvailable({
           subscription_tier: p?.subscription_tier ?? "free",
           subscription_status: p?.subscription_status ?? null,
           grandfathered_until: p?.grandfathered_until ?? null,
           current_period_end: p?.current_period_end ?? null,
+          benny_trial_ends_at: p?.benny_trial_ends_at ?? null,
           isAdmin,
         });
-        return !!p?.benny_assistant_enabled && tier !== "free";
+        return !!p?.benny_assistant_enabled && available;
       }
 
       if (cancelled) return;

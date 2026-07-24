@@ -138,7 +138,12 @@ export function generate(
   return generated;
 }
 
-function runAdapter(task: AdapterTask, promptText: string, maxNewTokens: number): string {
+/** tokens is promptIds.length + generatedIds.length -- total tokens this
+ * call actually processed, the unit Benny's usage cap (src/lib/billing/
+ * tier.ts) is measured in. Surfaced here rather than computed by a caller,
+ * since generatedIds (needed for an accurate count) is discarded right
+ * after decode() below. */
+function runAdapter(task: AdapterTask, promptText: string, maxNewTokens: number): { text: string; tokens: number } {
   const base = loadBaseWeights();
   const adapter = loadAdapterWeights(task);
   const promptIds = [bosId(), ...encode(promptText)];
@@ -148,7 +153,8 @@ function runAdapter(task: AdapterTask, promptText: string, maxNewTokens: number)
   // (repetition guard, hitting max_new_tokens, anything else) partway
   // through a multi-byte character's constituent tokens produces exactly
   // that. Never legitimate model output, so it's always safe to drop.
-  return decode(generatedIds).replace(/�/g, "");
+  const text = decode(generatedIds).replace(/�/g, "");
+  return { text, tokens: promptIds.length + generatedIds.length };
 }
 
 // Mirrors ml/serve/inference_server.py's ENTRY_DRAFT_PATTERN exactly (same
@@ -171,7 +177,7 @@ export interface DraftResult {
  * already treat null as "fall through to Stage 5", so this needs no
  * separate error channel. */
 export function draftEntry(rawWordDump: string): DraftResult | null {
-  const completionText = runAdapter("entry_drafting", `activity: ${rawWordDump}\n`, 120);
+  const { text: completionText } = runAdapter("entry_drafting", `activity: ${rawWordDump}\n`, 120);
   const match = ENTRY_DRAFT_PATTERN.exec(completionText);
   if (!match) return null;
   const [, courseTitle, subjectArea, creditValueRaw, rationale] = match;
@@ -189,11 +195,14 @@ export function draftEntry(rawWordDump: string): DraftResult | null {
 
 /** Mirrors inference_server.py's POST /chat handler (history accepted by
  * the caller for contract compatibility, not used in the prompt -- see
- * that route and src/lib/benny/chat.ts for why). */
-export function chatReply(message: string): string {
-  const completionText = runAdapter("platform_help", `question: ${message}\n`, 200).trim();
+ * that route and src/lib/benny/chat.ts for why). tokens is surfaced
+ * alongside the reply so callers can log it against the account's Benny
+ * usage cap (src/lib/billing/tier.ts). */
+export function chatReply(message: string): { reply: string; tokens: number } {
+  const { text, tokens } = runAdapter("platform_help", `question: ${message}\n`, 200);
+  const completionText = text.trim();
   const reply = completionText.toLowerCase().startsWith("answer:")
     ? completionText.slice("answer:".length).trim()
     : completionText;
-  return reply || "I'm not sure how to answer that one yet.";
+  return { reply: reply || "I'm not sure how to answer that one yet.", tokens };
 }
