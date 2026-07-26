@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LogoMark from "@/components/LogoMark";
 
 const LAST_UPDATED = "July 22, 2026";
 
@@ -9,11 +10,8 @@ export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl w-full flex flex-col gap-8 py-16 px-4 sm:px-6">
       <div className="text-center">
-        <Link
-          href="/"
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-ink text-xl font-bold mb-4"
-        >
-          F
+        <Link href="/" className="inline-flex mb-4">
+          <LogoMark size={48} />
         </Link>
         <h1 className="text-2xl font-bold font-serif">Privacy &amp; Cookie Policy</h1>
         <p className="text-muted text-sm mt-2">Last updated {LAST_UPDATED}.</p>

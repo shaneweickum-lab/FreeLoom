@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import LogoMark from "@/components/LogoMark";
 import { createClient } from "@/lib/supabase/client";
 import { featuresFor, PLAN_NAMES } from "@/lib/billing/tier";
 import type { SubscriptionTier } from "@/lib/billing/tier";
@@ -106,11 +107,8 @@ function OnboardingWizardInner({ userId, initialProfile, prices }: Props) {
   return (
     <div className="flex flex-col gap-8">
       <div className="text-center">
-        <Link
-          href="/"
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-ink text-xl font-bold mb-4"
-        >
-          F
+        <Link href="/" className="inline-flex mb-4">
+          <LogoMark size={48} />
         </Link>
         <p className="text-xs font-mono uppercase tracking-wide text-muted mb-1">
           Step {step === "profile" ? "1" : "2"} of 2
