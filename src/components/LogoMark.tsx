@@ -1,20 +1,17 @@
+import Image from "next/image";
+
 /**
- * Placeholder brand mark: a two-tone (gold/violet) woven "F" on a navy
- * square, meant to evoke the product's name (a loom). This is a stand-in,
- * not final brand art -- flag for real logo design later. The two offset
- * strokes are a cheap approximation of a woven/interlaced look without
- * needing true path-braiding.
+ * FreeLoom's real brand mark: a navy/gold circular seal (a woven "F" beside
+ * a hand-notated scroll, "FREELOOM" around the border) -- replaces the
+ * hand-drawn placeholder this component used to render. Source art is
+ * public/FreeLoom-Logo.png (1024x1024, transparent background). If the
+ * source art changes, also regenerate: src/app/icon.png (static 512x512
+ * resize), src/app/apple-icon.png (static 180x180 resize, Apple's
+ * documented @3x home-screen icon size), src/app/favicon.ico (16/32/48px,
+ * the legacy fallback), and public/FreeLoom-Logo-og.png (240x240 resize,
+ * read by src/app/opengraph-image.tsx -- the one spot that has to stay
+ * code-generated rather than a static file, see its own doc comment).
  */
 export default function LogoMark({ size = 40 }: { size?: number }) {
-  return (
-    <span
-      className="inline-flex shrink-0 items-center justify-center rounded-lg border border-navy-line bg-navy-soft"
-      style={{ width: size, height: size }}
-    >
-      <svg viewBox="0 0 32 32" width={size * 0.55} height={size * 0.55} fill="none" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M11 26V9h13" stroke="var(--violet)" strokeWidth="3.25" transform="translate(1.2,-1.2)" />
-        <path d="M10 25V8h13M10 16h9.5" stroke="var(--gold)" strokeWidth="2.75" />
-      </svg>
-    </span>
-  );
+  return <Image src="/FreeLoom-Logo.png" alt="FreeLoom" width={size} height={size} className="shrink-0" />;
 }
