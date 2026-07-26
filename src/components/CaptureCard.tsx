@@ -53,11 +53,18 @@ export default function CaptureCard({
           <input className="input" placeholder="e.g. Factorio, Recess" value={form.sourcePlatform} onChange={(e) => onChange({ ...form, sourcePlatform: e.target.value })} />
         </label>
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-muted">Time spent, minutes (optional)</span>
-          <input type="number" min={0} className="input" value={form.minutes} onChange={(e) => onChange({ ...form, minutes: e.target.value })} />
+          <span className="text-muted">Time spent, minutes</span>
+          <input
+            type="number"
+            min={1}
+            className="input"
+            value={form.minutes}
+            onChange={(e) => onChange({ ...form, minutes: e.target.value })}
+            required
+          />
         </label>
       </div>
-      <button type="submit" className="btn-primary w-fit" disabled={submitting || !form.rawWordDump.trim()}>
+      <button type="submit" className="btn-primary w-fit" disabled={submitting || !form.rawWordDump.trim() || !form.minutes}>
         {submitting ? "Weaving…" : "Weave into a record"}
       </button>
       {error && <p className="text-sm text-red-600">{error}</p>}

@@ -14,6 +14,7 @@
 
 import { findAllKnowledgeBaseMatches } from "@/lib/knowledgeBase";
 import { extractQuotedPhrase, findKeywordMatch } from "@/lib/keywordMatch";
+import { creditFromHours, guessIsLabScience } from "@/lib/pipeline/credit-calculation";
 
 export type WordDumpInput = {
   rawWordDump: string;
@@ -207,18 +208,6 @@ function dedupeBySubject<T>(matches: T[], getSubjectArea: (match: T) => string):
 }
 
 /**
- * Homeschool documentation commonly treats ~120-150 engaged hours as one
- * Carnegie credit hour. Falls back to a small single-session estimate when
- * no duration was given rather than guessing something larger.
- */
-function estimateCreditValue(timeSpentMinutes: number | null | undefined, base: number): number {
-  if (!timeSpentMinutes || timeSpentMinutes <= 0) return base;
-  const hours = timeSpentMinutes / 60;
-  const rounded = Math.round((hours / 130) * 4) / 4;
-  return Math.max(0.1, rounded);
-}
-
-/**
  * The whole of Stage 1+3 v0: try the curated knowledge base first (specific
  * games/platforms/activities with a hand-written rationale), then the
  * broader keyword clusters (a general subject match with no specific
@@ -244,7 +233,7 @@ export function classifyWordDump(input: WordDumpInput): ClassifyResult {
       tags: kbMatches.map(({ entry, matchedKeyword, matchIndex }) => ({
         subjectArea: entry.subjectArea,
         courseTitle: entry.courseTitle,
-        creditValue: estimateCreditValue(input.timeSpentMinutes, entry.baseCreditHours),
+        creditValue: creditFromHours(input.timeSpentMinutes, guessIsLabScience(entry.subjectArea), entry.baseCreditHours),
         reasoning: entry.rationale,
         confidence: "high",
         quotedPhrase: extractQuotedPhrase(input.rawWordDump, { keyword: matchedKeyword, index: matchIndex }),
@@ -263,7 +252,7 @@ export function classifyWordDump(input: WordDumpInput): ClassifyResult {
       tags: clusterMatches.map(({ cluster, matchedKeyword, matchIndex }) => ({
         subjectArea: cluster.subjectArea,
         courseTitle: cluster.courseTitle,
-        creditValue: estimateCreditValue(input.timeSpentMinutes, 0.1),
+        creditValue: creditFromHours(input.timeSpentMinutes, guessIsLabScience(cluster.subjectArea), 0.1),
         reasoning: `Matched to ${cluster.subjectArea.toLowerCase()} based on keywords in the activity description.`,
         confidence: "medium",
         quotedPhrase: extractQuotedPhrase(input.rawWordDump, { keyword: matchedKeyword, index: matchIndex }),

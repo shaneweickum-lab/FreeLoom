@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sumCredits, cumulativeCreditsByYear } from "./credit-calculation";
+import { sumCredits, cumulativeCreditsByYear, creditFromHours, guessIsLabScience } from "./credit-calculation";
 
 describe("sumCredits", () => {
   it("adds a flat list of credit values", () => {
@@ -76,5 +76,59 @@ describe("cumulativeCreditsByYear", () => {
       { year: "10", yearCredits: 2, cumulativeCredits: 2 },
       { year: "9", yearCredits: 2, cumulativeCredits: 4 },
     ]);
+  });
+});
+
+describe("guessIsLabScience", () => {
+  it("flags conventional lab-science subjects", () => {
+    expect(guessIsLabScience("Biology")).toBe(true);
+    expect(guessIsLabScience("Chemistry")).toBe(true);
+    expect(guessIsLabScience("Physics")).toBe(true);
+    expect(guessIsLabScience("AP Environmental Science")).toBe(true);
+  });
+
+  it("does not flag non-lab-science subjects, including a bare 'Science'", () => {
+    expect(guessIsLabScience("Mathematics")).toBe(false);
+    expect(guessIsLabScience("Language Arts")).toBe(false);
+    expect(guessIsLabScience("Science")).toBe(false);
+  });
+
+  it("is case-insensitive", () => {
+    expect(guessIsLabScience("BIOLOGY")).toBe(true);
+    expect(guessIsLabScience("biology")).toBe(true);
+  });
+});
+
+describe("creditFromHours", () => {
+  it("converts 150 hours (the standard rate) into exactly 1.0 credit", () => {
+    expect(creditFromHours(150 * 60, false, 0.25)).toBe(1);
+  });
+
+  it("converts 180 hours (the lab-science rate) into exactly 1.0 credit, unlike the standard rate", () => {
+    expect(creditFromHours(180 * 60, true, 0.25)).toBe(1);
+    // The same 180 hours at the standard 150hr/credit rate would round to 1.25, not 1 --
+    // confirms the lab-science flag actually changes which divisor is used, not just the input.
+    expect(creditFromHours(180 * 60, false, 0.25)).toBe(1.25);
+  });
+
+  it("rounds to the nearest quarter credit", () => {
+    // 165 standard hours is 1.1 credits -- should round down to 1.0, not up to 1.25.
+    expect(creditFromHours(165 * 60, false, 0.25)).toBe(1);
+    // 172.5 standard hours is 1.15 credits -- should round up to 1.25.
+    expect(creditFromHours(172.5 * 60, false, 0.25)).toBe(1.25);
+  });
+
+  it("falls back to the given default when no time was logged", () => {
+    expect(creditFromHours(null, false, 0.25)).toBe(0.25);
+    expect(creditFromHours(undefined, true, 0.5)).toBe(0.5);
+    expect(creditFromHours(0, false, 0.1)).toBe(0.1);
+  });
+
+  it("never returns below the 0.1 floor even for a very short logged duration", () => {
+    // 5 minutes is a real (if tiny) logged duration, not "no time given" --
+    // the rounded Carnegie-hours math alone would floor to 0 credit here;
+    // the 0.1 floor is what keeps a genuinely-logged activity from scoring
+    // as literally worthless.
+    expect(creditFromHours(5, false, 0.25)).toBe(0.1);
   });
 });

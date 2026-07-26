@@ -1,3 +1,5 @@
+import type { SchoolingStructure } from "@/lib/academicSessions";
+
 export type ActivityType = "game" | "book" | "project" | "platform" | "other";
 
 export const ACTIVITY_TYPES: ActivityType[] = ["game", "book", "project", "platform", "other"];
@@ -101,6 +103,12 @@ export type SchoolProfile = {
    * created before this column existed) have this null and just fall back
    * to ordinary tier-based gating, same as grandfathered_until above. */
   benny_trial_ends_at: string | null;
+  /** The cadence this family builds its academic_sessions rows against
+   * (src/lib/academicSessions.ts) -- null until a parent sets one up, same
+   * as every other opt-in structural field on this table. Purely a label/
+   * default for the Settings UI; the actual session date ranges live in
+   * their own table, not derived from this value. */
+  schooling_structure: SchoolingStructure | null;
   updated_at: string;
 };
 
@@ -147,6 +155,22 @@ export type PipelineClass = {
    * a progress bar against this when it's set; otherwise it just shows
    * accumulated credits with no fabricated target. */
   target_credits: number | null;
+  /** Which academic_sessions row this class accumulates within, if the
+   * family has session-scoping set up at all -- null for every class
+   * created before this existed, and for any family that hasn't built out
+   * a schooling structure (src/lib/academicSessions.ts). A class is looked
+   * up/created per (student_id, subject_area, session_id), so entries in
+   * the same subject during an open session cumulate into ONE record
+   * instead of one permanent record spanning the student's entire time on
+   * the app -- see findOrCreateClass() in (app)/log/page.tsx. */
+  session_id: string | null;
+  /** Whether this class earns credit at the Carnegie lab-science rate (180
+   * hours/credit) instead of the standard rate (150 hours/credit) --
+   * defaults from a keyword guess at creation time
+   * (guessIsLabScience() in pipeline/credit-calculation.ts) and is
+   * parent-correctable afterward (Portfolio page), since the guess is a
+   * starting point, not a final authority. */
+  is_lab_science: boolean;
   created_at: string;
 };
 

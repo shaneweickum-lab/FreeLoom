@@ -86,3 +86,63 @@ export function cumulativeCreditsByYear(entries: CreditEntry[]): YearlyCreditTot
     };
   });
 }
+
+/**
+ * The Carnegie unit convention this app scores every course against: ~150
+ * hours of engaged instruction, coursework, projects, and research per
+ * credit for most subjects. Lab sciences conventionally run richer (lab
+ * time on top of the same coursework), so they're recommended at 180
+ * hours/credit instead -- both numbers per the Carnegie Foundation's own
+ * definition, not something invented for this app.
+ */
+export const CARNEGIE_STANDARD_HOURS_PER_CREDIT = 150;
+export const CARNEGIE_LAB_SCIENCE_HOURS_PER_CREDIT = 180;
+
+/**
+ * Subject areas this app already produces (knowledgeBase.ts entries,
+ * classify.ts's HEURISTIC_CLUSTERS, and whatever a parent free-types on the
+ * manual/quick-add forms) that get the 180-hour lab-science rate instead of
+ * the 150-hour standard rate. A best-effort starting guess, not a final
+ * authority -- classes.is_lab_science is stored per class specifically so a
+ * parent can correct a wrong guess once, rather than fight the heuristic on
+ * every entry.
+ */
+const LAB_SCIENCE_KEYWORDS = [
+  "biology",
+  "chemistry",
+  "physics",
+  "anatomy",
+  "physiology",
+  "environmental science",
+  "earth science",
+  "marine science",
+  "marine biology",
+  "forensic science",
+  "astronomy",
+];
+
+/** Best-effort guess at whether `subjectArea` is a lab science (180
+ * hours/credit) vs. a standard subject (150 hours/credit) -- see
+ * LAB_SCIENCE_KEYWORDS' own comment for why this is a starting point, not
+ * a final answer. */
+export function guessIsLabScience(subjectArea: string): boolean {
+  const lower = subjectArea.toLowerCase();
+  return LAB_SCIENCE_KEYWORDS.some((keyword) => lower.includes(keyword));
+}
+
+/**
+ * Converts logged engaged time into a Carnegie-unit credit value, rounded
+ * to the nearest quarter credit (0.25) -- the standard transcript
+ * increment, and what this app already rounded to before this function
+ * existed. Falls back to `fallback` when no time was actually logged
+ * (rather than guessing a duration that was never given) -- every caller
+ * today passes a small fixed default for that case (e.g. a knowledge-base
+ * entry's own baseCreditHours, or 0.1 for a generic keyword match).
+ */
+export function creditFromHours(timeSpentMinutes: number | null | undefined, isLabScience: boolean, fallback: number): number {
+  if (!timeSpentMinutes || timeSpentMinutes <= 0) return fallback;
+  const hoursPerCredit = isLabScience ? CARNEGIE_LAB_SCIENCE_HOURS_PER_CREDIT : CARNEGIE_STANDARD_HOURS_PER_CREDIT;
+  const hours = timeSpentMinutes / 60;
+  const rounded = Math.round((hours / hoursPerCredit) * 4) / 4;
+  return Math.max(0.1, rounded);
+}
