@@ -121,12 +121,15 @@ No learned gate, no ambiguity to resolve at inference time.
   weights on top — reading and adapting working reference code is the standard way this
   is actually learned, not a shortcut around learning it.
 - **Training token budget**: v0.7 is a deliberate change of *strategy*, not another turn
-  of the same dial -- 30 tokens/parameter, much closer to Chinchilla's ~20 compute-optimal
-  ratio than v0.5/v0.6's 56/94 (both well past it, the deliberate-overtraining trade LLaMA
-  also made, leaning on how cheap extra TinyStories/FineWeb-Edu tokens are). At v0.7's
-  ~51.3M params that's **~1.54B tokens** (`ml/model/config.py`'s `estimate_token_budget()`)
-  -- landing almost exactly on the ~1.5B-token corpus Section 4 packs for this size
-  (TinyStories x2 ~950M + FineWeb-Edu ~550M), so this is again sized to consume
+  of the same dial -- it first moved to 30 tokens/parameter (much closer to Chinchilla's
+  ~20 compute-optimal ratio than v0.5/v0.6's 56/94, both well past it, the
+  deliberate-overtraining trade LLaMA also made, leaning on how cheap extra
+  TinyStories/FineWeb-Edu tokens are), then moved back up to **40 tokens/parameter** --
+  still a real step back from v0.6's 94, just not as close to pure Chinchilla-optimal as
+  the initial 30 attempt. At v0.7's ~51.3M params that's **~2.05B tokens**
+  (`ml/model/config.py`'s `estimate_token_budget()`) -- landing almost exactly on the
+  ~2.05B-token corpus Section 4 packs for this size (TinyStories x2 ~950M, unchanged,
+  + FineWeb-Edu ~1.1B filling the remainder), so this is again sized to consume
   essentially the whole packed corpus rather than waste most of it to subsampling.
 
 ## 4. Training data: two separate pools for two separate jobs
@@ -136,7 +139,7 @@ register) and the adapters' job (FreeLoom's exact output format) call for genuin
 different data — conflating them was the original open question here; the settled
 split:
 
-- **Base-pretraining pool — ~1.5B tokens, from already-generated open datasets, not a
+- **Base-pretraining pool — ~2.05B tokens, from already-generated open datasets, not a
   custom scrape**: `ml/data/prepare_base_corpus.py` streams **TinyStories**
   (`roneneldan/TinyStories`, license `cdla-sharing-1.0` — GPT-3.5/4-generated short
   stories in deliberately simple vocabulary, the direct precedent for "coherent
@@ -152,18 +155,21 @@ split:
   approximate the original target while keeping it the dominant source — both this
   project's own design intent below and the original TinyStories paper's own precedent
   (it trained small models over several epochs of this same small corpus). v0.7 repeats
-  it only 2 epochs instead (~950M tokens, "2 sets") — still the dominant single source,
-  but deliberately giving FineWeb-Edu more relative weight than before (~550M target,
-  up from ~20% of the mix to ~36%) now that the model is bigger and stands to benefit
-  more from broader, less narrow text. FineWeb-Edu is never repeated regardless of its
-  target. `train/prepare_dataset.py`'s first real run packed ~2.46B tokens total --
-  sized at the time for an even earlier ~81M-param config; re-running
-  `prepare_base_corpus.py` at v0.7's new ~950M/~550M targets is a real, one-time re-pull
-  this size change calls for, since packing/tokenizing this much data is itself hours of
-  work not worth doing speculatively. `train/train_base.py`'s full run subsamples
-  whatever's actually packed down to the *current* config's own deliberate-overtraining
-  budget (Section 3) -- at v0.7's sizing, that budget (~1.54B tokens) is close enough to
-  the ~1.5B freshly-packed corpus that no meaningful subsampling actually happens.
+  it only 2 epochs instead (~950M tokens, "2 sets") — still the dominant *individual*
+  source, but no longer the majority of the overall mix once the 40-tokens/param bump
+  raised FineWeb-Edu's own target to **~1.1B** (up from ~550M at the initial 30:1
+  attempt, filling however much of the larger token budget TinyStories' fixed ~950M
+  doesn't cover) — FineWeb-Edu is now ~54% of the mix vs. TinyStories' ~46%, continuing
+  the same rebalancing direction v0.7 already started, just taken further. FineWeb-Edu
+  is never repeated regardless of its target. `train/prepare_dataset.py`'s first real
+  run packed ~2.46B tokens total -- sized at the time for an even earlier ~81M-param
+  config; re-running `prepare_base_corpus.py` at v0.7's new ~950M/~1.1B targets is a
+  real, one-time re-pull this size change calls for, since packing/tokenizing this much
+  data is itself hours of work not worth doing speculatively. `train/train_base.py`'s
+  full run subsamples whatever's actually packed down to the *current* config's own
+  deliberate-overtraining budget (Section 3) -- at v0.7's sizing, that budget (~2.05B
+  tokens) is close enough to the ~2.05B freshly-packed corpus that no meaningful
+  subsampling actually happens.
   Deliberately **not** a custom scrape
   of "educational sites and documents" — most such sites are copyrighted and not
   licensed for training use, and building a scraper would just reinvent the
@@ -189,11 +195,11 @@ split:
 - **Future scale-up, not yet committed to**: once real revenue funds a much larger
   custom-generated corpus (on the order of tens of billions of tokens), that scale
   overshoots this ~51.3M-parameter model's deliberate-overtraining budget by roughly
-  20x (~30 tokens/param target vs. ~585 tokens/param at 30B tokens) — spent on Benny as
+  15x (~40 tokens/param target vs. ~585 tokens/param at 30B tokens) — spent on Benny as
   currently sized, most of it would go to waste. The two honest paths at that point are
   scaling the model up to match (this budget's own ratio at that token count implies
-  something on the order of 1B params, a genuinely bigger model) or reusing that corpus
-  across several smaller specialized models instead of overtraining one. Decide
+  something on the order of 750M params, a genuinely bigger model) or reusing that
+  corpus across several smaller specialized models instead of overtraining one. Decide
   deliberately when the budget is real, not now.
 
 ## 5. Training plan on the actual hardware (MacBook Pro, M5, 24GB unified memory)

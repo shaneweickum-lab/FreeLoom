@@ -79,10 +79,14 @@ from train_tokenizer import format_example, iter_training_texts  # noqa: E402
 # intent (docs/slm-strategy.md Section 4: narrow/simple data should
 # dominate) and the original TinyStories paper's own precedent (training
 # small models over several epochs of this same small corpus). v0.7 repeats
-# it only 2x ("2 sets", ~950M tokens) instead -- still dominant, but a
-# smaller share of the mix, deliberately giving FineWeb-Edu (below) more
-# relative weight than before. FineWeb-Edu hits its own target in one pass
-# and is never repeated.
+# it only 2x ("2 sets", ~950M tokens) instead, unchanged even after the
+# 30 -> 40 tokens/param bump below -- the extra tokens that ratio increase
+# calls for all come from raising FineWeb-Edu's own pull target (see
+# ml/data/prepare_base_corpus.py's DEFAULT_FINEWEB_TOKENS) rather than
+# repeating TinyStories a 3rd time, so FineWeb-Edu is now the *larger*
+# overall share of the mix (~54% vs. TinyStories' ~46%) despite TinyStories
+# still being the single dominant individual source. FineWeb-Edu hits its
+# own (now-larger) target in one pass and is never repeated.
 BASE_CORPUS_REPEATS = {"tinystories.jsonl": 2, "fineweb_edu.jsonl": 1}
 
 

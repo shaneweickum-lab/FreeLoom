@@ -91,15 +91,18 @@ def estimate_lora_param_count(cfg: ModelConfig, rank: int = LORA_RANK) -> int:
 # v0.5/v0.6 both deliberately overtrained well past that (56, then 94
 # tokens/param) -- the same trade LLaMA made, cheap extra pretraining compute
 # for a smaller, cheaper-to-run model at a given quality bar, leaning on how
-# cheap extra TinyStories/FineWeb-Edu tokens are. v0.7 is a deliberate change
-# of strategy, not a continuation of that trend: 30 tokens/param, much closer
-# to Chinchilla-optimal than either prior size. At ~51.3M params that's
-# ~1.54B tokens -- landing almost exactly on the ~1.5B-token corpus v0.7 packs
-# (TinyStories x2 ~950M + FineWeb-Edu ~550M, see prepare_base_corpus.py/
-# prepare_dataset.py), so this is again sized to consume the whole packed
-# corpus rather than waste most of it to subsampling.
+# cheap extra TinyStories/FineWeb-Edu tokens are. v0.7 first reversed that
+# trend down to 30 tokens/param (much closer to Chinchilla-optimal), then
+# moved back up to 40 -- still a deliberate step back from v0.6's 94, not a
+# return to the old overtraining trend, just landing a bit further from pure
+# Chinchilla-optimal than the initial 30 attempt. At ~51.3M params that's
+# ~2.05B tokens -- landing almost exactly on the ~2.05B-token corpus v0.7
+# packs (TinyStories x2 ~950M, unchanged, + FineWeb-Edu ~1.1B filling the
+# remainder, see prepare_base_corpus.py/prepare_dataset.py), so this is
+# again sized to consume the whole packed corpus rather than waste most of
+# it to subsampling.
 CHINCHILLA_TOKENS_PER_PARAM = 20
-TRAIN_TOKENS_PER_PARAM = 30
+TRAIN_TOKENS_PER_PARAM = 40
 
 
 def estimate_token_budget(param_count: int, tokens_per_param: int = TRAIN_TOKENS_PER_PARAM) -> int:
