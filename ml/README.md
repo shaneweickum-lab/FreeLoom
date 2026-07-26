@@ -1,7 +1,7 @@
 # FreeLoom SLM — `ml/`
 
 Implementation of the architecture in [`docs/slm-strategy.md`](../docs/slm-strategy.md):
-one shared ~26.1M-parameter (v0.6) native BitNet b1.58 base model, trained from scratch,
+one shared ~51.3M-parameter (v0.7) native BitNet b1.58 base model, trained from scratch,
 with three LoRA adapters on top (entry-drafting, knowledge-base-authoring, platform-help).
 This directory is a separate Python subproject from the Next.js app in `src/` — it has
 no shared test runner or build step with the TS app, and nothing here is imported by
@@ -54,8 +54,14 @@ for (see `docs/slm-strategy.md` Section 5).
   proof-of-concept corpus — byte-level BPE ran out of distinct merges to learn at that
   size). `model/config.py`'s `vocab_size` must match this exactly (`train_base.py`
   asserts it at startup) — already updated.
-- **Model sizing**: `model/config.py` computes ~26.1M base params (512 d_model, 7
-  layers, 8 heads, head_dim=64, vocab_size=8000) — v0.6, the first deliberate step up
+- **Model sizing**: `model/config.py` computes ~51.3M base params (512 d_model, 15
+  layers, 8 heads, head_dim=64, vocab_size=8000) — v0.7, grown from v0.6's ~26.1M
+  (512/7/8) by adding depth only, deliberately keeping d_model=512 unchanged (the width
+  v0.6's full bisection saga proved safe) rather than growing width and depth together.
+  **v0.7's own throughput has not been measured yet** — `batch_size=16` was v0.6's
+  proven value at 7 layers, not a value re-tested at 15; expect to re-run v0.6's
+  batch-size bisection (halving from 16 until throughput stops improving) rather than
+  assuming 16 still works here untested. v0.6 itself was the first deliberate step up
   from an earlier ~13.7M (384/6/6), which itself was shrunk from ~80.7M (876/8/12)
   after the first real training run on the M5 measured native BitNet QAT training as
   compute-heavier per step than a plain dense model the same size (every `BitLinear`
@@ -64,9 +70,9 @@ for (see `docs/slm-strategy.md` Section 5).
   only exists at inference time with truly packed low-bit weights, not during
   training). At ~80.7M params, the measured ~305 tok/s projected to ~84 days for one
   epoch -- untenable. The 13.7M config then actually ran on the M5 at ~20,600 tok/s,
-  ~10.3 hours/epoch (`RESULTS.md`, 2026-07-22) -- real headroom v0.6 spends. **v0.6's
+  ~10.3 hours/epoch (`RESULTS.md`, 2026-07-22) -- real headroom v0.6 spends. v0.6's
   first sizing attempt (464/9/8, head_dim=58) measured only ~506 tok/s on a real M5
-  run** -- a ~40x regression the param-count math doesn't explain, diagnosed as a
+  run -- a ~40x regression the param-count math doesn't explain, diagnosed as a
   dimension-alignment problem (head_dim=58 isn't a multiple of 32, unlike the 13.7M
   config's own head_dim=64, and Metal's matmul/attention kernels have well-known fast
   paths for aligned tile sizes). Corrected to 512/7/8 (head_dim=64, mlp_dim=2048, all
@@ -77,37 +83,49 @@ for (see `docs/slm-strategy.md` Section 5).
   pushes the M5's 24GB unified memory into swap. A clean single-variable test
   confirmed it -- same 512/7/8 architecture, only batch size changed: batch=64 gave
   ~829 tok/s, **batch=16 gave ~15,200 tok/s**. `train_base.py`'s default `--batch-size`
-  is now 16. See `docs/slm-strategy.md` Section 5 and `RESULTS.md` (2026-07-23) for the
-  full bisection log.
-- **Training token budget**: `model/config.py`'s `estimate_token_budget()` targets 94
-  tokens/parameter — well past Chinchilla's ~20 compute-optimal ratio, a deliberate
-  overtraining budget (same rationale as LLaMA training past compute-optimal for a
-  cheaper-to-run model, pushed further here since Benny's base model is unusually
-  small and TinyStories/FineWeb-Edu make extra tokens cheap). At v0.6's ~26.1M params
-  that's **~2.45 billion training tokens** — bumped up from the 13.7M config's 56
-  tokens/param specifically so this size's own budget lands almost exactly on the full
-  ~2.46B tokens already packed (below), rather than most of it being discarded by
-  subsampling the way the smaller size required. The domain-specific
-  `synthetic_corpus.jsonl` (a few thousand tokens) is separately the entry-drafting
-  fine-tune data, not the base-pretrain corpus below.
+  is still 16 (v0.7's own starting point pending the re-bisection above). See
+  `docs/slm-strategy.md` Section 5 and `RESULTS.md` (2026-07-23) for the full v0.6
+  bisection log.
+- **Optimizer**: `train/train_base.py` now defaults to **Sophia** (`--optimizer sophia`)
+  instead of AdamW — a second-order optimizer using a periodically-refreshed diagonal
+  Hessian estimate (Gauss-Newton-Bartlett; recomputed every `--sophia-hessian-interval`
+  steps, default 10) rather than AdamW's EMA-of-squared-gradients, clipped to bound any
+  single step to at most the learning rate regardless of how stale/wrong the Hessian
+  estimate is (Liu, Zhang, Basu, Chen, Ma, Liang, Ma & Wang, 2023,
+  [arXiv:2305.14342](https://arxiv.org/abs/2305.14342)). The update-rule arithmetic
+  lives in `model/sophia_math.py` (plain numpy, verified by `model/test_sophia_math.py`
+  in this Linux sandbox); `model/sophia.py` wires that same math into an
+  `mlx.optimizers.Optimizer` subclass but, like every other MLX-only file in this
+  project, **has never actually run** — validate with `--tiny` on the M5 before
+  trusting it for a real run. `--optimizer adamw` is a one-flag fallback if Sophia
+  misbehaves on real hardware.
+- **Training token budget**: `model/config.py`'s `estimate_token_budget()` now targets
+  **30 tokens/parameter** — a deliberate reversal of v0.5→v0.6's overtraining trend (56,
+  then 94 tokens/param), moving back toward Chinchilla's ~20 compute-optimal ratio
+  rather than continuing further past it. At v0.7's ~51.3M params that's **~1.54 billion
+  training tokens**. The domain-specific `synthetic_corpus.jsonl` (a few thousand
+  tokens) is separately the entry-drafting fine-tune data, not the base-pretrain corpus
+  below (though it's also mixed into base pretraining — see the next bullet).
 - **Base-pretraining corpus (pulled, on the Mac)**: `data/prepare_base_corpus.py`
   streams two already-generated, openly-licensed datasets instead of the small domain
   corpus for base pretraining — TinyStories (`roneneldan/TinyStories`, `cdla-sharing-1.0`)
-  + FineWeb-Edu (`HuggingFaceFW/fineweb-edu`, `sample-10BT` config, `odc-by`). TinyStories
-  was sized at 1.75B tokens but its real `train` split only holds **~475M unique tokens**
-  (2.1M stories) — discovered on the first real pull, since `huggingface.co` is blocked
-  in this container and this had never actually run before. FineWeb-Edu hit its 500M
-  target exactly. `train/prepare_dataset.py` repeats TinyStories 4 epochs (~1.9B tokens,
-  matching the original TinyStories paper's own precedent of training over several
-  epochs of this same small corpus) to keep it the dominant source, packing ~2.46B
-  tokens total on its first real run -- sized for the ~80.7M config in place at the
-  time. `train/train_base.py`'s full run subsamples that packed corpus down to
-  whatever the *current* config's own budget calls for — at v0.6's sizing that's
-  ~2.45B of the ~2.46B packed tokens, effectively the whole corpus, unlike the smaller
-  13.7M config this replaces (~766.6M tokens, ~1.50M of the packed 4.3M sequences) —
-  see `docs/slm-strategy.md` Section 4 for the full reasoning. Read both licenses
-  before shipping a model trained on this data (the script prints both URLs on
-  completion).
+  + FineWeb-Edu (`HuggingFaceFW/fineweb-edu`, `sample-10BT` config, `odc-by`), plus the
+  domain `synthetic_corpus.jsonl` mixed in via `train/prepare_dataset.py`'s
+  `main()` (`itertools.chain(iter_training_texts(), iter_base_corpus_texts())`).
+  TinyStories was originally sized at 1.75B tokens but its real `train` split only
+  holds **~475M unique tokens** (2.1M stories) — discovered on the first real pull,
+  since `huggingface.co` is blocked in this container and this had never actually run
+  before. v0.6 repeated TinyStories 4 epochs (~1.9B tokens) to keep it the dominant
+  source; **v0.7 repeats it only 2 epochs (~950M tokens)** instead, giving FineWeb-Edu
+  proportionally more weight, and its own pull target was raised 500M → **550M
+  tokens** to match — re-run both `data/prepare_base_corpus.py` and
+  `train/prepare_dataset.py` before training v0.7, the previously-packed corpus was
+  sized for v0.6's split. `train/train_base.py`'s full run subsamples the freshly
+  packed corpus down to whatever the *current* config's own budget calls for — at
+  v0.7's sizing (~1.54B tokens) that's effectively the whole ~1.5B-token packed corpus,
+  not a meaningful subsample. See `docs/slm-strategy.md` Section 4 for the full
+  reasoning. Read both licenses before
+  shipping a model trained on this data (the script prints both URLs on completion).
 - **`entry_drafting` adapter**: real training data via `train/prepare_dataset.py`,
   confirmed working (see the Known gaps entry below).
 - **`kb_authoring` adapter**: now has a synthetic *bootstrap* dataset via
@@ -179,11 +197,13 @@ python3 train/train_base.py --tiny
 
 # 4. Full base pretrain (once the tiny run's loss curve looks sane).
 #    Automatically subsamples the packed corpus down to this config's own
-#    ~2.45B-token deliberate-overtraining budget -- at v0.6's sizing that's
-#    effectively the whole packed corpus, not a meaningful subsample. Default
-#    --batch-size is 16 -- v0.6's real M5 runs measured ~829 tok/s at the old
-#    default of 64 (a swap-triggering memory bottleneck) vs. ~15,200 tok/s at
-#    16, see RESULTS.md 2026-07-23:
+#    ~1.54B-token budget (30 tokens/param) -- at v0.7's sizing that's
+#    effectively the whole packed corpus, not a meaningful subsample. Defaults
+#    to --optimizer sophia (verify with --tiny first -- never run on real
+#    hardware yet, see the Model sizing / Optimizer notes above; fall back to
+#    --optimizer adamw if it misbehaves). Default --batch-size is 16, carried
+#    over from v0.6's own bisection at 7 layers -- NOT yet re-verified at
+#    v0.7's 15 layers, expect to re-bisect if throughput looks off:
 python3 train/train_base.py
 
 # 5. Fine-tune the entry-drafting adapter on the frozen base:
@@ -220,7 +240,7 @@ python3 eval/run_eval_platform_help.py \
 
 ```bash
 pip install -r requirements.txt   # tokenizers, numpy, pytest -- skip the mlx/anthropic lines
-python3 -m pytest model/test_bitlinear.py eval/test_validate_output.py eval/test_validate_kb_entry.py -v
+python3 -m pytest model/test_bitlinear.py model/test_sophia_math.py eval/test_validate_output.py eval/test_validate_kb_entry.py -v
 ```
 
 ## Where this plugs in
@@ -265,11 +285,11 @@ single request calls synchronously. That scheduling/approval-queue piece is unbu
 - Done: tokenizer retrained at a real 8,000-token production vocab against the base
   corpus sample, `model/config.py` updated to match.
 - Once real revenue funds a much larger custom-generated corpus (discussed but not
-  committed to yet): a 30B-token target is still well past this ~26.1M-parameter (v0.6)
-  model's deliberate-overtraining budget (~1,150 tokens/param vs. the 94 target) — that
-  scale of spend is better matched to a genuinely bigger model than to overtraining
-  Benny as currently sized, or to reusing the corpus across several small models rather
-  than one.
+  committed to yet): a 30B-token target is still well past this ~51.3M-parameter (v0.7)
+  model's deliberate-overtraining budget (~585 tokens/param vs. the 30 target, ~20x
+  over) — that scale of spend is better matched to a genuinely bigger model (~1B
+  params at a 30:1 ratio) than to overtraining Benny as currently sized, or to reusing
+  the corpus across several small models rather than one.
 - Build the classical subject-area cross-check from `docs/slm-strategy.md` Section 7
   (this lives in `src/lib/pipeline/`, not `ml/` — it's the existing hashed-vector
   classifier idea, not new ml/ scaffolding).

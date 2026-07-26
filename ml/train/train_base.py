@@ -16,7 +16,8 @@ has scaled into the thousands of examples.
 Usage (on the Mac, after `pip install -r ../../requirements.txt` and
 running prepare_dataset.py):
     python3 train_base.py --tiny                 # pipeline sanity check
-    python3 train_base.py                        # full-config run
+    python3 train_base.py                        # full-config run (Sophia, v0.7 default)
+    python3 train_base.py --optimizer adamw      # fall back to v0.6's optimizer
     python3 train_base.py --resume base_ckpt.safetensors
 
 A full run saves 5 checkpoints evenly spaced across the whole run by default
@@ -24,6 +25,13 @@ A full run saves 5 checkpoints evenly spaced across the whole run by default
 with no intermediate save loses everything on a crash/interruption. Each
 mid-run save also overwrites the canonical base.safetensors, so --resume
 always has a recent checkpoint to load.
+
+v0.7 trains with Sophia (model/sophia.py) instead of AdamW by default --
+see that module's docstring for the paper citation and why it needs a
+second, periodic update path (update_hessian(), called every
+--sophia-hessian-interval steps here) that AdamW/plain optimizers don't.
+--optimizer adamw is kept as a one-flag fallback in case Sophia misbehaves
+on the first real run, since none of this has run on real MLX yet.
 """
 
 import argparse
@@ -37,9 +45,11 @@ import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
+from mlx.utils import tree_map
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 from config import BASE_CONFIG, ModelConfig, estimate_param_count, estimate_token_budget  # noqa: E402
+from sophia import SophiaG  # noqa: E402
 from transformer_mlx import BitNetTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
@@ -54,6 +64,31 @@ TINY_CONFIG = ModelConfig(d_model=128, n_layers=2, n_heads=4, max_seq_len=512)
 def loss_fn(model: BitNetTransformer, inputs: mx.array, targets: mx.array) -> mx.array:
     logits = model(inputs)
     return nn.losses.cross_entropy(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1), reduction="mean")
+
+
+def resampled_loss_fn(model: BitNetTransformer, inputs: mx.array) -> mx.array:
+    """Sophia's Gauss-Newton-Bartlett Hessian estimator (model/sophia.py's
+    docstring has the full reasoning): loss against a label RESAMPLED from
+    the model's own predicted distribution at each position, not the real
+    target -- `targets` never enters this function at all. Sum (not mean)
+    reduction, since the estimator's derivation scales with the per-example
+    loss sum; gnb_hessian_estimate() below divides back out by batch size."""
+    logits = model(inputs)
+    flat_logits = logits.reshape(-1, logits.shape[-1])
+    resampled_labels = mx.random.categorical(flat_logits)
+    return nn.losses.cross_entropy(flat_logits, resampled_labels, reduction="sum")
+
+
+def gnb_hessian_estimate(hessian_loss_and_grad, model: BitNetTransformer, inputs: mx.array):
+    """One Gauss-Newton-Bartlett Hessian-diagonal estimate: an extra
+    forward+backward pass on `inputs` (the same batch already used for
+    this step's real update) against resampled_loss_fn's resampled labels,
+    squaring the resulting gradient per parameter. Call this every
+    --sophia-hessian-interval steps, not every step -- see model/sophia.py's
+    SophiaG.update_hessian() docstring."""
+    _, grads = hessian_loss_and_grad(model, inputs)
+    batch_size = inputs.shape[0]
+    return tree_map(lambda g: (g * g) / batch_size, grads)
 
 
 def iterate_batches(sequences: np.ndarray, batch_size: int, rng: np.random.Generator, chunk_size: int = None):
@@ -110,11 +145,11 @@ def main():
     parser.add_argument("--tiny", action="store_true", help="use TINY_CONFIG for a fast pipeline sanity check")
     parser.add_argument("--epochs", type=int, default=None,
                          help="defaults to 20 for --tiny (many quick passes over a small subsample) or "
-                              "1 for the full run -- base_train.npy already IS the full ~2.4B-token "
-                              "budget the corpus was originally packed for (TinyStories was already "
-                              "repeated 4x when the corpus was assembled), so one epoch over it hits "
-                              "that budget exactly; each additional epoch here multiplies the effective "
-                              "token count on top of that, not for free")
+                              "1 for the full run -- base_train.npy already IS the full token budget "
+                              "the corpus was packed for (see prepare_dataset.py's BASE_CORPUS_REPEATS "
+                              "for the current TinyStories/FineWeb-Edu repeat counts), so one epoch over "
+                              "it hits that budget exactly; each additional epoch here multiplies the "
+                              "effective token count on top of that, not for free")
     parser.add_argument("--batch-size", type=int, default=16,
                          help="was 64 at v0.6's 512/7/8 (~26.1M param) config, real M5 runs measured "
                               "only ~829 tok/s -- a swap-triggering memory bottleneck confirmed by a "
@@ -128,6 +163,23 @@ def main():
                               "memory headroom to spare (more unified memory, or a smaller model); "
                               "lower it further if you still hit a memory error.")
     parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--optimizer", type=str, choices=["sophia", "adamw"], default="sophia",
+                         help="Sophia (model/sophia.py) is v0.7's default -- a second-order optimizer "
+                              "the paper reports converging in roughly half the steps AdamW needs at "
+                              "comparable scale. Falls back to plain AdamW (v0.6's optimizer) with one "
+                              "flag if Sophia misbehaves on the first real run -- none of this has run "
+                              "on real MLX yet, see model/sophia.py's docstring.")
+    parser.add_argument("--weight-decay", type=float, default=0.1,
+                         help="decoupled weight decay, same meaning for both --optimizer choices. 0.1 "
+                              "matches Sophia's own paper defaults for LM pretraining-scale runs.")
+    parser.add_argument("--sophia-rho", type=float, default=0.04,
+                         help="Sophia-only: the clipping-threshold hyperparameter in "
+                              "model/sophia_math.py's clipped_update() -- the paper's own default.")
+    parser.add_argument("--sophia-hessian-interval", type=int, default=10,
+                         help="Sophia-only: recompute the Hessian diagonal estimate (an extra "
+                              "forward+backward pass, model/train_base.py's gnb_hessian_estimate()) "
+                              "every this-many steps rather than every step -- the paper's own k=10 "
+                              "default, balancing a fresher estimate against the extra compute cost.")
     parser.add_argument("--eval-every", type=int, default=1)
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--heartbeat-seconds", type=float, default=20.0,
@@ -155,9 +207,10 @@ def main():
     parser.add_argument("--num-checkpoints", type=int, default=5,
                          help="save this many checkpoints evenly spaced across the whole planned run "
                               "(in addition to the final save at the end), not just one at the very "
-                              "end -- v0.6's full run is projected at ~1.9 days in one process "
-                              "(docs/slm-strategy.md Section 5), and a crash/interruption with no "
-                              "intermediate save loses all of it. Each is saved as "
+                              "end -- a full run can take hours to days in one process (see "
+                              "docs/slm-strategy.md Section 5 for the current config's own estimate), "
+                              "and a crash/interruption with no intermediate save loses all of it. "
+                              "Each is saved as "
                               "base_checkpoint_<N>.safetensors (N = total batches done so far) AND "
                               "overwrites the canonical base.safetensors/base_tiny.safetensors path, "
                               "so --resume always has a recent one to load regardless of which "
@@ -222,8 +275,15 @@ def main():
         model.load_weights(args.resume)
     mx.eval(model.parameters())
 
-    optimizer = optim.AdamW(learning_rate=args.lr)
+    if args.optimizer == "sophia":
+        optimizer = SophiaG(learning_rate=args.lr, rho=args.sophia_rho, weight_decay=args.weight_decay)
+    else:
+        optimizer = optim.AdamW(learning_rate=args.lr, weight_decay=args.weight_decay)
     loss_and_grad = nn.value_and_grad(model, loss_fn)
+    # Only actually used for --optimizer sophia (gnb_hessian_estimate below),
+    # but cheap to always create -- nn.value_and_grad just wraps a function,
+    # no compute happens until it's called.
+    hessian_loss_and_grad = nn.value_and_grad(model, resampled_loss_fn)
     rng = np.random.default_rng(0)
 
     # mx.compile fuses the repeated training-step graph instead of MLX
@@ -239,6 +299,19 @@ def main():
         loss, grads = loss_and_grad(model, inputs, targets)
         optimizer.update(model, grads)
         return loss
+
+    # Deliberately NOT wrapped in mx.compile like train_step above -- this
+    # only runs every --sophia-hessian-interval steps (not every step), so
+    # the payoff of compiling it is much smaller, and keeping it eager
+    # avoids mixing a second, separately-compiled graph that also touches
+    # optimizer.state with train_step's. Only ever called for --optimizer
+    # sophia; a no-op branch for adamw (see the training loop below).
+    def maybe_update_hessian(inputs: mx.array):
+        if args.optimizer != "sophia":
+            return
+        estimate = gnb_hessian_estimate(hessian_loss_and_grad, model, inputs)
+        optimizer.update_hessian(estimate)
+        mx.eval(optimizer.state)
 
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
     ckpt_name = "base_tiny.safetensors" if args.tiny else "base.safetensors"
@@ -286,6 +359,9 @@ def main():
             epoch_losses.append(float(loss))
             batches_done += 1
             total_batches_done += 1
+
+            if total_batches_done % args.sophia_hessian_interval == 0:
+                maybe_update_hessian(inputs)
 
             if checkpoint_interval and total_batches_done % checkpoint_interval == 0 \
                     and total_batches_done < total_batches_planned:

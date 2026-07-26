@@ -15,13 +15,17 @@ datasets already did):
   Adds academic-register vocabulary (science/history/math terms) that
   TinyStories' toy-story register never touches.
 
-Split 1.75B / 500M tokens -- together exactly matching
-ml/model/config.py's estimate_token_budget() at 75M params
-(30 tokens/param -> ~2.25B tokens). TinyStories gets the larger share
-deliberately: its whole research finding is that simple/narrow data is
-what makes small-model coherence achievable, so it should dominate
-training, with FineWeb-Edu mixed in for vocabulary breadth rather than
-given equal weight.
+Pulls as much TinyStories as actually exists (its real train split holds
+only ~475M unique tokens -- a real ceiling discovered on the first real
+pull, not a target this script can raise) plus a 550M-token FineWeb-Edu
+target -- together sized for v0.7 (ml/model/config.py, ~51.3M params @ 30
+tokens/param -> ~1.54B tokens). ml/train/prepare_dataset.py's
+BASE_CORPUS_REPEATS packs TinyStories twice ("2 sets") to reach ~950M of
+the ~1.54B total -- still the single dominant source per this project's
+own research precedent (narrow/simple data is what makes small-model
+coherence achievable), but a smaller relative share than v0.5/v0.6 used
+(previously repeated 4x) now that FineWeb-Edu's share of the mix has grown
+from ~20% to ~36%.
 
 Both datasets are streamed (HF `streaming=True`) so this never downloads
 the full underlying dataset -- only as many shards as needed to satisfy
@@ -52,7 +56,7 @@ Usage:
                             # only needed to run this script
     python3 prepare_base_corpus.py
     python3 prepare_base_corpus.py --tinystories-tokens 1_750_000_000 \
-        --fineweb-tokens 500_000_000
+        --fineweb-tokens 550_000_000
 """
 
 import argparse
@@ -71,8 +75,13 @@ FINEWEB_EDU_CONFIG = "sample-10BT"
 FINEWEB_EDU_LICENSE = "odc-by"
 
 DEFAULT_CHARS_PER_TOKEN = 4.0
+# TinyStories' real train split (~475M tokens) is well short of this --
+# left high on purpose so the script always just pulls everything that
+# exists rather than needing to be re-tuned whenever that real ceiling
+# gets re-confirmed; ml/train/prepare_dataset.py's BASE_CORPUS_REPEATS is
+# what actually controls how many effective tokens TinyStories contributes.
 DEFAULT_TINYSTORIES_TOKENS = 1_750_000_000
-DEFAULT_FINEWEB_TOKENS = 500_000_000
+DEFAULT_FINEWEB_TOKENS = 550_000_000
 
 
 def stream_texts(

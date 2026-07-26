@@ -56,7 +56,7 @@ negative-transfer failure mode that a naive shared-head design would risk. The
 application code — which already knows which job it needs — swaps in the right adapter.
 No learned gate, no ambiguity to resolve at inference time.
 
-## 3. Size and architecture: v0.6, ~26.1M parameters, native BitNet b1.58
+## 3. Size and architecture: v0.7, ~51.3M parameters, native BitNet b1.58
 
 - **~26.1M ternary parameters** (512 d_model, 7 layers, 8 heads, head_dim=64,
   vocab_size=8000 — see `ml/model/config.py`), trained natively at 1.58 bits (BitNet's
@@ -93,6 +93,18 @@ No learned gate, no ambiguity to resolve at inference time.
   are all powers of two again, restoring the same alignment property the 13.7M config
   relied on, landing at ~26.1M params instead of an exact ~27.0M. Still comfortably
   inside the well-evidenced small-BitNet-research range below.
+- **v0.7 grows again, to ~51.3M params (464/9/8 was the ~27.0M-target shape; v0.7's
+  target is ~50M) — 512/15/8** (d_model/n_layers/n_heads unchanged in width from v0.6,
+  only deeper). Deliberately kept d_model=512/head_dim=64 rather than widening further:
+  v0.6's full bisection (this section, above, and `ml/RESULTS.md`) showed the real
+  memory-pressure cliff was tied to *this width's total footprint* growing with depth
+  and batch size together, not to width itself -- n_layers=5 at this same width stayed
+  fast even at the old batch_size=64, while n_layers=7 didn't. Going deeper at an
+  already-proven-safe width is the best-evidenced way to add capacity; the corollary is
+  that v0.7 will very likely need an even smaller `--batch-size` than v0.6's 16 to stay
+  off that same cliff, and that hasn't been tested yet -- expect to re-run v0.6's
+  batch-size bisection (halving from 16 until throughput stops improving) rather than
+  assuming 16 still works untested at this size.
 - This size range is unusually well-evidenced for BitNet specifically: published
   small-scale BitNet research ("BitNet b1.58 Reloaded") tested ternary models in the
   100K–48M parameter range — the closest real precedent available, well short of
@@ -108,26 +120,23 @@ No learned gate, no ambiguity to resolve at inference time.
   understanding the standard dense-transformer training loop before layering ternary
   weights on top — reading and adapting working reference code is the standard way this
   is actually learned, not a shortcut around learning it.
-- **Training token budget**: 94 tokens/parameter — well past Chinchilla's ~20
-  compute-optimal ratio, a deliberate overtraining budget (same trade LLaMA made to get
-  a cheaper-to-run model at the cost of extra training compute, pushed further here
-  since this base model is unusually small and TinyStories/FineWeb-Edu make extra
-  tokens cheap) — **~2.45B tokens** at v0.6's ~26.1M params (`ml/model/config.py`'s
-  `estimate_token_budget()`). Deliberately bumped up from the 13.7M config's 56 (which
-  gave ~766.6M tokens) specifically so this larger size's own budget lands almost
-  exactly on the ~2.46B tokens Section 4's TinyStories/FineWeb-Edu pull already packed
-  (sized at the time for an even earlier, larger ~81M config) -- `train/train_base.py`'s
-  full run now trains on essentially the entire packed corpus rather than subsampling
-  most of it away the way the smaller 13.7M size required.
+- **Training token budget**: v0.7 is a deliberate change of *strategy*, not another turn
+  of the same dial -- 30 tokens/parameter, much closer to Chinchilla's ~20 compute-optimal
+  ratio than v0.5/v0.6's 56/94 (both well past it, the deliberate-overtraining trade LLaMA
+  also made, leaning on how cheap extra TinyStories/FineWeb-Edu tokens are). At v0.7's
+  ~51.3M params that's **~1.54B tokens** (`ml/model/config.py`'s `estimate_token_budget()`)
+  -- landing almost exactly on the ~1.5B-token corpus Section 4 packs for this size
+  (TinyStories x2 ~950M + FineWeb-Edu ~550M), so this is again sized to consume
+  essentially the whole packed corpus rather than waste most of it to subsampling.
 
 ## 4. Training data: two separate pools for two separate jobs
 
-At v0.6's ~26.1M parameters, the base model's job (general English + broad academic
+At v0.7's ~51.3M parameters, the base model's job (general English + broad academic
 register) and the adapters' job (FreeLoom's exact output format) call for genuinely
 different data — conflating them was the original open question here; the settled
 split:
 
-- **Base-pretraining pool — ~2.4B tokens, from already-generated open datasets, not a
+- **Base-pretraining pool — ~1.5B tokens, from already-generated open datasets, not a
   custom scrape**: `ml/data/prepare_base_corpus.py` streams **TinyStories**
   (`roneneldan/TinyStories`, license `cdla-sharing-1.0` — GPT-3.5/4-generated short
   stories in deliberately simple vocabulary, the direct precedent for "coherent
@@ -139,22 +148,23 @@ split:
   out to hold only **~475M unique tokens** (2.1M stories) — a real ceiling on the
   dataset's own size, discovered on the first real pull (this container's network
   policy blocks `huggingface.co`, so it had never actually run before). `ml/train/
-  prepare_dataset.py` repeats TinyStories 4 epochs (~1.9B tokens) to approximate the
-  original target while keeping it the dominant source — both this project's own design
-  intent below and the original TinyStories paper's own precedent (it trained small
-  models over several epochs of this same small corpus). FineWeb-Edu hit its 500M target
-  in a single pass and isn't repeated. `train/prepare_dataset.py`'s first real run
-  packed ~2.46B tokens total -- sized at the time for an even earlier ~81M-param
-  config, since packing/tokenizing this much data is itself hours of work not worth
-  repeating every time the model's own budget changes. `train/train_base.py`'s full
-  run subsamples that packed corpus down to whatever the *current* config's own
-  deliberate-overtraining budget calls for (Section 3) -- at v0.6's 512/7/8 sizing,
-  that budget (~2.45B tokens) is close enough to the full packed corpus that no
-  meaningful subsampling actually happens, unlike the smaller 13.7M config this
-  replaces. TinyStories still gets the larger effective share
-  deliberately — its own research finding is that narrow, simple data is what makes
-  small-model coherence achievable, so it should dominate, with FineWeb-Edu mixed in for
-  vocabulary breadth rather than given equal weight. Deliberately **not** a custom scrape
+  prepare_dataset.py` repeated TinyStories 4 epochs (~1.9B tokens) for v0.5/v0.6, to
+  approximate the original target while keeping it the dominant source — both this
+  project's own design intent below and the original TinyStories paper's own precedent
+  (it trained small models over several epochs of this same small corpus). v0.7 repeats
+  it only 2 epochs instead (~950M tokens, "2 sets") — still the dominant single source,
+  but deliberately giving FineWeb-Edu more relative weight than before (~550M target,
+  up from ~20% of the mix to ~36%) now that the model is bigger and stands to benefit
+  more from broader, less narrow text. FineWeb-Edu is never repeated regardless of its
+  target. `train/prepare_dataset.py`'s first real run packed ~2.46B tokens total --
+  sized at the time for an even earlier ~81M-param config; re-running
+  `prepare_base_corpus.py` at v0.7's new ~950M/~550M targets is a real, one-time re-pull
+  this size change calls for, since packing/tokenizing this much data is itself hours of
+  work not worth doing speculatively. `train/train_base.py`'s full run subsamples
+  whatever's actually packed down to the *current* config's own deliberate-overtraining
+  budget (Section 3) -- at v0.7's sizing, that budget (~1.54B tokens) is close enough to
+  the ~1.5B freshly-packed corpus that no meaningful subsampling actually happens.
+  Deliberately **not** a custom scrape
   of "educational sites and documents" — most such sites are copyrighted and not
   licensed for training use, and building a scraper would just reinvent the
   deduplication/quality-filtering work these two datasets already did. Neither dataset is
@@ -178,13 +188,13 @@ split:
   it in the near term.
 - **Future scale-up, not yet committed to**: once real revenue funds a much larger
   custom-generated corpus (on the order of tens of billions of tokens), that scale
-  overshoots this ~26.1M-parameter model's deliberate-overtraining budget by roughly an
-  order of magnitude (~94 tokens/param target vs. ~1,150 tokens/param at 30B tokens) —
-  spent on Benny as currently sized, most of it would go to waste. The two honest paths
-  at that point are scaling the model up to match (this budget's own ratio at that
-  token count implies something on the order of 300M params, a genuinely bigger model)
-  or reusing that corpus across several smaller specialized models instead of
-  overtraining one. Decide deliberately when the budget is real, not now.
+  overshoots this ~51.3M-parameter model's deliberate-overtraining budget by roughly
+  20x (~30 tokens/param target vs. ~585 tokens/param at 30B tokens) — spent on Benny as
+  currently sized, most of it would go to waste. The two honest paths at that point are
+  scaling the model up to match (this budget's own ratio at that token count implies
+  something on the order of 1B params, a genuinely bigger model) or reusing that corpus
+  across several smaller specialized models instead of overtraining one. Decide
+  deliberately when the budget is real, not now.
 
 ## 5. Training plan on the actual hardware (MacBook Pro, M5, 24GB unified memory)
 
@@ -229,6 +239,32 @@ split:
   budget (Section 3). A real number now, not a projection — see `ml/RESULTS.md`,
   2026-07-23, for the complete bisection log across every architecture and batch-size
   variant tried along the way.
+- **v0.7 (512/15/8, ~51.3M params) throughput — not yet measured**. Per this section's
+  own bisection findings above, the memory-pressure cliff tracked total model footprint
+  at d_model=512 growing with depth *and* batch size together (n_layers=5 stayed fast
+  at batch=64; n_layers=7 didn't) -- v0.7 is more than twice as deep as the config that
+  needed batch=16, so batch_size=16 is a starting point to test, not an assumption to
+  trust. Re-run the same halve-until-it-stops-helping bisection from Section 5's
+  earlier entries before committing to a long unattended run, and log the real result
+  in `ml/RESULTS.md` once it's found, same as v0.6's.
+- **Optimizer: Sophia instead of AdamW.** Sophia ("Sophia: A Scalable Stochastic
+  Second-order Optimizer for Language Model Pre-training", Liu, Zhang, Basu, Chen, Ma,
+  Liang, Ma & Wang, 2023, https://arxiv.org/abs/2305.14342) replaces AdamW's EMA-of-
+  squared-gradients denominator with a periodically-refreshed diagonal Hessian
+  estimate, clipped before it's applied -- the paper reports reaching a given loss in
+  roughly half the steps AdamW needs at comparable model/data scale, for ~5% extra
+  per-step compute (the Hessian estimate is only recomputed every k=10 steps, not every
+  step). `ml/model/sophia_math.py` has the exact update-rule arithmetic and the
+  reasoning for why the clip matters (it bounds a single step to the learning rate no
+  matter how wrong the Hessian estimate is, the same worst-case guarantee AdamW's own
+  gradient normalization gives for free) -- verified with its own numpy-only unit tests
+  in this sandbox, the same way `bitlinear.py`'s BitNet quantization math is verified
+  without needing MLX. `ml/model/sophia.py` wires that verified arithmetic into an
+  `mlx.optimizers.Optimizer` subclass; unlike the math itself, **the MLX wiring has
+  never run on real hardware** -- validate it with a `--tiny` run before trusting it for
+  the real one, same as any other change to this training loop.
+  `train/train_base.py --optimizer adamw` is kept as a one-flag fallback to v0.6's
+  optimizer in case Sophia misbehaves on the first real run.
 - **Validate the pipeline at tiny scale first**: `train/train_base.py --tiny` uses a
   deliberately small model (d_model=128, 2 layers) on a small data subsample (minutes,
   not hours) to confirm the tokenizer, data loading, BitLinear layer, and loss curve all
