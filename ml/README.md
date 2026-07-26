@@ -203,7 +203,13 @@ python3 train/train_base.py --tiny
 #    hardware yet, see the Model sizing / Optimizer notes above; fall back to
 #    --optimizer adamw if it misbehaves). Default --batch-size is 16, carried
 #    over from v0.6's own bisection at 7 layers -- NOT yet re-verified at
-#    v0.7's 15 layers, expect to re-bisect if throughput looks off:
+#    v0.7's 15 layers, expect to re-bisect if throughput looks off. Every
+#    --diagnostic-every-steps (default 500) prints val_loss on a small fixed
+#    held-out subsample plus a short greedy-decoded text sample from the
+#    current weights -- added after a real v0.6 run's train loss reversed
+#    22 hours in with zero val_loss data anywhere near that point to tell
+#    overfitting apart from an LR-stability issue (no LR schedule exists
+#    yet, see the Model sizing note above and docs/slm-strategy.md Section 5):
 python3 train/train_base.py
 
 # 5. Fine-tune the entry-drafting adapter on the frozen base:

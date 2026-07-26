@@ -32,6 +32,19 @@ second, periodic update path (update_hessian(), called every
 --sophia-hessian-interval steps here) that AdamW/plain optimizers don't.
 --optimizer adamw is kept as a one-flag fallback in case Sophia misbehaves
 on the first real run, since none of this has run on real MLX yet.
+
+Every --diagnostic-every-steps batches (default 500), prints a val_loss
+reading (on a small FIXED held-out subsample, so readings are comparable
+across the run) plus a short greedy-decoded text sample from the current
+weights -- a running, human-readable record of val_loss and language
+quality over a run that can span days, not just a single number at the
+very end. This came directly out of a real v0.6 run: 22 hours in, train
+loss reversed and started climbing (no LR schedule exists yet -- see
+docs/slm-strategy.md Section 5 -- so this is the most likely cause), and
+there was no val_loss data anywhere near that point to tell overfitting
+apart from an LR/stability issue. NOT literally every single step -- a
+full val pass every step would be a real, unnecessary cost; tying both
+prints to one periodic cadence is the practical middle ground.
 """
 
 import argparse
@@ -46,6 +59,7 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
 from mlx.utils import tree_map
+from tokenizers import Tokenizer
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 from config import BASE_CONFIG, ModelConfig, estimate_param_count, estimate_token_budget  # noqa: E402
@@ -54,6 +68,7 @@ from transformer_mlx import BitNetTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
+TOKENIZER_PATH = Path(__file__).parent.parent / "tokenizer" / "tokenizer.json"
 
 # A deliberately small config for --tiny: fast enough to sanity-check the
 # whole pipeline (tokenizer, data loading, BitLinear, loss curve) in
@@ -140,6 +155,28 @@ def evaluate(model: BitNetTransformer, sequences: np.ndarray, batch_size: int) -
     return sum(losses) / max(len(losses), 1)
 
 
+def generate_sample(model: BitNetTransformer, tokenizer: Tokenizer, bos_id: int,
+                     eos_id: int | None, max_new_tokens: int) -> str:
+    """Greedy-decodes a short completion from the CURRENT (mid-training)
+    weights, seeded with just <bos> -- a base model, not yet adapter-tuned,
+    has no prompt/instruction to answer, so this is free-form continuation,
+    not a question/answer. Same one-token-at-a-time loop as eval/run_eval.py's
+    generate(), called eagerly (not through train_step's compiled graph) --
+    this exists purely as a documentary, human-readable checkpoint of how
+    Benny's language looks at this point in training, not a metric anything
+    downstream reads. Not batched and not the full held-out eval -- fine,
+    since --diagnostic-every-steps callers only need one short sample."""
+    ids = [bos_id]
+    for _ in range(max_new_tokens):
+        window = ids[-model.cfg.max_seq_len:]
+        logits = model(mx.array([window]))
+        next_id = int(mx.argmax(logits[0, -1]))
+        ids.append(next_id)
+        if eos_id is not None and next_id == eos_id:
+            break
+    return tokenizer.decode(ids[1:])
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tiny", action="store_true", help="use TINY_CONFIG for a fast pipeline sanity check")
@@ -204,6 +241,26 @@ def main():
     parser.add_argument("--full-corpus", action="store_true",
                          help="skip the --target-tokens cap and train on every packed sequence "
                               "regardless of cfg's token budget")
+    parser.add_argument("--diagnostic-every-steps", type=int, default=500,
+                         help="every this many training steps (batches), print a val_loss reading and "
+                              "a short greedy-decoded text sample from the current weights -- a running, "
+                              "human-readable record of Benny's language sharpening over a multi-day run "
+                              "(previously the only val_loss print was at the very end of the whole run, "
+                              "so a long run gave zero visibility into whether/when it started overfitting "
+                              "or destabilizing). NOT literally every step -- a full val pass is a real "
+                              "cost to pay that often, so this reuses the same periodic cadence for both "
+                              "the (cheap, fixed-subsample) val_loss check and the sample. Set to 0 to "
+                              "disable both.")
+    parser.add_argument("--diagnostic-val-sequences", type=int, default=256,
+                         help="size of the FIXED held-out subsample --diagnostic-every-steps reads "
+                              "val_loss from -- deliberately much smaller than --max-val-sequences (the "
+                              "full end-of-epoch eval) since this one runs far more often. Fixed (same "
+                              "sequences every time, chosen once before training starts) rather than "
+                              "freshly resampled each check, so the printed numbers are actually "
+                              "comparable to each other across the run instead of each reading being a "
+                              "different random slice of val.")
+    parser.add_argument("--sample-max-new-tokens", type=int, default=60,
+                         help="length of the greedy-decoded text sample --diagnostic-every-steps prints")
     parser.add_argument("--num-checkpoints", type=int, default=5,
                          help="save this many checkpoints evenly spaced across the whole planned run "
                               "(in addition to the final save at the end), not just one at the very "
@@ -345,6 +402,22 @@ def main():
     seq_len = train_sequences.shape[1] if len(train_sequences) else 0
     tokens_per_batch = args.batch_size * max(0, seq_len - 1)
 
+    # --diagnostic-every-steps setup: a tokenizer (for decoding text samples)
+    # and one FIXED, small val subsample chosen once up front -- reused for
+    # every periodic check so the val_loss readings are actually comparable
+    # to each other across the run (a fresh random subsample each time would
+    # make step 500 vs step 5000 an apples-to-oranges comparison). Loaded
+    # unconditionally rather than gated on diagnostic_every_steps > 0 --
+    # negligible cost, and keeps --resume mid-run simple.
+    tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH))
+    bos_id = tokenizer.token_to_id("<bos>")
+    eos_id = tokenizer.token_to_id("<eos>")
+    diagnostic_val_sequences = val_sequences
+    if len(diagnostic_val_sequences) > args.diagnostic_val_sequences:
+        diag_rng = np.random.default_rng(2)
+        idx = diag_rng.choice(len(diagnostic_val_sequences), size=args.diagnostic_val_sequences, replace=False)
+        diagnostic_val_sequences = np.array(diagnostic_val_sequences[idx])
+
     run_start = time.time()
     total_batches_done = 0
 
@@ -366,6 +439,18 @@ def main():
             if checkpoint_interval and total_batches_done % checkpoint_interval == 0 \
                     and total_batches_done < total_batches_planned:
                 save_checkpoint(total_batches_done)
+
+            # Documentary record of val_loss + a language sample over the
+            # course of a long run -- previously the only val_loss print was
+            # at the very end of the whole run, so a multi-day run gave zero
+            # visibility into whether/when it started overfitting or
+            # (see docs/slm-strategy.md's v0.6 flat-LR loss-reversal note)
+            # destabilizing partway through.
+            if args.diagnostic_every_steps and total_batches_done % args.diagnostic_every_steps == 0:
+                diag_val_loss = evaluate(model, diagnostic_val_sequences, args.batch_size)
+                sample_text = generate_sample(model, tokenizer, bos_id, eos_id, args.sample_max_new_tokens)
+                print(f"  [diagnostic @ step {total_batches_done}] val_loss={diag_val_loss:.4f}")
+                print(f"    sample: {sample_text!r}")
 
             # A full run can spend many minutes-to-hours per epoch (hundreds
             # of thousands of batches at the base config) with the loop above
