@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { meetsMinimumStrength } from "@/lib/passwordStrength";
 import { recordRememberMeChoice } from "@/lib/authSession";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
+import LogoMark from "@/components/LogoMark";
 
 function LoginForm() {
   const router = useRouter();
@@ -80,11 +81,8 @@ function LoginForm() {
   return (
     <div className="mx-auto max-w-sm flex flex-col gap-8 py-16 px-4 sm:px-6">
       <div className="text-center">
-        <Link
-          href="/"
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-gold to-violet text-ink text-xl font-bold mb-4"
-        >
-          F
+        <Link href="/" className="inline-flex mb-4">
+          <LogoMark size={48} />
         </Link>
         <h1 className="text-2xl font-bold font-serif">{mode === "signin" ? "Sign in" : "Create your parent account"}</h1>
         <p className="text-muted text-sm mt-2">
