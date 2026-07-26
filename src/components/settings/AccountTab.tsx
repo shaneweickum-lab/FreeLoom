@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getEffectiveTier } from "@/lib/billing/tier";
+import { isBennyAvailable } from "@/lib/billing/tier";
 import type { SchoolProfile } from "@/lib/types";
 
 const SCHOOLING_TYPE_OPTIONS = [
@@ -89,14 +89,20 @@ export default function AccountTab({
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const tier = getEffectiveTier({
+  const bennyAvailable = isBennyAvailable({
     subscription_tier: initialProfile?.subscription_tier ?? "free",
     subscription_status: initialProfile?.subscription_status ?? null,
     grandfathered_until: initialProfile?.grandfathered_until ?? null,
     current_period_end: initialProfile?.current_period_end ?? null,
+    benny_trial_ends_at: initialProfile?.benny_trial_ends_at ?? null,
     isAdmin,
   });
-  const bennyLocked = tier === "free";
+  const bennyLocked = !bennyAvailable;
+  const bennyOnTrial =
+    bennyAvailable &&
+    initialProfile?.subscription_tier === "free" &&
+    !!initialProfile?.benny_trial_ends_at &&
+    new Date(initialProfile.benny_trial_ends_at) > new Date();
 
   async function saveBennyEnabled(next: boolean) {
     setBennyEnabled(next);
@@ -310,6 +316,17 @@ export default function AccountTab({
             <>
               Adds a chat icon to the app for asking Benny, FreeLoom&apos;s in-house assistant, questions. Benny is AI
               and can make mistakes.
+              {bennyOnTrial && initialProfile?.benny_trial_ends_at && (
+                <>
+                  {" "}
+                  Free trial active until{" "}
+                  {new Date(initialProfile.benny_trial_ends_at).toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                  })}
+                  .
+                </>
+              )}
             </>
           )}
         </span>

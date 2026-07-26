@@ -1,14 +1,25 @@
 import { ImageResponse } from "next/og";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 // Shown when a FreeLoom link is shared/hovered/previewed (iMessage, Slack,
-// Twitter/X, Safari/Arc link previews, etc.) -- same navy/gold/violet "F"
-// mark as icon.tsx and LogoMark.tsx, kept in sync manually since
-// ImageResponse can't import a "use client" component.
+// Twitter/X, Safari/Arc link previews, etc.) -- same brand mark as
+// src/app/icon.png and LogoMark.tsx, but reads FreeLoom-Logo-og.png (a
+// 240x240 resize of the real public/FreeLoom-Logo.png) rather than the
+// full source art: this route stays code-generated (composes a
+// background/gradient/wordmark, so it can't use the static-file icon
+// convention), and there's no reason to base64-inline a 2MB image for a
+// mark rendered at 108px. Read + base64-inlined rather than referenced by
+// URL: ImageResponse's Satori renderer can't fetch a relative "/..." path
+// the way a browser would, per Next.js's own ImageResponse docs.
 export const alt = "FreeLoom — Real learning, formally recorded.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function Image() {
+export default async function Image() {
+  const logoData = await readFile(join(process.cwd(), "public", "FreeLoom-Logo-og.png"), "base64");
+  const logoSrc = `data:image/png;base64,${logoData}`;
+
   return new ImageResponse(
     (
       <div
@@ -26,30 +37,7 @@ export default function Image() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 108,
-              height: 108,
-              borderRadius: 24,
-              background: "#1c2242",
-              border: "2px solid #2b3260",
-            }}
-          >
-            <svg width="64" height="64" viewBox="0 0 32 32" fill="none">
-              <path
-                d="M11 26V9h13"
-                stroke="#8968c9"
-                strokeWidth="3.25"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                transform="translate(1.2,-1.2)"
-              />
-              <path d="M10 25V8h13M10 16h9.5" stroke="#c7a252" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <img src={logoSrc} width={108} height={108} alt="" />
           <div style={{ display: "flex", fontSize: 88, fontWeight: 700, color: "#ece8de" }}>FreeLoom</div>
         </div>
         <div style={{ display: "flex", fontSize: 32, color: "#9b96b3" }}>Real learning, formally recorded.</div>

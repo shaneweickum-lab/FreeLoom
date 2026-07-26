@@ -1,5 +1,5 @@
 """
-Architecture sizing for the shared ~13.7M-parameter BitNet base model.
+Architecture sizing for the shared ~51.3M-parameter BitNet base model.
 
 Pure-Python arithmetic, no MLX dependency -- verifiable in any environment,
 including this one. The MLX model (transformer_mlx.py) is built directly
@@ -17,55 +17,28 @@ class ModelConfig:
                             # -- train_base.py asserts these stay in sync, since a
                             # mismatch here means a real token id the tokenizer can
                             # produce falls outside the model's embedding table).
-    d_model: int = 512      # v0.6: the first deliberate step up the staged-growth
+    d_model: int = 512      # v0.7: another deliberate step up the staged-growth
                             # staircase (docs/benny-case-study.md's "long-term vision"),
-                            # not another compute-driven shrink. Sizing history: 876
-                            # (~80.7M) -> shrunk to 384 (~13.7M) once the first real M5
-                            # run showed native BitNet QAT training is compute-heavier
-                            # per step than a plain dense model the same size (every
-                            # BitLinear forward re-quantizes its full-precision shadow
-                            # weights via the straight-through estimator on top of an
-                            # otherwise-ordinary matmul -- the famous BitNet speed/memory
-                            # win only exists at inference time with truly packed
-                            # low-bit weights, not during training). That 13.7M config
-                            # then actually trained on the M5: ~20,600 tok/s sustained,
-                            # ~10.3 hours for a full 766.6M-token epoch (ml/RESULTS.md,
-                            # 2026-07-22) -- far faster than the old 876-config's
-                            # measured ~305 tok/s, since compute scales with param count.
-                            # That headroom is what this step spends. FIRST ATTEMPT at
-                            # this size was 464/9/8 (head_dim=58) -- picked to land as
-                            # close as possible to a round ~27.0M params, but a real M5
-                            # run measured only ~506 tok/s, a ~40x regression nothing in
-                            # the param-count math predicts. head_dim=58 (and d_model=464
-                            # itself) aren't multiples of 32, unlike the 13.7M config's
-                            # own head_dim=64 -- its doc comment already called that out
-                            # as "a clean power of 2", deliberately, and Metal's
-                            # matmul/attention kernels have well-known fast paths for
-                            # aligned tile sizes (multiples of 32/64) with much slower
-                            # generic fallbacks otherwise. 512/7/8 (head_dim=64,
-                            # mlp_dim=2048) restores that alignment throughout -- d_model,
-                            # head_dim, and mlp_dim are all powers of two again, same
-                            # property the 13.7M config relied on -- while landing at
-                            # ~26.1M params, still comfortably inside the well-evidenced
-                            # 100K-48M-param small-scale BitNet research range cited in
-
-                            # docs/slm-strategy.md Section 3. Alignment alone still wasn't
-                            # enough, though: this exact 512/7/8 config, on the *full*
-                            # packed corpus, still only measured ~829 tok/s. Real hands-on
-                            # bisection (varying d_model, n_layers, and batch size one at a
-                            # time across many real M5 runs -- see ml/RESULTS.md for the
-                            # full log) traced the actual cause to `--batch-size` (train_
-                            # base.py's default was 64): at this model's total size,
-                            # batch=64's activation/gradient memory pushes the M5's 24GB
-                            # unified memory into swap, and that swap -- not the model's
-                            # architecture at all -- was the real bottleneck. A clean,
-                            # single-variable test (identical 512/7/8/mlp_ratio=4
-                            # architecture, only batch size changed) confirmed it:
-                            # batch=64 -> ~829 tok/s, batch=16 -> ~15,200 tok/s on the same
-                            # hardware, same full corpus. train_base.py's default
-                            # --batch-size is now 16 to match.
-    n_layers: int = 7
-    n_heads: int = 8        # head_dim = 512/8 = 64, a clean power of 2 again.
+                            # kept at v0.6's same d_model=512/head_dim=64 -- the width
+                            # confirmed fast and safe across the whole v0.6 bisection
+                            # (from a ~40x dimension-misalignment regression at
+                            # d_model=464/head_dim=58, through a ~829-tok/s
+                            # memory-pressure regression at n_layers=7/batch_size=64,
+                            # to a real, measured 15,200 tok/s at n_layers=7/
+                            # batch_size=16 -- see ml/RESULTS.md 2026-07-23 for the full
+                            # log). This size spends capacity on DEPTH instead of width
+                            # for exactly that reason: v0.6's bisection showed the memory
+                            # cliff was tied to total model footprint at this width, not
+                            # width itself, so going deeper at the same already-safe
+                            # d_model=512 is the best-evidenced way to grow further,
+                            # though a deeper/bigger model will very likely need an even
+                            # smaller --batch-size than v0.6's 16 to stay off that same
+                            # cliff -- expect to re-run v0.6's batch-size bisection
+                            # (halving from 16 until throughput stops improving) rather
+                            # than assuming 16 still works here untested.
+    n_layers: int = 15       # ~51.3M params (see estimate_param_count()) -- closest
+                            # clean value to the requested ~50M at this width.
+    n_heads: int = 8        # head_dim = 512/8 = 64, a clean power of 2, unchanged from v0.6.
     mlp_ratio: int = 4
     max_seq_len: int = 512
     dropout: float = 0.1
@@ -115,21 +88,21 @@ def estimate_lora_param_count(cfg: ModelConfig, rank: int = LORA_RANK) -> int:
 
 
 # Chinchilla (Hoffmann et al. 2022) found ~20 tokens/parameter compute-optimal.
-# Training past that ratio is well-precedented for small models meant to run
-# cheaply at inference (LLaMA trained well beyond compute-optimal for exactly
-# this reason). Pushed further here than a modest +10 margin -- Benny's base
-# model is unusually small and the TinyStories/FineWeb-Edu corpus makes extra
-# tokens cheap to come by, so deliberately overtraining well past
-# compute-optimal trades cheap extra pretraining compute for a smaller,
-# cheaper model at a given quality bar, same trade LLaMA made. Bumped from 56
-# to 94 for v0.6's 512/7/8 (~26.1M param) config specifically so this size's
-# own deliberate-overtraining budget lands almost exactly on the ~2.46B
-# tokens train/prepare_dataset.py already packed (sized at the time for an
-# earlier, larger config) -- the full already-packed corpus becomes exactly
-# what this size calls for, rather than most of it being discarded by
-# train_base.py's budget-based subsampling the way smaller configs required.
+# v0.5/v0.6 both deliberately overtrained well past that (56, then 94
+# tokens/param) -- the same trade LLaMA made, cheap extra pretraining compute
+# for a smaller, cheaper-to-run model at a given quality bar, leaning on how
+# cheap extra TinyStories/FineWeb-Edu tokens are. v0.7 first reversed that
+# trend down to 30 tokens/param (much closer to Chinchilla-optimal), then
+# moved back up to 40 -- still a deliberate step back from v0.6's 94, not a
+# return to the old overtraining trend, just landing a bit further from pure
+# Chinchilla-optimal than the initial 30 attempt. At ~51.3M params that's
+# ~2.05B tokens -- landing almost exactly on the ~2.05B-token corpus v0.7
+# packs (TinyStories x2 ~950M, unchanged, + FineWeb-Edu ~1.1B filling the
+# remainder, see prepare_base_corpus.py/prepare_dataset.py), so this is
+# again sized to consume the whole packed corpus rather than waste most of
+# it to subsampling.
 CHINCHILLA_TOKENS_PER_PARAM = 20
-TRAIN_TOKENS_PER_PARAM = 94
+TRAIN_TOKENS_PER_PARAM = 40
 
 
 def estimate_token_budget(param_count: int, tokens_per_param: int = TRAIN_TOKENS_PER_PARAM) -> int:

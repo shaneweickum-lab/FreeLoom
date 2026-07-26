@@ -25,6 +25,10 @@ type TierInputProfile = Pick<SchoolProfile, "subscription_tier" | "subscription_
    * regardless of subscription state. Mirrored in effective_tier() SQL via
    * an admin_users check. */
   isAdmin?: boolean;
+  /** Only needed by isBennyAvailable()/getBennyUsageWindow() below --
+   * optional so every existing tier.ts caller that isn't Benny-related
+   * still compiles unchanged. */
+  benny_trial_ends_at?: string | null;
 };
 
 /** The single source of truth for "what tier does this account actually
@@ -80,4 +84,64 @@ export function featuresFor(tier: SubscriptionTier): string[] {
     tier === "free" ? "Benny assistant not included" : "Benny assistant-mode chat",
     tier === "free" ? "No admin read-only support access" : "Admin read-only support access",
   ];
+}
+
+/** Every new account gets one 14-day Benny trial regardless of tier
+ * (benny_trial_ends_at's column default at row-creation time) -- this is
+ * a one-time grant, not a recurring window, and is completely separate
+ * from a Stripe-managed subscription_status of "trialing" above, which
+ * only ever applies to a real paid-plan trial. */
+export const BENNY_TRIAL_DAYS = 14;
+export const BENNY_TRIAL_TOKEN_CAP = 100_000;
+/** Pro's monthly Benny token budget. Premium is deliberately absent here
+ * (getBennyUsageWindow returns cap: null for it) -- not literally
+ * unlimited forever by omission, a real product decision that Premium
+ * has no cap at all. */
+export const BENNY_MONTHLY_TOKEN_CAP: Partial<Record<SubscriptionTier, number>> = { pro: 200_000 };
+
+/** Whether this account's *plan* allows Benny assistant mode right now --
+ * either a real paid tier, or still inside the one-time trial window every
+ * new account gets. Independent of the per-account benny_assistant_enabled
+ * opt-in toggle (AccountTab.tsx/AppRail.tsx check that separately) -- this
+ * only answers "is the plan allowed to use it," not "has this parent
+ * turned it on." */
+export function isBennyAvailable(profile: TierInputProfile): boolean {
+  if (getEffectiveTier(profile) !== "free") return true;
+  return !!profile.benny_trial_ends_at && new Date(profile.benny_trial_ends_at) > new Date();
+}
+
+export type BennyUsageWindow = {
+  /** Total tokens allowed in this window, or null for no cap (Premium). */
+  cap: number | null;
+  /** Usage is summed from this point forward when enforcing the cap. */
+  periodStart: Date;
+  /** When the cap lifts/resets -- null only when there's no cap at all. */
+  resetsAt: Date | null;
+  source: "trial" | "monthly_pro" | "unlimited";
+};
+
+/** How much Benny usage this account gets and over what window, given it's
+ * already passed isBennyAvailable(). Trial usage is measured across the
+ * whole 14-day trial (a one-time budget, not a rolling window); Pro's cap
+ * resets every calendar month (UTC) -- deliberately a fixed calendar
+ * boundary rather than the exact Stripe billing-cycle date, which can
+ * shift on upgrades/prorations and would make "resets on the 1st"-style
+ * messaging inaccurate. */
+export function getBennyUsageWindow(profile: TierInputProfile): BennyUsageWindow {
+  const tier = getEffectiveTier(profile);
+  if (tier === "premium") {
+    return { cap: null, periodStart: new Date(0), resetsAt: null, source: "unlimited" };
+  }
+  if (tier === "pro") {
+    const now = new Date();
+    const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    return { cap: BENNY_MONTHLY_TOKEN_CAP.pro ?? null, periodStart, resetsAt, source: "monthly_pro" };
+  }
+  // Only reachable when isBennyAvailable() already confirmed this free-tier
+  // account is inside its trial window -- benny_trial_ends_at is
+  // guaranteed set and in the future.
+  const trialEnd = new Date(profile.benny_trial_ends_at as string);
+  const periodStart = new Date(trialEnd.getTime() - BENNY_TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  return { cap: BENNY_TRIAL_TOKEN_CAP, periodStart, resetsAt: trialEnd, source: "trial" };
 }

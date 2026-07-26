@@ -74,14 +74,20 @@ from train_tokenizer import format_example, iter_training_texts  # noqa: E402
 
 # TinyStories' actual train split turned out to hold only ~475M tokens
 # (2.1M stories) -- well short of the 1.75B it was originally sized for, a
-# real ceiling on the dataset itself, not a bug in the pull script. Repeating
-# it BASE_CORPUS_REPEATS times (~1.9B tokens total) approximates the original
-# target while keeping it the dominant source, matching both this project's
-# own design intent (docs/slm-strategy.md Section 4: narrow/simple data
-# should dominate) and the original TinyStories paper's own precedent
-# (training small models over several epochs of this same small corpus).
-# FineWeb-Edu hit its 500M target in one pass and isn't repeated.
-BASE_CORPUS_REPEATS = {"tinystories.jsonl": 4, "fineweb_edu.jsonl": 1}
+# real ceiling on the dataset itself, not a bug in the pull script. v0.5/v0.6
+# repeated it 4x (~1.9B tokens) to keep it dominant per this project's design
+# intent (docs/slm-strategy.md Section 4: narrow/simple data should
+# dominate) and the original TinyStories paper's own precedent (training
+# small models over several epochs of this same small corpus). v0.7 repeats
+# it only 2x ("2 sets", ~950M tokens) instead, unchanged even after the
+# 30 -> 40 tokens/param bump below -- the extra tokens that ratio increase
+# calls for all come from raising FineWeb-Edu's own pull target (see
+# ml/data/prepare_base_corpus.py's DEFAULT_FINEWEB_TOKENS) rather than
+# repeating TinyStories a 3rd time, so FineWeb-Edu is now the *larger*
+# overall share of the mix (~54% vs. TinyStories' ~46%) despite TinyStories
+# still being the single dominant individual source. FineWeb-Edu hits its
+# own (now-larger) target in one pass and is never repeated.
+BASE_CORPUS_REPEATS = {"tinystories.jsonl": 2, "fineweb_edu.jsonl": 1}
 
 
 def iter_base_corpus_texts():

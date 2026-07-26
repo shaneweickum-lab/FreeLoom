@@ -95,6 +95,12 @@ export type SchoolProfile = {
    * nobody's real usage breaks the moment tiers went live. Null for any
    * account created after that migration ran. */
   grandfathered_until: string | null;
+  /** Every NEW account gets a 14-day Benny trial regardless of tier, via a
+   * column default set at row-creation time -- see
+   * src/lib/billing/tier.ts's isBennyAvailable(). Existing accounts (row
+   * created before this column existed) have this null and just fall back
+   * to ordinary tier-based gating, same as grandfathered_until above. */
+  benny_trial_ends_at: string | null;
   updated_at: string;
 };
 

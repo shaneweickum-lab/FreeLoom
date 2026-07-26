@@ -29,14 +29,19 @@ export type ChatTurn = {
   body: string;
 };
 
-export async function callBennyChat(input: { history: ChatTurn[]; message: string }): Promise<string> {
-  if (!isSlmChatEnabled()) return NOT_READY_REPLY;
+export type BennyChatResult = { reply: string; tokens: number };
+
+/** tokens is 0 for the placeholder replies below (weights not bundled yet,
+ * or a generation error) -- neither one actually ran the model, so nothing
+ * should be logged against the account's Benny usage cap for them. */
+export async function callBennyChat(input: { history: ChatTurn[]; message: string }): Promise<BennyChatResult> {
+  if (!isSlmChatEnabled()) return { reply: NOT_READY_REPLY, tokens: 0 };
 
   try {
-    const reply = chatReply(input.message);
-    return reply.trim() ? reply : TROUBLE_REPLY;
+    const result = chatReply(input.message);
+    return result.reply.trim() ? result : { reply: TROUBLE_REPLY, tokens: 0 };
   } catch (err) {
     console.error("benny chat call failed:", err);
-    return TROUBLE_REPLY;
+    return { reply: TROUBLE_REPLY, tokens: 0 };
   }
 }
