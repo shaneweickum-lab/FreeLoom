@@ -137,7 +137,7 @@ function AddTagForm({ onAdd }: { onAdd: (input: { subjectArea: string; courseTit
       <label className="flex items-center gap-2 text-xs text-ink-soft w-fit">
         <input
           type="number"
-          step={0.05}
+          step={0.01}
           min={0}
           className="bg-white/40 border border-parchment-line text-ink text-sm rounded px-2 py-1 w-20"
           value={creditValue}
@@ -224,7 +224,7 @@ export default function RecordCard({
           <label className="flex items-center gap-2 text-sm">
             <input
               type="number"
-              step={0.05}
+              step={0.01}
               min={0}
               className="w-20 rounded border border-ink/20 bg-white/50 px-2 py-1 text-sm text-ink disabled:opacity-60"
               value={pending?.creditValue ?? entry.credit_value}

@@ -132,17 +132,29 @@ export function guessIsLabScience(subjectArea: string): boolean {
 
 /**
  * Converts logged engaged time into a Carnegie-unit credit value, rounded
- * to the nearest quarter credit (0.25) -- the standard transcript
- * increment, and what this app already rounded to before this function
- * existed. Falls back to `fallback` when no time was actually logged
- * (rather than guessing a duration that was never given) -- every caller
- * today passes a small fixed default for that case (e.g. a knowledge-base
- * entry's own baseCreditHours, or 0.1 for a generic keyword match).
+ * to the nearest hundredth of a credit (0.01) -- fine enough that every
+ * single entry's logged hours actually move the number, rather than
+ * quarter-credit (0.25) rounding, which used to leave the displayed credit
+ * unchanged for however many hours it took to cross the next 0.25
+ * boundary (up to ~37 standard hours, or ~45 lab-science hours, of
+ * apparently "invisible" progress). sumCredits()/computeSubjectLedger()
+ * already do all their summation in exact integer hundredths for this
+ * same reason (see this file's own header comment) -- rounding the
+ * per-entry value to that same hundredths precision, instead of a coarser
+ * quarter-credit grid, is just extending that same precision one step
+ * earlier, into every entry a parent actually sees add up. Falls back to
+ * `fallback` when no time was actually logged (rather than guessing a
+ * duration that was never given) -- every caller today passes a small
+ * fixed default for that case (e.g. a knowledge-base entry's own
+ * baseCreditHours, or 0.1 for a generic keyword match).
  */
 export function creditFromHours(timeSpentMinutes: number | null | undefined, isLabScience: boolean, fallback: number): number {
   if (!timeSpentMinutes || timeSpentMinutes <= 0) return fallback;
   const hoursPerCredit = isLabScience ? CARNEGIE_LAB_SCIENCE_HOURS_PER_CREDIT : CARNEGIE_STANDARD_HOURS_PER_CREDIT;
   const hours = timeSpentMinutes / 60;
-  const rounded = Math.round((hours / hoursPerCredit) * 4) / 4;
-  return Math.max(0.1, rounded);
+  const rounded = Math.round((hours / hoursPerCredit) * 100) / 100;
+  // 0.01 (not 0.1) -- a genuinely-logged duration should never show as
+  // literally 0 credit, but the floor itself shouldn't wipe out the finer
+  // granularity this function exists to provide.
+  return Math.max(0.01, rounded);
 }
