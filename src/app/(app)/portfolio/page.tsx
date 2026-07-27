@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
+import type { AcademicSession } from "@/lib/academicSessions";
 import PortfolioPdfModal from "@/components/PortfolioPdfModal";
 import type { PipelineClass, PipelineEntry } from "@/lib/types";
 
@@ -12,9 +13,15 @@ type ClassWithEntries = PipelineClass & { entries: PipelineEntry[] };
 export default function PortfolioPage() {
   const { currentStudent } = useStudents();
   const [classes, setClasses] = useState<ClassWithEntries[]>([]);
+  // Keyed by id -- classes.session_id is a foreign key, not the session
+  // itself, so this is a lightweight lookup for the label shown next to
+  // each class rather than a join FreeLoom's simple `classes` query doesn't
+  // otherwise need.
+  const [sessionsById, setSessionsById] = useState<Record<string, AcademicSession>>({});
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [savingLabScience, setSavingLabScience] = useState<string | null>(null);
 
   async function load() {
     if (!currentStudent) {
@@ -26,18 +33,27 @@ export default function PortfolioPage() {
     const supabase = createClient();
     // Only accepted entries make it into the portfolio -- drafts and
     // needs-your-input entries are still a work in progress over on /log.
-    const { data } = await supabase
-      .from("classes")
-      .select("*, entries(*)")
-      .eq("student_id", currentStudent.id)
-      .order("subject_area", { ascending: true });
+    const [{ data }, { data: sessions }] = await Promise.all([
+      supabase.from("classes").select("*, entries(*)").eq("student_id", currentStudent.id).order("subject_area", { ascending: true }),
+      supabase.from("academic_sessions").select("*").eq("user_id", currentStudent.user_id),
+    ]);
 
     const withAcceptedOnly = ((data as ClassWithEntries[]) || [])
       .map((c) => ({ ...c, entries: c.entries.filter((e) => e.status === "accepted") }))
       .filter((c) => c.entries.length > 0);
 
     setClasses(withAcceptedOnly);
+    setSessionsById(Object.fromEntries(((sessions as AcademicSession[]) || []).map((s) => [s.id, s])));
     setLoading(false);
+  }
+
+  async function toggleLabScience(cls: ClassWithEntries) {
+    setSavingLabScience(cls.id);
+    const supabase = createClient();
+    const nextValue = !cls.is_lab_science;
+    await supabase.from("classes").update({ is_lab_science: nextValue }).eq("id", cls.id);
+    setClasses((prev) => prev.map((c) => (c.id === cls.id ? { ...c, is_lab_science: nextValue } : c)));
+    setSavingLabScience(null);
   }
 
   useEffect(() => {
@@ -115,11 +131,29 @@ export default function PortfolioPage() {
 
       {classes.map((cls) => {
         const classCredits = sumCredits(cls.entries.map((e) => e.credit_value));
+        const session = cls.session_id ? sessionsById[cls.session_id] : null;
         return (
           <div key={cls.id} className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="font-semibold">{cls.title}</h2>
-              <span className="text-xs text-muted">{classCredits.toFixed(2)} credits</span>
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold">{cls.title}</h2>
+                {session && (
+                  <span className="text-[11px] text-muted rounded-full border border-navy-line px-2 py-0.5">{session.label}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <label className="flex items-center gap-1.5 text-[11px] text-muted cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-gold"
+                    checked={cls.is_lab_science}
+                    disabled={savingLabScience === cls.id}
+                    onChange={() => toggleLabScience(cls)}
+                  />
+                  Lab science (180 hrs/credit)
+                </label>
+                <span className="text-xs text-muted">{classCredits.toFixed(2)} credits</span>
+              </div>
             </div>
             <div className="flex flex-col gap-3">
               {cls.entries.map((entry) => {

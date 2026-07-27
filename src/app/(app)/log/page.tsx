@@ -8,7 +8,8 @@ import type { ActivityType, EntryStatus, PipelineEntry, SourceStage, TagConfiden
 import type { DraftSource } from "@/lib/pipeline/classify";
 import type { ClassifyResultWithDraft } from "@/lib/pipeline/slmDraft";
 import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
-import { sumCredits } from "@/lib/pipeline/credit-calculation";
+import { sumCredits, creditFromHours, guessIsLabScience } from "@/lib/pipeline/credit-calculation";
+import { findCurrentSession, type AcademicSession } from "@/lib/academicSessions";
 import CaptureCard, { type CaptureForm } from "@/components/CaptureCard";
 import RecordCard, { type EntryWithTags } from "@/components/RecordCard";
 import VoiceInputButton from "@/components/VoiceInputButton";
@@ -24,8 +25,18 @@ type TagInput = {
 };
 
 const EMPTY_FORM = { rawWordDump: "", activityType: "other" as ActivityType, sourcePlatform: "", minutes: "" };
-const EMPTY_MANUAL_FORM = { subjectArea: "", courseTitle: "", creditValue: "0.25", description: "" };
-const EMPTY_QUICK_ADD = { subjectArea: "", courseTitle: "", creditValue: "0.25", description: "", rawWordDump: "" };
+// creditValue is no longer typed by hand on either form -- it's computed
+// from logged minutes via the Carnegie-unit algorithm (creditFromHours(),
+// pipeline/credit-calculation.ts) once the target class's is_lab_science
+// flag is known, in insertEntryWithTags().
+const EMPTY_MANUAL_FORM = { subjectArea: "", courseTitle: "", description: "" };
+const EMPTY_QUICK_ADD = { subjectArea: "", courseTitle: "", description: "", rawWordDump: "", minutes: "" };
+
+/** Fallback credit_value used only when no minutes were actually logged --
+ * shouldn't happen in practice now that every entry-creation path requires
+ * an hours field, but kept as a defensive non-zero default rather than
+ * ever storing a bare 0. */
+const FALLBACK_CREDIT_VALUE = 0.25;
 
 /** At least one tag drawn from a past accepted entry (Stage 2) makes the
  * whole entry a "retrieval" draft in DB terms; every other automated
@@ -106,19 +117,47 @@ function LogPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStudent]);
 
-  /** Finds the child's existing class for a subject, or creates one — classes are just a (student, subject) grouping. */
-  async function findOrCreateClass(studentId: string, subjectArea: string) {
+  /** Which academic_sessions row (if any) covers today, for the parent
+   * account `currentStudent` belongs to -- academic_sessions is per-family
+   * (school_profiles-level), not per-student, since most homeschool
+   * families run one shared calendar for every student in the house.
+   * Resolved once per submission (not once per tag/findOrCreateClass call)
+   * since every tag in the same submission shares the same "now". */
+  async function getCurrentSessionId(parentUserId: string): Promise<string | null> {
     const supabase = createClient();
-    const { data: existing } = await supabase
-      .from("classes")
-      .select("*")
-      .eq("student_id", studentId)
-      .eq("subject_area", subjectArea)
-      .maybeSingle();
+    const { data } = await supabase.from("academic_sessions").select("*").eq("user_id", parentUserId).order("start_date");
+    return findCurrentSession((data as AcademicSession[]) || [])?.id ?? null;
+  }
+
+  /**
+   * Finds the child's existing class for a subject, or creates one. Scoped
+   * to (student, subject, session) rather than just (student, subject) --
+   * sessionId is whatever getCurrentSessionId() resolved for "now", or null
+   * if the family hasn't set up sessions (or today falls outside every
+   * session they have). That null case is exactly the pre-session
+   * behavior: one permanent class per subject, accumulating for the
+   * student's entire time on the app. Once a session's end_date passes,
+   * the next matching activity resolves a different (or no) session id and
+   * gets its own fresh class here, instead of piling onto the old one --
+   * that's what actually makes entries "start new classes within the new
+   * date range and stop at the deadline," not anything at write time on
+   * the old class itself.
+   */
+  async function findOrCreateClass(studentId: string, subjectArea: string, sessionId: string | null) {
+    const supabase = createClient();
+    let query = supabase.from("classes").select("*").eq("student_id", studentId).eq("subject_area", subjectArea);
+    query = sessionId ? query.eq("session_id", sessionId) : query.is("session_id", null);
+    const { data: existing } = await query.maybeSingle();
     if (existing) return existing;
     const { data: created, error: createError } = await supabase
       .from("classes")
-      .insert({ student_id: studentId, subject_area: subjectArea, title: subjectArea })
+      .insert({
+        student_id: studentId,
+        subject_area: subjectArea,
+        title: subjectArea,
+        session_id: sessionId,
+        is_lab_science: guessIsLabScience(subjectArea),
+      })
       .select()
       .single();
     if (createError || !created) throw createError;
@@ -133,6 +172,16 @@ function LogPageInner() {
    * credit rollups) keep working against real, consistent data --
    * credit_value specifically is the sum across every tag, not just the
    * first, so those rollups don't silently under-count a multi-tag entry.
+   *
+   * Each tag's credit_value is RECOMPUTED here from extractedSlots'
+   * time_spent_minutes against that tag's actual class's is_lab_science
+   * flag (creditFromHours(), the Carnegie-unit algorithm), falling back to
+   * whatever the caller passed in (tag.creditValue) only when no minutes
+   * were logged at all. This is what makes a parent's is_lab_science
+   * correction on an existing class (Portfolio) actually change future
+   * credit math, and what keeps every entry path -- pipeline classify,
+   * manual resolution, quick-add -- scored the same real way instead of
+   * three slightly different guesses.
    */
   async function insertEntryWithTags(params: {
     studentId: string;
@@ -144,9 +193,19 @@ function LogPageInner() {
     generatedFromPipeline: boolean;
   }) {
     const supabase = createClient();
-    const [primaryTag] = params.tags;
-    const primaryClass = await findOrCreateClass(params.studentId, primaryTag.subjectArea);
-    const totalCredit = sumCredits(params.tags.map((t) => t.creditValue));
+    const sessionId = currentStudent ? await getCurrentSessionId(currentStudent.user_id) : null;
+
+    const classesByTag = await Promise.all(
+      params.tags.map((tag) => findOrCreateClass(params.studentId, tag.subjectArea, sessionId))
+    );
+    const scoredTags = params.tags.map((tag, i) => ({
+      ...tag,
+      creditValue: creditFromHours(params.extractedSlots.time_spent_minutes, classesByTag[i].is_lab_science, tag.creditValue),
+    }));
+
+    const [primaryTag] = scoredTags;
+    const primaryClass = classesByTag[0];
+    const totalCredit = sumCredits(scoredTags.map((t) => t.creditValue));
 
     const { data: entry, error: insertError } = await supabase
       .from("entries")
@@ -155,7 +214,7 @@ function LogPageInner() {
         student_id: params.studentId,
         raw_word_dump: params.rawWordDump,
         extracted_slots: params.extractedSlots,
-        subject_tags: params.tags.map((t) => t.subjectArea),
+        subject_tags: scoredTags.map((t) => t.subjectArea),
         credit_value: totalCredit,
         generated_description: params.generatedFromPipeline ? primaryTag.courseTitle : null,
         generated_reasoning: params.generatedFromPipeline ? primaryTag.reasoning : null,
@@ -168,11 +227,7 @@ function LogPageInner() {
       .single();
     if (insertError || !entry) throw insertError;
 
-    for (const tag of params.tags) {
-      // The primary tag's class was already created/found above; every
-      // other tag can belong to a different subject/class entirely.
-      if (tag !== primaryTag) await findOrCreateClass(params.studentId, tag.subjectArea);
-
+    for (const tag of scoredTags) {
       const { error: tagError } = await supabase.from("entry_subject_tags").insert({
         entry_id: entry.id,
         student_id: params.studentId,
@@ -192,7 +247,7 @@ function LogPageInner() {
 
   async function submitWordDump(e: React.FormEvent) {
     e.preventDefault();
-    if (!currentStudent || !form.rawWordDump.trim()) return;
+    if (!currentStudent || !form.rawWordDump.trim() || !form.minutes) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -222,12 +277,7 @@ function LogPageInner() {
         setNeedsReview({ result, rawWordDump: form.rawWordDump });
         setManualForm(
           draft
-            ? {
-                subjectArea: draft.subjectArea,
-                courseTitle: draft.courseTitle,
-                creditValue: String(draft.creditValue),
-                description: draft.rationale,
-              }
+            ? { subjectArea: draft.subjectArea, courseTitle: draft.courseTitle, description: draft.rationale }
             : EMPTY_MANUAL_FORM
         );
         setForm(EMPTY_FORM);
@@ -268,7 +318,7 @@ function LogPageInner() {
           {
             subjectArea: manualForm.subjectArea.trim(),
             courseTitle: manualForm.courseTitle.trim() || manualForm.subjectArea.trim(),
-            creditValue: Number(manualForm.creditValue) || 0,
+            creditValue: FALLBACK_CREDIT_VALUE,
             reasoning: manualForm.description.trim(),
             confidence: "human",
             quotedPhrase: null,
@@ -312,7 +362,7 @@ function LogPageInner() {
 
   async function submitQuickAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (!currentStudent || !quickAdd || !quickAdd.rawWordDump.trim() || !quickAdd.description.trim()) return;
+    if (!currentStudent || !quickAdd || !quickAdd.rawWordDump.trim() || !quickAdd.description.trim() || !quickAdd.minutes) return;
     setQuickAdding(true);
     setError(null);
     try {
@@ -320,12 +370,12 @@ function LogPageInner() {
       const entry = await insertEntryWithTags({
         studentId: currentStudent.id,
         rawWordDump: quickAdd.rawWordDump.trim(),
-        extractedSlots: { activity_type: null, source_platform: null, time_spent_minutes: null },
+        extractedSlots: { activity_type: null, source_platform: null, time_spent_minutes: Number(quickAdd.minutes) },
         tags: [
           {
             subjectArea: quickAdd.subjectArea.trim(),
             courseTitle: quickAdd.courseTitle.trim() || quickAdd.subjectArea.trim(),
-            creditValue: Number(quickAdd.creditValue) || 0,
+            creditValue: FALLBACK_CREDIT_VALUE,
             reasoning: quickAdd.description.trim(),
             confidence: "human",
             quotedPhrase: null,
@@ -418,7 +468,8 @@ function LogPageInner() {
   async function addTag(entry: EntryWithTags, input: { subjectArea: string; courseTitle: string; creditValue: number }) {
     if (!currentStudent) return;
     const supabase = createClient();
-    await findOrCreateClass(currentStudent.id, input.subjectArea);
+    const sessionId = await getCurrentSessionId(currentStudent.user_id);
+    await findOrCreateClass(currentStudent.id, input.subjectArea, sessionId);
     await supabase.from("entry_subject_tags").insert({
       entry_id: entry.id,
       student_id: currentStudent.id,
@@ -561,19 +612,20 @@ function LogPageInner() {
           <label className="flex items-center gap-2 text-sm w-fit">
             <input
               type="number"
-              step={0.05}
-              min={0}
+              step={1}
+              min={1}
               className="input w-24"
-              value={quickAdd.creditValue}
-              onChange={(e) => setQuickAdd({ ...quickAdd, creditValue: e.target.value })}
+              value={quickAdd.minutes}
+              onChange={(e) => setQuickAdd({ ...quickAdd, minutes: e.target.value })}
+              required
             />
-            <span className="text-muted">credit value</span>
+            <span className="text-muted">minutes spent</span>
           </label>
           <div className="flex gap-2">
             <button
               type="submit"
               className="btn-primary w-fit"
-              disabled={quickAdding || !quickAdd.rawWordDump.trim() || !quickAdd.description.trim()}
+              disabled={quickAdding || !quickAdd.rawWordDump.trim() || !quickAdd.description.trim() || !quickAdd.minutes}
             >
               {quickAdding ? "Saving…" : "Save entry"}
             </button>
@@ -622,17 +674,10 @@ function LogPageInner() {
             onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
             required
           />
-          <label className="flex items-center gap-2 text-sm w-fit">
-            <input
-              type="number"
-              step={0.05}
-              min={0}
-              className="input w-24"
-              value={manualForm.creditValue}
-              onChange={(e) => setManualForm({ ...manualForm, creditValue: e.target.value })}
-            />
-            <span className="text-muted">credit value</span>
-          </label>
+          <p className="text-xs text-muted">
+            Credit is calculated automatically from the {needsReview.result.extractedSlots.time_spent_minutes ?? 0}{" "}
+            minutes you logged, using the Carnegie-unit convention (150 hours/credit, 180 for lab sciences).
+          </p>
           <div className="flex gap-2">
             <button type="submit" className="btn-primary w-fit" disabled={resolving || !manualForm.subjectArea.trim() || !manualForm.description.trim()}>
               {resolving ? "Saving…" : "Save entry"}

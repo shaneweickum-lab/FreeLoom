@@ -4,6 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useStudents } from "@/lib/studentContext";
 import type { Student } from "@/lib/types";
+import { GRADE_LEVEL_OPTIONS, type SchoolLevel } from "@/lib/gradeLevels";
+
+const GRADE_LEVEL_GROUPS: SchoolLevel[] = ["Elementary", "Middle School", "High School"];
 
 const EMPTY_FORM = {
   name: "",
@@ -180,12 +183,22 @@ function DashboardPageInner() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
             />
-            <input
+            <select
               className="input"
-              placeholder="Grade level (e.g. 9th grade)"
               value={form.gradeLevel}
               onChange={(e) => setForm({ ...form, gradeLevel: e.target.value })}
-            />
+            >
+              <option value="">Grade level</option>
+              {GRADE_LEVEL_GROUPS.map((group) => (
+                <optgroup key={group} label={group}>
+                  {GRADE_LEVEL_OPTIONS.filter((option) => option.group === group).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} — {group}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <input

@@ -31,10 +31,22 @@ describe("classifyWordDump", () => {
   });
 
   it("estimates credit value from minutes spent using the Carnegie-unit convention", () => {
-    // 130 hours (7800 minutes) of engaged time is the convention's definition of 1.0 credit.
-    const result = classifyWordDump({ rawWordDump: "Played Minecraft", timeSpentMinutes: 7800 });
+    // 150 hours (9000 minutes) of engaged time is the standard convention's definition of 1.0 credit.
+    const result = classifyWordDump({ rawWordDump: "Played Minecraft", timeSpentMinutes: 9000 });
     expect(result.confident).toBe(true);
     if (!result.confident) throw new Error("expected a confident match");
+    expect(result.tags[0].creditValue).toBe(1);
+  });
+
+  it("uses the 180-hour lab-science rate instead of the 150-hour standard rate", () => {
+    // "animal/wildlife/zoo" matches the Biology cluster (classify.ts) -- a
+    // real lab-science subject area this app already produces, not a
+    // hypothetical. 180 hours (10800 minutes) should land on exactly 1.0
+    // credit here, where it would round to 0.75 at the standard rate.
+    const result = classifyWordDump({ rawWordDump: "Visited the zoo and studied the animals", timeSpentMinutes: 10800 });
+    expect(result.confident).toBe(true);
+    if (!result.confident) throw new Error("expected a confident match");
+    expect(result.tags[0].subjectArea).toBe("Biology");
     expect(result.tags[0].creditValue).toBe(1);
   });
 

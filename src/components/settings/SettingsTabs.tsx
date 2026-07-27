@@ -4,6 +4,7 @@ import Tabs from "@/components/Tabs";
 import AccountTab from "@/components/settings/AccountTab";
 import AppearanceTab from "@/components/settings/AppearanceTab";
 import NotificationsTab from "@/components/settings/NotificationsTab";
+import AcademicTab from "@/components/settings/AcademicTab";
 import BillingTab from "@/components/settings/BillingTab";
 import AboutTab from "@/components/settings/AboutTab";
 import type { SchoolProfile } from "@/lib/types";
@@ -33,6 +34,11 @@ export default function SettingsTabs({
           id: "notifications",
           label: "Notifications",
           content: <NotificationsTab userId={userId} initialProfile={initialProfile} isAdmin={isAdmin} />,
+        },
+        {
+          id: "academic",
+          label: "Academic",
+          content: <AcademicTab userId={userId} initialProfile={initialProfile} />,
         },
         {
           id: "billing",
