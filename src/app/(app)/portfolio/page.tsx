@@ -177,7 +177,7 @@ export default function PortfolioPage() {
                       <label className="flex items-center gap-2 text-sm">
                         <input
                           type="number"
-                          step={0.05}
+                          step={0.01}
                           min={0}
                           className="input w-20"
                           value={pending?.creditValue ?? entry.credit_value}

@@ -106,16 +106,28 @@ describe("creditFromHours", () => {
 
   it("converts 180 hours (the lab-science rate) into exactly 1.0 credit, unlike the standard rate", () => {
     expect(creditFromHours(180 * 60, true, 0.25)).toBe(1);
-    // The same 180 hours at the standard 150hr/credit rate would round to 1.25, not 1 --
+    // The same 180 hours at the standard 150hr/credit rate is 1.2, not 1 --
     // confirms the lab-science flag actually changes which divisor is used, not just the input.
-    expect(creditFromHours(180 * 60, false, 0.25)).toBe(1.25);
+    expect(creditFromHours(180 * 60, false, 0.25)).toBe(1.2);
   });
 
-  it("rounds to the nearest quarter credit", () => {
-    // 165 standard hours is 1.1 credits -- should round down to 1.0, not up to 1.25.
-    expect(creditFromHours(165 * 60, false, 0.25)).toBe(1);
-    // 172.5 standard hours is 1.15 credits -- should round up to 1.25.
-    expect(creditFromHours(172.5 * 60, false, 0.25)).toBe(1.25);
+  it("rounds to the nearest hundredth of a credit, not a coarser quarter-credit grid", () => {
+    // 100 standard hours is 0.6667 credits -- should round to 0.67, not jump to the
+    // nearest quarter credit (0.75). Fine-grained rounding is the whole point of this
+    // function: a parent should see their logged hours move the number every time,
+    // not wait to cross a big fixed increment.
+    expect(creditFromHours(100 * 60, false, 0.25)).toBe(0.67);
+    // 172.5 standard hours is 1.15 credits exactly.
+    expect(creditFromHours(172.5 * 60, false, 0.25)).toBe(1.15);
+  });
+
+  it("shows real, small progress for a single short session instead of a big invisible dead zone", () => {
+    // The motivating real case: 240 minutes (4 hours) at the standard rate is
+    // 0.0267 credits -- rounds to 0.03. The old quarter-credit rounding (with a 0.1
+    // floor) would have shown 0.1 here, the same number a parent would keep seeing
+    // for anything up to 15 hours logged in this subject -- weeks of apparently no
+    // progress at a typical few-hours-a-week pace.
+    expect(creditFromHours(240, false, 0.25)).toBe(0.03);
   });
 
   it("falls back to the given default when no time was logged", () => {
@@ -124,11 +136,12 @@ describe("creditFromHours", () => {
     expect(creditFromHours(0, false, 0.1)).toBe(0.1);
   });
 
-  it("never returns below the 0.1 floor even for a very short logged duration", () => {
+  it("never returns below the 0.01 floor even for a very short logged duration", () => {
     // 5 minutes is a real (if tiny) logged duration, not "no time given" --
     // the rounded Carnegie-hours math alone would floor to 0 credit here;
-    // the 0.1 floor is what keeps a genuinely-logged activity from scoring
-    // as literally worthless.
-    expect(creditFromHours(5, false, 0.25)).toBe(0.1);
+    // the 0.01 floor is what keeps a genuinely-logged activity from scoring
+    // as literally worthless, without wiping out this function's own
+    // hundredths precision the way the old 0.1 floor did.
+    expect(creditFromHours(5, false, 0.25)).toBe(0.01);
   });
 });
