@@ -145,9 +145,12 @@ function LogPageInner() {
    */
   async function findOrCreateClass(studentId: string, subjectArea: string, sessionId: string | null) {
     const supabase = createClient();
-    let query = supabase.from("classes").select("*").eq("student_id", studentId).eq("subject_area", subjectArea);
-    query = sessionId ? query.eq("session_id", sessionId) : query.is("session_id", null);
-    const { data: existing } = await query.maybeSingle();
+    function existingQuery() {
+      const query = supabase.from("classes").select("*").eq("student_id", studentId).eq("subject_area", subjectArea);
+      return sessionId ? query.eq("session_id", sessionId) : query.is("session_id", null);
+    }
+
+    const { data: existing } = await existingQuery().maybeSingle();
     if (existing) return existing;
     const { data: created, error: createError } = await supabase
       .from("classes")
@@ -160,8 +163,20 @@ function LogPageInner() {
       })
       .select()
       .single();
-    if (createError || !created) throw createError;
-    return created;
+    if (!createError) return created;
+
+    // 23505 (unique_violation) here means another concurrent call for this
+    // exact (student, subject, session) already won the insert between our
+    // SELECT above and this INSERT -- a real, previously-unhandled race
+    // this select-then-insert pattern always had, just newly reachable
+    // once entries in the same subject/session started arriving close
+    // together. Re-select rather than surface a hard error: the row that
+    // "lost" the race is exactly the one we want to use anyway.
+    if (createError.code === "23505") {
+      const { data: raced } = await existingQuery().maybeSingle();
+      if (raced) return raced;
+    }
+    throw createError;
   }
 
   /**
