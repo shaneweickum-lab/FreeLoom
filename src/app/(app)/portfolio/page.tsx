@@ -22,6 +22,21 @@ export default function PortfolioPage() {
   const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [savingLabScience, setSavingLabScience] = useState<string | null>(null);
+  // Which classes have their individual entries expanded -- collapsed by
+  // default, so this page shows just the one accumulated total per
+  // class/session rather than every entry that fed into it. The
+  // individual entries (and their editing/remove controls below) are
+  // still fully reachable, just not shown until asked for.
+  const [expandedClassIds, setExpandedClassIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(classId: string) {
+    setExpandedClassIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(classId)) next.delete(classId);
+      else next.add(classId);
+      return next;
+    });
+  }
 
   async function load() {
     if (!currentStudent) {
@@ -153,8 +168,18 @@ export default function PortfolioPage() {
                   Lab science (180 hrs/credit)
                 </label>
                 <span className="text-xs text-muted">{classCredits.toFixed(2)} credits</span>
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(cls.id)}
+                  className="text-xs text-muted hover:text-foreground underline underline-offset-2"
+                >
+                  {expandedClassIds.has(cls.id)
+                    ? "Hide entries"
+                    : `Show ${cls.entries.length} ${cls.entries.length === 1 ? "entry" : "entries"}`}
+                </button>
               </div>
             </div>
+            {expandedClassIds.has(cls.id) && (
             <div className="flex flex-col gap-3">
               {cls.entries.map((entry) => {
                 const pending = edits[entry.id];
@@ -200,6 +225,7 @@ export default function PortfolioPage() {
                 );
               })}
             </div>
+            )}
           </div>
         );
       })}

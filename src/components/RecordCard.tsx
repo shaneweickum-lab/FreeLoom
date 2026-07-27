@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import StitchDivider from "@/components/StitchDivider";
+import { sumCredits } from "@/lib/pipeline/credit-calculation";
 import type { PipelineClass, PipelineEntry, PipelineEntrySubjectTag, TagConfidence } from "@/lib/types";
 
 export type EntryWithTags = PipelineEntry & {
@@ -261,6 +262,85 @@ export default function RecordCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+/**
+ * A collapsed summary for every ACCEPTED entry sharing one class_id --
+ * once a parent accepts a second (or third, ...) entry for a class that
+ * already has one, the feed shouldn't grow a whole new card per entry;
+ * this shows a single accumulated total instead, expandable back into the
+ * individual entries (each rendered via the same RecordCard used
+ * everywhere else, so editing/reasoning/add-remove-tag all keep working
+ * per entry). Only ever rendered for groups of 2+ -- a lone accepted entry
+ * for a class just renders as a plain RecordCard, no grouping wrapper
+ * needed.
+ */
+export function GroupedRecordCard({
+  entries,
+  edits,
+  onEditField,
+  onChangeTag,
+  onRemoveTag,
+  onAddTag,
+}: {
+  entries: EntryWithTags[];
+  edits: Record<string, PendingEdit>;
+  onEditField: (entryId: string, patch: PendingEdit) => void;
+  onChangeTag: (tagId: string, patch: { subjectArea?: string; courseTitle?: string }) => void;
+  onRemoveTag: (tagId: string) => void;
+  onAddTag: (entry: EntryWithTags, input: { subjectArea: string; courseTitle: string; creditValue: number }) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // entries arrives most-recent-first (the feed's own query order) -- that
+  // first entry is what stands in for the group's headline/date when collapsed.
+  const [mostRecent] = entries;
+  const totalCredit = sumCredits(entries.map((e) => e.credit_value));
+
+  return (
+    <div className="rounded-lg border border-navy-line overflow-hidden shadow-sm">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 p-4 bg-navy-soft text-left hover:bg-navy-soft/80 transition-colors"
+      >
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <span className="text-xs font-mono uppercase tracking-wide text-muted">
+            {mostRecent.classes?.subject_area ?? "Uncategorized"}
+          </span>
+          <span className="font-serif font-semibold truncate">{mostRecent.final_description}</span>
+          <span className="text-xs text-muted">{entries.length} entries accumulated</span>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="rounded-full bg-gold/25 text-ink text-xs font-mono px-2 py-0.5">{totalCredit.toFixed(2)} cr</span>
+          <ChevronIcon className={`h-4 w-4 text-muted transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+      {expanded && (
+        <div className="flex flex-col gap-2 p-3 bg-background/60">
+          {entries.map((entry) => (
+            <RecordCard
+              key={entry.id}
+              entry={entry}
+              pending={edits[entry.id]}
+              onEditField={(patch) => onEditField(entry.id, patch)}
+              onDecide={() => {}}
+              onChangeTag={onChangeTag}
+              onRemoveTag={onRemoveTag}
+              onAddTag={(input) => onAddTag(entry, input)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

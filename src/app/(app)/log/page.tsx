@@ -11,7 +11,7 @@ import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
 import { sumCredits, creditFromHours, guessIsLabScience } from "@/lib/pipeline/credit-calculation";
 import { findCurrentSession, type AcademicSession } from "@/lib/academicSessions";
 import CaptureCard, { type CaptureForm } from "@/components/CaptureCard";
-import RecordCard, { type EntryWithTags } from "@/components/RecordCard";
+import RecordCard, { GroupedRecordCard, type EntryWithTags } from "@/components/RecordCard";
 import VoiceInputButton from "@/components/VoiceInputButton";
 
 type TagInput = {
@@ -45,6 +45,43 @@ const FALLBACK_CREDIT_VALUE = 0.25;
  * single-tag mapping generalized to a tag list. */
 function toSourceStage(tags: { source: DraftSource }[]): SourceStage {
   return tags.some((tag) => tag.source === "retrieval") ? "retrieval" : "template";
+}
+
+type FeedItem = { type: "single"; entry: EntryWithTags } | { type: "group"; entries: EntryWithTags[] };
+
+/**
+ * Collapses every ACCEPTED entry sharing a class_id into one feed item
+ * (rendered as GroupedRecordCard) instead of one card apiece -- once a
+ * parent accepts a second matching entry for the same class, the feed
+ * shouldn't keep growing a new card per activity; drafts and
+ * needs-review entries are left exactly as they were (still individual
+ * decisions the parent hasn't made yet, not something to accumulate).
+ * `allEntries` arrives most-recent-first (the feed's own query order);
+ * each group appears at the position of its most recent member, and a
+ * class with only one accepted entry still renders as a plain single
+ * card -- grouping only matters once there's something to accumulate.
+ */
+function groupAcceptedEntries(allEntries: EntryWithTags[]): FeedItem[] {
+  const acceptedByClass = new Map<string, EntryWithTags[]>();
+  for (const entry of allEntries) {
+    if (entry.status !== "accepted") continue;
+    if (!acceptedByClass.has(entry.class_id)) acceptedByClass.set(entry.class_id, []);
+    acceptedByClass.get(entry.class_id)!.push(entry);
+  }
+
+  const renderedClasses = new Set<string>();
+  const items: FeedItem[] = [];
+  for (const entry of allEntries) {
+    if (entry.status !== "accepted") {
+      items.push({ type: "single", entry });
+      continue;
+    }
+    if (renderedClasses.has(entry.class_id)) continue;
+    renderedClasses.add(entry.class_id);
+    const group = acceptedByClass.get(entry.class_id)!;
+    items.push(group.length > 1 ? { type: "group", entries: group } : { type: "single", entry: group[0] });
+  }
+  return items;
 }
 
 export default function LogPage() {
@@ -712,18 +749,30 @@ function LogPageInner() {
             Nothing woven yet — describe today&apos;s first activity above and FreeLoom will draft the record.
           </p>
         )}
-        {entries.map((entry) => (
-          <RecordCard
-            key={entry.id}
-            entry={entry}
-            pending={edits[entry.id]}
-            onEditField={(patch) => editField(entry.id, patch)}
-            onDecide={(decision) => decide(entry, decision)}
-            onChangeTag={changeTag}
-            onRemoveTag={removeTag}
-            onAddTag={(input) => addTag(entry, input)}
-          />
-        ))}
+        {groupAcceptedEntries(entries).map((item) =>
+          item.type === "group" ? (
+            <GroupedRecordCard
+              key={item.entries[0].class_id}
+              entries={item.entries}
+              edits={edits}
+              onEditField={editField}
+              onChangeTag={changeTag}
+              onRemoveTag={removeTag}
+              onAddTag={addTag}
+            />
+          ) : (
+            <RecordCard
+              key={item.entry.id}
+              entry={item.entry}
+              pending={edits[item.entry.id]}
+              onEditField={(patch) => editField(item.entry.id, patch)}
+              onDecide={(decision) => decide(item.entry, decision)}
+              onChangeTag={changeTag}
+              onRemoveTag={removeTag}
+              onAddTag={(input) => addTag(item.entry, input)}
+            />
+          )
+        )}
       </div>
     </div>
   );
