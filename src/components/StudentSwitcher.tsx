@@ -229,7 +229,7 @@ export default function StudentSwitcher() {
               </Link>
             ) : (
               <Link
-                href="/dashboard?new=1"
+                href="/settings?tab=academic&new=1"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
               >

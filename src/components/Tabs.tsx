@@ -11,9 +11,13 @@ type Tab = {
 
 /** A fully-controlled, content-embedding tab bar -- not admin-specific
  * despite its original home, so it's shared between /admin and the
- * redesigned /settings page. */
-export default function Tabs({ tabs }: { tabs: Tab[] }) {
-  const [activeId, setActiveId] = useState(tabs[0]?.id);
+ * redesigned /settings page. `initialTabId` lets a caller deep-link into a
+ * specific tab (e.g. /settings?tab=academic) -- falls back to the first
+ * tab when it doesn't match any tab id. */
+export default function Tabs({ tabs, initialTabId }: { tabs: Tab[]; initialTabId?: string }) {
+  const [activeId, setActiveId] = useState(
+    (initialTabId && tabs.some((t) => t.id === initialTabId) ? initialTabId : tabs[0]?.id)
+  );
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
   const buttonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
