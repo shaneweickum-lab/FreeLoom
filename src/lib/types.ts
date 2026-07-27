@@ -109,6 +109,15 @@ export type SchoolProfile = {
    * default for the Settings UI; the actual session date ranges live in
    * their own table, not derived from this value. */
   schooling_structure: SchoolingStructure | null;
+  /** The family's overall school-year date range -- distinct from any
+   * individual academic_sessions row. Setting both, together with
+   * schooling_structure, is what lets AcademicTab.tsx propose a
+   * quarter/trimester/semester breakdown via generateProposedSessions()
+   * instead of a parent building each session's dates by hand. Null until
+   * a parent sets one up, same as every other opt-in structural field on
+   * this table. */
+  year_start_date: string | null;
+  year_end_date: string | null;
   updated_at: string;
 };
 

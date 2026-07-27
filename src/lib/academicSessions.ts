@@ -55,3 +55,74 @@ export function findCurrentSession(sessions: AcademicSession[], on?: string): Ac
   const targetDate = on ?? new Date().toISOString().slice(0, 10);
   return sessions.find((session) => session.start_date <= targetDate && targetDate <= session.end_date) ?? null;
 }
+
+const MS_PER_DAY = 86_400_000;
+
+/** Parses a YYYY-MM-DD string as a UTC-midnight timestamp -- plain
+ * `new Date(dateStr)` parsing is timezone-dependent for date-only strings
+ * in some engines, and this only ever needs calendar-day arithmetic, not a
+ * real moment in time. */
+function parseDateUTC(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return Date.UTC(y, m - 1, d);
+}
+
+function formatDateUTC(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addUTCDays(dateStr: string, days: number): string {
+  return formatDateUTC(parseDateUTC(dateStr) + days * MS_PER_DAY);
+}
+
+/** Number of calendar days spanned by [startDate, endDate], both inclusive
+ * -- e.g. the same day both ways is a 1-day span. */
+function inclusiveDaySpan(startDate: string, endDate: string): number {
+  return Math.round((parseDateUTC(endDate) - parseDateUTC(startDate)) / MS_PER_DAY) + 1;
+}
+
+/** Base label per sub-session, in the order they occur across the year --
+ * the calendar year of each session's own start date gets appended
+ * afterward, so these stay singular ("Quarter 1", not "Quarter 1 Fall"). */
+const STRUCTURE_SESSION_LABELS: Record<SchoolingStructure, string[]> = {
+  full_year: ["Full Year"],
+  semester: ["Fall Semester", "Spring Semester"],
+  trimester: ["Trimester 1", "Trimester 2", "Trimester 3"],
+  quarter: ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"],
+};
+
+export type ProposedSession = { label: string; start_date: string; end_date: string };
+
+/**
+ * Splits [yearStartDate, yearEndDate] into contiguous, non-overlapping
+ * date ranges matching `structure` (1 for full_year, 2 for semester, 3 for
+ * trimester, 4 for quarter) -- a starting point a parent then reviews,
+ * edits, or discards, not a final answer (see AcademicTab.tsx's proposal
+ * preview). Splits proportionally by calendar day so a 366-day year
+ * divides as evenly as integer days allow; the last chunk absorbs any
+ * remainder. Returns [] if the range is invalid (end before start).
+ */
+export function generateProposedSessions(
+  structure: SchoolingStructure,
+  yearStartDate: string,
+  yearEndDate: string
+): ProposedSession[] {
+  if (yearEndDate < yearStartDate) return [];
+  const labels = STRUCTURE_SESSION_LABELS[structure];
+  const n = labels.length;
+  const totalDays = inclusiveDaySpan(yearStartDate, yearEndDate);
+
+  const sessions: ProposedSession[] = [];
+  for (let i = 0; i < n; i++) {
+    const startOffset = Math.floor((i * totalDays) / n);
+    const endOffset = Math.floor(((i + 1) * totalDays) / n) - 1;
+    const start_date = addUTCDays(yearStartDate, startOffset);
+    const end_date = addUTCDays(yearStartDate, endOffset);
+    sessions.push({ label: `${labels[i]} ${start_date.slice(0, 4)}`, start_date, end_date });
+  }
+  return sessions;
+}

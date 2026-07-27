@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import Tabs from "@/components/Tabs";
 import AccountTab from "@/components/settings/AccountTab";
 import AppearanceTab from "@/components/settings/AppearanceTab";
@@ -21,8 +22,10 @@ export default function SettingsTabs({
   isAdmin: boolean;
   prices: PriceTable;
 }) {
+  const searchParams = useSearchParams();
   return (
     <Tabs
+      initialTabId={searchParams.get("tab") ?? undefined}
       tabs={[
         {
           id: "account",

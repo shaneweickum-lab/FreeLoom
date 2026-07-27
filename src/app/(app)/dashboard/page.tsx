@@ -1,22 +1,15 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useStudents } from "@/lib/studentContext";
 import type { Student } from "@/lib/types";
-import { GRADE_LEVEL_OPTIONS, type SchoolLevel } from "@/lib/gradeLevels";
-
-const GRADE_LEVEL_GROUPS: SchoolLevel[] = ["Elementary", "Middle School", "High School"];
-
-const EMPTY_FORM = {
-  name: "",
-  gradeLevel: "",
-  state: "",
-  birthDate: "",
-  gradYear: "",
-  gender: "",
-  graduationDate: "",
-};
+import StudentForm, {
+  EMPTY_STUDENT_FORM,
+  studentFormToPatch,
+  studentToFormValues,
+  type StudentFormValues,
+} from "@/components/StudentForm";
 
 export default function DashboardPage() {
   return (
@@ -27,7 +20,6 @@ export default function DashboardPage() {
 }
 
 function DashboardPageInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const {
     students,
@@ -42,13 +34,18 @@ function DashboardPageInner() {
   } = useStudents();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<StudentFormValues>(EMPTY_STUDENT_FORM);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     // Only after the real student list has loaded — students.length is 0 on
     // every mount until the async fetch resolves, so gating on it directly
     // was forcing this form open on every reload, even for existing families.
+    // This is also the ONLY place a new student can be created once an
+    // account already has at least one profile -- adding another lives in
+    // Settings > Academic instead (see AcademicTab.tsx), so this dashboard
+    // form only ever opens for the very first student or to edit an
+    // existing one.
     if (!studentsLoading && students.length === 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowForm(true);
@@ -56,35 +53,20 @@ function DashboardPageInner() {
   }, [studentsLoading, students.length]);
 
   useEffect(() => {
-    // Deep link from the nav switcher's "+ Add a student" (?new=1) —
-    // open the create form immediately instead of landing on a page the
-    // parent then has to find the button on themselves.
+    // Deep link from the student switcher's "Add your first student" --
+    // only reachable when the account has zero students, matching the
+    // effect above.
     if (searchParams.get("new") === "1") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowForm(true);
       setEditingId(null);
-      router.replace("/dashboard");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function startCreate() {
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-    setShowForm(true);
-  }
-
   function startEdit(s: Student) {
     setEditingId(s.id);
-    setForm({
-      name: s.name,
-      gradeLevel: s.grade_level || "",
-      state: s.state || "",
-      birthDate: s.birth_date || "",
-      gradYear: s.expected_graduation_year ? String(s.expected_graduation_year) : "",
-      gender: s.gender || "",
-      graduationDate: s.graduation_date || "",
-    });
+    setForm(studentToFormValues(s));
     setShowForm(true);
   }
 
@@ -92,21 +74,13 @@ function DashboardPageInner() {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSubmitting(true);
-    const patch = {
-      name: form.name,
-      grade_level: form.gradeLevel || null,
-      state: form.state || null,
-      birth_date: form.birthDate || null,
-      expected_graduation_year: form.gradYear ? Number(form.gradYear) : null,
-      gender: form.gender || null,
-      graduation_date: form.graduationDate || null,
-    };
+    const patch = studentFormToPatch(form);
     if (editingId) {
       await updateStudent(editingId, patch);
     } else {
       await createStudent(patch);
     }
-    setForm(EMPTY_FORM);
+    setForm(EMPTY_STUDENT_FORM);
     setEditingId(null);
     setSubmitting(false);
     setShowForm(false);
@@ -125,9 +99,8 @@ function DashboardPageInner() {
       <div>
         <h1 className="text-2xl font-bold mb-1">Your students</h1>
         <p className="text-muted text-sm">
-          One FreeLoom account for your whole family — add a profile for each student and switch between them
-          any time from the nav bar. Every student gets their own discovery notes, learning log, transcript, and
-          portfolio.
+          One FreeLoom account for your whole family — switch between student profiles any time from the nav bar.
+          Every student gets their own discovery notes, learning log, transcript, and portfolio.
         </p>
       </div>
 
@@ -168,93 +141,29 @@ function DashboardPageInner() {
 
       {createError && <p className="text-sm text-red-600">{createError}</p>}
 
-      {!showForm ? (
-        <button onClick={startCreate} className="btn-secondary w-fit">
-          + Add another student
-        </button>
-      ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4 max-w-lg">
-          <h2 className="font-semibold">{editingId ? "Edit student profile" : "New student profile"}</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <input
-              className="input"
-              placeholder="Student's name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
-            <select
-              className="input"
-              value={form.gradeLevel}
-              onChange={(e) => setForm({ ...form, gradeLevel: e.target.value })}
-            >
-              <option value="">Grade level</option>
-              {GRADE_LEVEL_GROUPS.map((group) => (
-                <optgroup key={group} label={group}>
-                  {GRADE_LEVEL_OPTIONS.filter((option) => option.group === group).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label} — {group}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <input
-              className="input"
-              placeholder="State (e.g. CA, TX, NY)"
-              value={form.state}
-              onChange={(e) => setForm({ ...form, state: e.target.value })}
-            />
-            <input
-              type="date"
-              className="input"
-              value={form.birthDate}
-              onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
-            />
-            <input
-              type="number"
-              className="input"
-              placeholder="Expected grad year"
-              value={form.gradYear}
-              onChange={(e) => setForm({ ...form, gradYear: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <select className="input" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-              <option value="">Gender (optional)</option>
-              <option value="M">Male</option>
-              <option value="F">Female</option>
-            </select>
-            <label className="flex flex-col gap-1.5 text-xs text-muted">
-              Graduation date (once known — for the official transcript)
-              <input
-                type="date"
-                className="input"
-                value={form.graduationDate}
-                onChange={(e) => setForm({ ...form, graduationDate: e.target.value })}
-              />
-            </label>
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" className="btn-primary" disabled={submitting || !form.name.trim()}>
-              {editingId ? "Save changes" : "Create profile"}
-            </button>
-            {(students.length > 0 || editingId) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingId(null);
-                }}
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        </form>
+      {showForm && (
+        <StudentForm
+          form={form}
+          onChange={setForm}
+          onSubmit={handleSubmit}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingId(null);
+          }}
+          submitting={submitting}
+          isEditing={!!editingId}
+          showCancel={!!editingId}
+        />
+      )}
+
+      {students.length > 0 && !showForm && (
+        <p className="text-muted text-sm">
+          Want to add another student?{" "}
+          <a href="/settings?tab=academic" className="text-gold hover:underline">
+            Head to Settings &gt; Academic
+          </a>
+          .
+        </p>
       )}
     </div>
   );
