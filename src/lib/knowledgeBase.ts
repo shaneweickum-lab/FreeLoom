@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { findKeywordMatch } from "@/lib/keywordMatch";
 
 export type KnowledgeBaseEntry = {
@@ -9,11 +10,29 @@ export type KnowledgeBaseEntry = {
   rationale: string;
 };
 
+type KnowledgeBaseRow = {
+  keywords: string[];
+  course_title: string;
+  subject_area: string;
+  skills: string[];
+  base_credit_hours: number;
+  rationale: string;
+};
+
 /**
  * Grounding layer for well-known games, platforms, and family activities.
  * The translation engine matches free-text descriptions against these
  * keyword lists before falling back to generic heuristics or an LLM,
  * so common cases stay consistent instead of re-guessed every time.
+ *
+ * This array is now only the FALLBACK/seed set -- the real, growing
+ * knowledge base lives in the `knowledge_base` table (see
+ * getKnowledgeBase() below), so it can be expanded by loading research
+ * straight into the database instead of requiring a code deploy for every
+ * new entry. This array stays around as what a fresh install seeds from,
+ * and as what classifyWordDump() falls back to if that table is ever
+ * unreachable -- callers should never see a total loss of knowledge-base
+ * matching just because one DB read failed.
  */
 export const KNOWLEDGE_BASE: KnowledgeBaseEntry[] = [
   {
@@ -142,16 +161,43 @@ export type KnowledgeBaseMatch = { entry: KnowledgeBaseEntry; matchedKeyword: st
  * just the first -- "redstone" and "minecraft" are separate entries with
  * different subjects, and a word dump can genuinely mention both, which is
  * exactly the multi-tag case (one activity, more than one real subject).
+ *
+ * `entries` defaults to the built-in KNOWLEDGE_BASE array so every existing
+ * call site (tests included) keeps working unchanged; real classification
+ * requests pass the DB-backed set from getKnowledgeBase() instead.
  */
-export function findAllKnowledgeBaseMatches(description: string): KnowledgeBaseMatch[] {
+export function findAllKnowledgeBaseMatches(description: string, entries: KnowledgeBaseEntry[] = KNOWLEDGE_BASE): KnowledgeBaseMatch[] {
   const matches: KnowledgeBaseMatch[] = [];
-  for (const entry of KNOWLEDGE_BASE) {
+  for (const entry of entries) {
     const match = findKeywordMatch(description, entry.keywords);
     if (match) matches.push({ entry, matchedKeyword: match.keyword, matchIndex: match.index });
   }
   return matches;
 }
 
-export function findKnowledgeBaseMatch(description: string): KnowledgeBaseEntry | null {
-  return findAllKnowledgeBaseMatches(description)[0]?.entry ?? null;
+export function findKnowledgeBaseMatch(description: string, entries: KnowledgeBaseEntry[] = KNOWLEDGE_BASE): KnowledgeBaseEntry | null {
+  return findAllKnowledgeBaseMatches(description, entries)[0]?.entry ?? null;
+}
+
+/**
+ * Fetches the live, growing knowledge base from the `knowledge_base` table
+ * -- this is the actual source of truth at runtime; KNOWLEDGE_BASE above is
+ * only what a fresh install seeds that table with. Throws on a DB error
+ * rather than swallowing it, so callers (classify route) can decide how to
+ * degrade -- see that route's try/catch, which falls back to KNOWLEDGE_BASE
+ * rather than failing the whole classify request over one bad read.
+ */
+export async function getKnowledgeBase(supabase: SupabaseClient): Promise<KnowledgeBaseEntry[]> {
+  const { data, error } = await supabase
+    .from("knowledge_base")
+    .select("keywords, course_title, subject_area, skills, base_credit_hours, rationale");
+  if (error) throw error;
+  return ((data as KnowledgeBaseRow[]) ?? []).map((row) => ({
+    keywords: row.keywords,
+    courseTitle: row.course_title,
+    subjectArea: row.subject_area,
+    skills: row.skills,
+    baseCreditHours: row.base_credit_hours,
+    rationale: row.rationale,
+  }));
 }

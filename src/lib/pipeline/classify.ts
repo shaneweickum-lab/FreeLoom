@@ -12,7 +12,7 @@
  * need to change.
  */
 
-import { findAllKnowledgeBaseMatches } from "@/lib/knowledgeBase";
+import { findAllKnowledgeBaseMatches, KNOWLEDGE_BASE, type KnowledgeBaseEntry } from "@/lib/knowledgeBase";
 import { extractQuotedPhrase, findKeywordMatch } from "@/lib/keywordMatch";
 import { creditFromHours, guessIsLabScience } from "@/lib/pipeline/credit-calculation";
 
@@ -216,7 +216,7 @@ function dedupeBySubject<T>(matches: T[], getSubjectArea: (match: T) => string):
  * No silent guessing: a low-confidence draft that LOOKS like a real answer
  * is worse than an honest "needs your input."
  */
-export function classifyWordDump(input: WordDumpInput): ClassifyResult {
+export function classifyWordDump(input: WordDumpInput, kbEntries: KnowledgeBaseEntry[] = KNOWLEDGE_BASE): ClassifyResult {
   const extractedSlots: ExtractedSlots = {
     activity_type: input.activityType ?? null,
     source_platform: input.sourcePlatform ?? null,
@@ -224,7 +224,7 @@ export function classifyWordDump(input: WordDumpInput): ClassifyResult {
   };
 
   const kbMatches = dedupeBySubject(
-    findAllKnowledgeBaseMatches(input.rawWordDump),
+    findAllKnowledgeBaseMatches(input.rawWordDump, kbEntries),
     (m) => m.entry.subjectArea
   );
   if (kbMatches.length > 0) {
