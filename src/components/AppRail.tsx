@@ -6,7 +6,7 @@ import { useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { useBennyPanel } from "@/lib/bennyPanelContext";
-import { isBennyAvailable } from "@/lib/billing/tier";
+import { BENNY_ASSISTANT_MODE_LAUNCHED, isBennyAvailable } from "@/lib/billing/tier";
 import StudentSwitcher from "@/components/StudentSwitcher";
 import LogoMark from "@/components/LogoMark";
 import NotificationBell from "@/components/NotificationBell";
@@ -113,7 +113,7 @@ function BennyTriggerButton() {
           benny_trial_ends_at: p?.benny_trial_ends_at ?? null,
           isAdmin,
         });
-        return !!p?.benny_assistant_enabled && available;
+        return BENNY_ASSISTANT_MODE_LAUNCHED && !!p?.benny_assistant_enabled && available;
       }
 
       if (cancelled) return;

@@ -32,7 +32,7 @@ import mlx.optimizers as optim
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
-from config import BASE_CONFIG  # noqa: E402
+from config import BASE_CONFIG, LORA_ALPHA, LORA_RANK  # noqa: E402
 from lora import attach_lora_adapters, save_adapter_params, trainable_lora_params  # noqa: E402
 from transformer_mlx import BitNetTransformer  # noqa: E402
 
@@ -79,7 +79,24 @@ def main():
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--rank", type=int, default=None,
+                         help="LoRA rank, defaults to model/config.py's LORA_RANK (currently 8). Raise this for a "
+                              "task that needs more adapter capacity than the default gives it -- e.g. kb_authoring "
+                              "has the hardest schema of the three tasks (the only one with list-valued fields, "
+                              "keywords/skills) on top of needing to summarize a 3-example cluster, and rank=8 "
+                              "produced eval output that collapsed into repeated/nonsense tokens regardless of "
+                              "decoding strategy (see eval/run_eval_kb_authoring.py's --repetition-penalty), "
+                              "consistent with too little capacity for the task rather than a decoding artifact. "
+                              "--rank must match between train_adapter.py and whichever eval/inference script "
+                              "later loads this exact adapter file, or load_adapter() breaks on a shape mismatch.")
+    parser.add_argument("--alpha", type=int, default=None,
+                         help="LoRA alpha, defaults to model/config.py's LORA_ALPHA (currently 16) when --rank is "
+                              "also unset. If --rank is set and this isn't, scales alpha to keep the same "
+                              "alpha/rank=2 ratio the current default uses, rather than silently changing that "
+                              "ratio's effect on the adapter's effective learning rate.")
     args = parser.parse_args()
+    if args.rank is not None and args.alpha is None:
+        args.alpha = args.rank * 2
 
     train_path = DATA_DIR / f"{args.task}_train.npz"
     val_path = DATA_DIR / f"{args.task}_val.npz"
@@ -94,7 +111,11 @@ def main():
 
     model = BitNetTransformer(BASE_CONFIG)
     model.load_weights(args.base_checkpoint)
-    attach_lora_adapters(model)
+    # Falls back to attach_lora_adapters' own defaults (config.py's
+    # LORA_RANK/LORA_ALPHA) when --rank isn't passed, rather than
+    # duplicating those constants here.
+    lora_kwargs = {"rank": args.rank, "alpha": args.alpha} if args.rank is not None else {}
+    attach_lora_adapters(model, **lora_kwargs)
     model.freeze()
 
     # Unfreeze exactly the LoRA params -- everything else (base BitLinear
@@ -109,8 +130,8 @@ def main():
 
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(f"Fine-tuning '{args.task}' adapter: {len(train_data['input_ids'])} train / "
-          f"{len(val_data['input_ids'])} val examples")
+    print(f"Fine-tuning '{args.task}' adapter (rank={args.rank or LORA_RANK}, alpha={args.alpha or LORA_ALPHA}): "
+          f"{len(train_data['input_ids'])} train / {len(val_data['input_ids'])} val examples")
 
     # With datasets this small (tens of examples), a handful of epochs is
     # enough to fully fit the train set and start memorizing it -- val_loss

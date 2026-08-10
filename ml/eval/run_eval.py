@@ -28,7 +28,7 @@ from tokenizers import Tokenizer
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
-from config import BASE_CONFIG  # noqa: E402
+from config import BASE_CONFIG, LORA_ALPHA, LORA_RANK  # noqa: E402
 from lora import attach_lora_adapters, load_adapter  # noqa: E402
 from transformer_mlx import BitNetTransformer  # noqa: E402
 from validate_output import load_known_subject_areas, validate_draft  # noqa: E402
@@ -87,8 +87,15 @@ def main():
     parser.add_argument("--max-new-tokens", type=int, default=120)
     parser.add_argument("--limit", type=int, default=None, help="only run the first N val examples")
     parser.add_argument("--quiet", action="store_true", help="skip printing each completion's raw text, just the pass/fail summary")
+    parser.add_argument("--rank", type=int, default=None,
+                         help="LoRA rank the adapter file was actually trained/saved with -- must match "
+                              "train_adapter.py's --rank for this exact adapter file, or load_adapter() "
+                              "breaks on a shape mismatch. Defaults to config.py's LORA_RANK (currently 8).")
+    parser.add_argument("--alpha", type=int, default=None, help="LoRA alpha; defaults to matching --rank's alpha/rank=2 convention when --rank is set, else config.py's LORA_ALPHA")
     parser.add_argument("--repetition-penalty", type=float, default=1.3, help="1.0 disables it, falling back to plain argmax")
     args = parser.parse_args()
+    if args.rank is not None and args.alpha is None:
+        args.alpha = args.rank * 2
 
     tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH))
     eos_id = tokenizer.token_to_id("<eos>")
@@ -97,9 +104,11 @@ def main():
 
     model = BitNetTransformer(BASE_CONFIG)
     model.load_weights(args.base_checkpoint)
-    attach_lora_adapters(model)
+    lora_kwargs = {"rank": args.rank, "alpha": args.alpha} if args.rank is not None else {}
+    attach_lora_adapters(model, **lora_kwargs)
     load_adapter(model, args.adapter)
     model.eval()
+    print(f"Loaded {args.adapter} (rank={args.rank or LORA_RANK}, alpha={args.alpha or LORA_ALPHA})")
 
     val_data = np.load(DATA_DIR / "entry_drafting_val.npz")
     input_ids_all = val_data["input_ids"]

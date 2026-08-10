@@ -30,6 +30,24 @@ vi.mock("@/lib/benny/chat", () => ({
   callBennyChat: vi.fn(async () => ({ reply: "a benny reply", tokens: 123 })),
 }));
 
+// Every other test in this file is about the tier/cap/ownership logic
+// BELOW the launch kill-switch, not the switch itself -- default it to
+// true (feature launched) so those tests still exercise what they're
+// actually testing, and flip it per-test via the mutable `bennyLaunched`
+// below for the one test that covers the switch itself. A getter (not a
+// plain snapshot value) is required here so route.ts's read of
+// BENNY_ASSISTANT_MODE_LAUNCHED picks up a later per-test reassignment.
+let bennyLaunched = true;
+vi.mock("@/lib/billing/tier", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/billing/tier")>();
+  return {
+    ...actual,
+    get BENNY_ASSISTANT_MODE_LAUNCHED() {
+      return bennyLaunched;
+    },
+  };
+});
+
 import { POST } from "./route";
 import { callBennyChat } from "@/lib/benny/chat";
 
@@ -62,6 +80,17 @@ describe("POST /api/benny/messages", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: USER } };
     fromQueue = [];
+    bennyLaunched = true;
+  });
+
+  it("403s when the launch kill-switch is off, before ever checking plan/tier", async () => {
+    bennyLaunched = false;
+    // Would otherwise pass the plan/tier gate -- proves the kill-switch is
+    // checked first and independent of it, not that it happens to line up.
+    fromQueue = [AVAILABLE_PROFILE, NO_ADMIN_ROW];
+    const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
+    expect(res.status).toBe(403);
+    expect(callBennyChat).not.toHaveBeenCalled();
   });
 
   it("rejects when signed out", async () => {
