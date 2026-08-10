@@ -4,6 +4,7 @@ import { classifyWordDump, type ClassifyResult, type TagConfidence } from "@/lib
 import { findRetrievalMatch } from "@/lib/pipeline/retrieve";
 import { composeFromFragments } from "@/lib/pipeline/compose";
 import { callEntryDraftingAdapter } from "@/lib/pipeline/slmDraft";
+import { getKnowledgeBase, KNOWLEDGE_BASE, type KnowledgeBaseEntry } from "@/lib/knowledgeBase";
 
 /** Maps a retrieval match's similarity score to the same confidence
  * vocabulary the rest of the pipeline uses, instead of introducing a raw
@@ -42,12 +43,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
   }
 
-  const stage1 = classifyWordDump({
-    rawWordDump,
-    activityType: typeof body?.activity_type === "string" ? body.activity_type : null,
-    sourcePlatform: typeof body?.source_platform === "string" ? body.source_platform : null,
-    timeSpentMinutes: typeof body?.time_spent_minutes === "number" ? body.time_spent_minutes : null,
-  });
+  // The knowledge base is DB-backed (grows from research loaded straight
+  // into the knowledge_base table, no code deploy needed) -- a fetch
+  // failure shouldn't 500 the whole classify request when the built-in
+  // seed set is still a usable answer, same degrade-gracefully pattern as
+  // Stage 2/3 below.
+  let kbEntries: KnowledgeBaseEntry[] = KNOWLEDGE_BASE;
+  try {
+    kbEntries = await getKnowledgeBase(supabase);
+  } catch (err) {
+    console.error("Knowledge base fetch failed, falling back to built-in defaults:", err);
+  }
+
+  const stage1 = classifyWordDump(
+    {
+      rawWordDump,
+      activityType: typeof body?.activity_type === "string" ? body.activity_type : null,
+      sourcePlatform: typeof body?.source_platform === "string" ? body.source_platform : null,
+      timeSpentMinutes: typeof body?.time_spent_minutes === "number" ? body.time_spent_minutes : null,
+    },
+    kbEntries
+  );
 
   // A knowledge-base hit on any tag is already as specific an answer as v0
   // gets for that tag; only worth trying Stage 2/3 when every tag so far is
