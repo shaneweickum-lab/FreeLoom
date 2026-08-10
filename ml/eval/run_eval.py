@@ -71,6 +71,8 @@ def main():
     parser.add_argument("--base-checkpoint", type=str, required=True)
     parser.add_argument("--adapter", type=str, required=True)
     parser.add_argument("--max-new-tokens", type=int, default=120)
+    parser.add_argument("--limit", type=int, default=None, help="only run the first N val examples")
+    parser.add_argument("--quiet", action="store_true", help="skip printing each completion's raw text, just the pass/fail summary")
     args = parser.parse_args()
 
     tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH))
@@ -85,15 +87,24 @@ def main():
     model.eval()
 
     val_data = np.load(DATA_DIR / "entry_drafting_val.npz")
+    input_ids_all = val_data["input_ids"]
+    loss_mask_all = val_data["loss_mask"]
+    if args.limit:
+        input_ids_all = input_ids_all[: args.limit]
+        loss_mask_all = loss_mask_all[: args.limit]
     known_subject_areas = load_known_subject_areas()
-    total = len(val_data["input_ids"])
+    total = len(input_ids_all)
 
     # Autoregressive generation (up to max_new_tokens per example, no batching)
     # over the full held-out set has no other output until the very end --
     # without this, a long eval run looks identical to a hung process.
+    # Prints each raw completion (unless --quiet) alongside the pass/fail --
+    # format-valid isn't the same as good: a repetition loop can still hit
+    # every required field label and pass validate_draft, so the pass/fail
+    # count alone can't catch that, only reading the actual text can.
     results = []
     run_start = time.time()
-    for i, (input_ids, loss_mask) in enumerate(zip(val_data["input_ids"], val_data["loss_mask"])):
+    for i, (input_ids, loss_mask) in enumerate(zip(input_ids_all, loss_mask_all)):
         completion_start = int(np.argmax(loss_mask))
         prompt_ids = [t for t in input_ids[:completion_start].tolist() if t != pad_id]
         if not prompt_ids or prompt_ids[0] != bos_id:
@@ -104,10 +115,18 @@ def main():
         draft = parse_completion(completion_text)
 
         if draft is None:
-            results.append((False, ["could not parse expected fields from generated text"]))
+            valid, errors = False, ["could not parse expected fields from generated text"]
         else:
             result = validate_draft(draft, known_subject_areas)
-            results.append((bool(result), result.errors))
+            valid, errors = bool(result), result.errors
+        results.append((valid, errors))
+
+        if not args.quiet:
+            prompt_text = tokenizer.decode(prompt_ids).strip()
+            print(f"[{i}] {prompt_text}")
+            print(f"  generated: {completion_text.strip()}")
+            print(f"  valid: {valid}" + (f"  errors: {errors}" if errors else ""))
+            print()
 
         elapsed = time.time() - run_start
         avg = elapsed / (i + 1)
