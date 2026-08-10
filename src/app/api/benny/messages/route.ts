@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { callBennyChat, type ChatTurn } from "@/lib/benny/chat";
-import { getBennyUsageWindow, isBennyAvailable } from "@/lib/billing/tier";
+import { BENNY_ASSISTANT_MODE_LAUNCHED, getBennyUsageWindow, isBennyAvailable } from "@/lib/billing/tier";
 
 const DEFAULT_TITLE = "New conversation";
 const TITLE_MAX_LEN = 50;
@@ -42,6 +42,12 @@ export async function POST(req: NextRequest) {
       .maybeSingle(),
     supabase.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle(),
   ]);
+  // Checked before the tier/trial gate below -- this is a hard kill-switch
+  // independent of plan, not a billing limit, so it gets its own distinct
+  // response rather than reusing the "upgrade your plan" message.
+  if (!BENNY_ASSISTANT_MODE_LAUNCHED) {
+    return NextResponse.json({ error: "Benny isn't available yet." }, { status: 403 });
+  }
   const tierProfile = {
     subscription_tier: profile?.subscription_tier ?? "free",
     subscription_status: profile?.subscription_status ?? null,

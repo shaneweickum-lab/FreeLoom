@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { isBennyAvailable } from "@/lib/billing/tier";
+import { BENNY_ASSISTANT_MODE_LAUNCHED, isBennyAvailable } from "@/lib/billing/tier";
 import type { SchoolProfile } from "@/lib/types";
 
 const SCHOOLING_TYPE_OPTIONS = [
@@ -295,42 +295,44 @@ export default function AccountTab({
         </span>
       </div>
 
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
-        <label className={`flex items-center gap-2 text-sm ${bennyLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
-          <input
-            type="checkbox"
-            className="h-4 w-4 shrink-0 accent-gold"
-            checked={bennyEnabled && !bennyLocked}
-            disabled={bennySaving || bennyLocked}
-            onChange={(e) => saveBennyEnabled(e.target.checked)}
-          />
-          <span className="font-medium">Benny (AI Assistant)</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold font-mono">
-            Beta
+      {BENNY_ASSISTANT_MODE_LAUNCHED && (
+        <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+          <label className={`flex items-center gap-2 text-sm ${bennyLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-gold"
+              checked={bennyEnabled && !bennyLocked}
+              disabled={bennySaving || bennyLocked}
+              onChange={(e) => saveBennyEnabled(e.target.checked)}
+            />
+            <span className="font-medium">Benny (AI Assistant)</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold font-mono">
+              Beta
+            </span>
+          </label>
+          <span className="text-muted/70 text-[11px]">
+            {bennyLocked ? (
+              <>Available on Pro and Premium plans -- see the Billing tab to upgrade.</>
+            ) : (
+              <>
+                Adds a chat icon to the app for asking Benny, FreeLoom&apos;s in-house assistant, questions. Benny is AI
+                and can make mistakes.
+                {bennyOnTrial && initialProfile?.benny_trial_ends_at && (
+                  <>
+                    {" "}
+                    Free trial active until{" "}
+                    {new Date(initialProfile.benny_trial_ends_at).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                    })}
+                    .
+                  </>
+                )}
+              </>
+            )}
           </span>
-        </label>
-        <span className="text-muted/70 text-[11px]">
-          {bennyLocked ? (
-            <>Available on Pro and Premium plans -- see the Billing tab to upgrade.</>
-          ) : (
-            <>
-              Adds a chat icon to the app for asking Benny, FreeLoom&apos;s in-house assistant, questions. Benny is AI
-              and can make mistakes.
-              {bennyOnTrial && initialProfile?.benny_trial_ends_at && (
-                <>
-                  {" "}
-                  Free trial active until{" "}
-                  {new Date(initialProfile.benny_trial_ends_at).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                  })}
-                  .
-                </>
-              )}
-            </>
-          )}
-        </span>
-      </div>
+        </div>
+      )}
 
       {editing && (
         <div className="flex items-center gap-3">

@@ -99,12 +99,29 @@ export const BENNY_TRIAL_TOKEN_CAP = 100_000;
  * has no cap at all. */
 export const BENNY_MONTHLY_TOKEN_CAP: Partial<Record<SubscriptionTier, number>> = { pro: 200_000 };
 
+/** Hard kill-switch for Benny assistant-mode chat, independent of tier/
+ * trial/opt-in state entirely -- flip to true once the underlying model's
+ * platform_help answers are actually reliable. Eval against the real
+ * fine-tuned adapter (ml/eval/run_eval_platform_help.py) showed it
+ * confidently answering real app questions (billing, dark mode, adding
+ * students) with plausible-sounding but WRONG specifics -- worse than no
+ * answer at all, since a parent has no way to tell it's wrong. Setting
+ * this false hides the feature entirely (AccountTab.tsx's toggle row,
+ * AppRail.tsx's chat trigger) rather than showing it locked/disabled,
+ * since a locked/disabled state would (wrongly) read as a tier/billing
+ * limit -- misleading in a completely different way. entry_drafting and
+ * kb_authoring aren't gated by this; only the direct user-facing Q&A path.
+ */
+export const BENNY_ASSISTANT_MODE_LAUNCHED = false;
+
 /** Whether this account's *plan* allows Benny assistant mode right now --
  * either a real paid tier, or still inside the one-time trial window every
  * new account gets. Independent of the per-account benny_assistant_enabled
  * opt-in toggle (AccountTab.tsx/AppRail.tsx check that separately) -- this
  * only answers "is the plan allowed to use it," not "has this parent
- * turned it on." */
+ * turned it on," and not "has this feature launched at all" (see
+ * BENNY_ASSISTANT_MODE_LAUNCHED above, which callers check separately so
+ * the not-launched-yet state can be hidden rather than shown locked). */
 export function isBennyAvailable(profile: TierInputProfile): boolean {
   if (getEffectiveTier(profile) !== "free") return true;
   return !!profile.benny_trial_ends_at && new Date(profile.benny_trial_ends_at) > new Date();
