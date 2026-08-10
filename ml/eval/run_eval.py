@@ -54,16 +54,30 @@ def parse_completion(text: str) -> dict | None:
 
 
 def generate(model: BitNetTransformer, tokenizer: Tokenizer, prompt_ids: list[int],
-             max_new_tokens: int = 120, eos_id: int | None = None) -> list[int]:
+             max_new_tokens: int = 120, eos_id: int | None = None, repetition_penalty: float = 1.3) -> list[int]:
+    """Greedy (argmax) decoding, same as every other generate() in this
+    project -- but plain argmax has a well-known failure mode in small
+    models: once it repeats a token, that repeated pattern becomes its own
+    highest-probability continuation, and it gets stuck in a loop.
+    `repetition_penalty` (the standard CTRL-paper/HF technique: divide
+    already-generated tokens' positive logits, multiply their negative
+    logits, both pushing the logit down) discourages picking a token that
+    already appeared in THIS completion, without switching to true
+    stochastic sampling -- decoding stays deterministic, just biased
+    against looping. Pass 1.0 to fall back to plain argmax."""
     ids = list(prompt_ids)
+    generated_start = len(prompt_ids)
     for _ in range(max_new_tokens):
         window = ids[-model.cfg.max_seq_len:]
-        logits = model(mx.array([window]))
-        next_id = int(mx.argmax(logits[0, -1]))
+        logits = model(mx.array([window]))[0, -1].tolist()
+        if repetition_penalty != 1.0:
+            for tok in set(ids[generated_start:]):
+                logits[tok] = logits[tok] / repetition_penalty if logits[tok] > 0 else logits[tok] * repetition_penalty
+        next_id = max(range(len(logits)), key=logits.__getitem__)
         ids.append(next_id)
         if eos_id is not None and next_id == eos_id:
             break
-    return ids[len(prompt_ids):]
+    return ids[generated_start:]
 
 
 def main():
@@ -73,6 +87,7 @@ def main():
     parser.add_argument("--max-new-tokens", type=int, default=120)
     parser.add_argument("--limit", type=int, default=None, help="only run the first N val examples")
     parser.add_argument("--quiet", action="store_true", help="skip printing each completion's raw text, just the pass/fail summary")
+    parser.add_argument("--repetition-penalty", type=float, default=1.3, help="1.0 disables it, falling back to plain argmax")
     args = parser.parse_args()
 
     tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH))
@@ -110,7 +125,7 @@ def main():
         if not prompt_ids or prompt_ids[0] != bos_id:
             prompt_ids = [bos_id] + prompt_ids
 
-        generated_ids = generate(model, tokenizer, prompt_ids, args.max_new_tokens, eos_id)
+        generated_ids = generate(model, tokenizer, prompt_ids, args.max_new_tokens, eos_id, args.repetition_penalty)
         completion_text = tokenizer.decode(generated_ids)
         draft = parse_completion(completion_text)
 
