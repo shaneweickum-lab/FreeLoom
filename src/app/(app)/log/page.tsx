@@ -225,15 +225,19 @@ function LogPageInner() {
    * credit_value specifically is the sum across every tag, not just the
    * first, so those rollups don't silently under-count a multi-tag entry.
    *
-   * Each tag's credit_value is RECOMPUTED here from extractedSlots'
-   * time_spent_minutes against that tag's actual class's is_lab_science
-   * flag (creditFromHours(), the Carnegie-unit algorithm), falling back to
+   * Each tag's credit_value is RECOMPUTED here from an even split of
+   * extractedSlots' time_spent_minutes across however many tags this word
+   * dump produced, against that tag's actual class's is_lab_science flag
+   * (creditFromHours(), the Carnegie-unit algorithm) -- one entry is one
+   * block of time, so a dump resolving to N classes splits that time N
+   * ways rather than counting the whole thing toward each. Falls back to
    * whatever the caller passed in (tag.creditValue) only when no minutes
    * were logged at all. This is what makes a parent's is_lab_science
    * correction on an existing class (Portfolio) actually change future
    * credit math, and what keeps every entry path -- pipeline classify,
    * manual resolution, quick-add -- scored the same real way instead of
-   * three slightly different guesses.
+   * three slightly different guesses. A parent can still rebalance the
+   * split afterward per tag in the reasoning panel (changeTagHours()).
    */
   async function insertEntryWithTags(params: {
     studentId: string;
@@ -250,9 +254,16 @@ function LogPageInner() {
     const classesByTag = await Promise.all(
       params.tags.map((tag) => findOrCreateClass(params.studentId, tag.subjectArea, sessionId))
     );
+    // Split the logged time evenly across however many tags this word dump
+    // produced -- one entry describes ONE block of time, so a dump that
+    // resolves to 3 classes should split that time three ways, not count
+    // it toward each class separately (which would triple-count it).
+    const totalMinutes = params.extractedSlots.time_spent_minutes;
+    const perTagMinutes = totalMinutes != null && params.tags.length > 0 ? totalMinutes / params.tags.length : totalMinutes;
     const scoredTags = params.tags.map((tag, i) => ({
       ...tag,
-      creditValue: creditFromHours(params.extractedSlots.time_spent_minutes, classesByTag[i].is_lab_science, tag.creditValue),
+      timeSpentMinutes: perTagMinutes,
+      creditValue: creditFromHours(perTagMinutes, classesByTag[i].is_lab_science, tag.creditValue),
     }));
 
     const [primaryTag] = scoredTags;
@@ -286,6 +297,7 @@ function LogPageInner() {
         subject_area: tag.subjectArea,
         course_title: tag.courseTitle,
         credit_value: tag.creditValue,
+        time_spent_minutes: tag.timeSpentMinutes,
         confidence: tag.confidence,
         quoted_phrase: tag.quotedPhrase,
         reasoning: tag.reasoning,
@@ -497,6 +509,34 @@ function LogPageInner() {
     if (patch.courseTitle !== undefined) updates.course_title = patch.courseTitle;
     const { data: tag } = await supabase.from("entry_subject_tags").update(updates).eq("id", tagId).select("entry_id").single();
     if (!tag) return;
+    await syncEntryLegacyFields(tag.entry_id);
+    await refreshSubjectLedger();
+    await loadEntries();
+  }
+
+  /** The reasoning panel's "adjust hours" action for one tag -- recomputes
+   * that tag's credit_value from the new minutes against its own class's
+   * is_lab_science rate (the same Carnegie math insertEntryWithTags() uses
+   * at intake), so rebalancing time across a multi-tag entry's classes
+   * actually changes credit, not just a cosmetic number. Falls back to the
+   * tag's existing credit_value if minutes is cleared, rather than
+   * zeroing it out. */
+  async function changeTagHours(tagId: string, minutes: number) {
+    if (!currentStudent) return;
+    const supabase = createClient();
+    const { data: tag } = await supabase
+      .from("entry_subject_tags")
+      .select("entry_id, subject_area, credit_value")
+      .eq("id", tagId)
+      .single();
+    if (!tag) return;
+    const sessionId = await getCurrentSessionId(currentStudent.user_id);
+    const cls = await findOrCreateClass(currentStudent.id, tag.subject_area, sessionId);
+    const creditValue = creditFromHours(minutes, cls.is_lab_science, tag.credit_value);
+    await supabase
+      .from("entry_subject_tags")
+      .update({ time_spent_minutes: minutes, credit_value: creditValue })
+      .eq("id", tagId);
     await syncEntryLegacyFields(tag.entry_id);
     await refreshSubjectLedger();
     await loadEntries();
@@ -759,6 +799,7 @@ function LogPageInner() {
               onChangeTag={changeTag}
               onRemoveTag={removeTag}
               onAddTag={addTag}
+              onChangeHours={changeTagHours}
             />
           ) : (
             <RecordCard
@@ -770,6 +811,7 @@ function LogPageInner() {
               onChangeTag={changeTag}
               onRemoveTag={removeTag}
               onAddTag={(input) => addTag(item.entry, input)}
+              onChangeHours={changeTagHours}
             />
           )
         )}

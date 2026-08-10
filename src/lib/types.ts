@@ -228,6 +228,13 @@ export type PipelineEntrySubjectTag = {
   subject_area: string;
   course_title: string;
   credit_value: number;
+  /** How much of the entry's logged time this tag was allocated -- when a
+   * word dump splits into several tags, this is a share of the total, not
+   * a duplicate of it (see insertEntryWithTags() in (app)/log/page.tsx).
+   * Null for any row created before this column existed; credit_value
+   * still holds a real number for those, just not backed by a stored
+   * minutes figure a parent can re-derive it from. */
+  time_spent_minutes: number | null;
   confidence: TagConfidence;
   /** The exact phrase in the entry's raw_word_dump that produced this tag,
    * or null (a retrieval-matched tag, a Stage 3 generic fallback, or a

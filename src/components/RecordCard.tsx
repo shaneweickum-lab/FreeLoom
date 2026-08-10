@@ -41,14 +41,17 @@ function TagRow({
   canRemove,
   onChangeTag,
   onRemoveTag,
+  onChangeHours,
 }: {
   tag: PipelineEntrySubjectTag;
   canRemove: boolean;
   onChangeTag: (tagId: string, patch: { subjectArea?: string; courseTitle?: string }) => void;
   onRemoveTag: (tagId: string) => void;
+  onChangeHours: (tagId: string, minutes: number) => void;
 }) {
   const [subjectArea, setSubjectArea] = useState(tag.subject_area);
   const [courseTitle, setCourseTitle] = useState(tag.course_title);
+  const [minutes, setMinutes] = useState(tag.time_spent_minutes != null ? String(Math.round(tag.time_spent_minutes)) : "");
 
   useEffect(() => {
     // Re-sync local editable-input state when the underlying tag changes
@@ -57,7 +60,8 @@ function TagRow({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSubjectArea(tag.subject_area);
     setCourseTitle(tag.course_title);
-  }, [tag.subject_area, tag.course_title]);
+    setMinutes(tag.time_spent_minutes != null ? String(Math.round(tag.time_spent_minutes)) : "");
+  }, [tag.subject_area, tag.course_title, tag.time_spent_minutes]);
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-parchment-line bg-white/30 p-3">
@@ -83,8 +87,24 @@ function TagRow({
       ) : (
         <p className="text-xs text-ink-soft/70">No specific phrase behind this match.</p>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-mono text-ink-soft">{tag.credit_value.toFixed(2)} credits</span>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+          <input
+            type="number"
+            step={1}
+            min={0}
+            className="w-16 rounded border border-ink/20 bg-white/50 px-1.5 py-0.5 text-xs text-ink"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+            onBlur={() => {
+              const parsed = Number(minutes);
+              if (minutes.trim() !== "" && !Number.isNaN(parsed) && parsed !== tag.time_spent_minutes) {
+                onChangeHours(tag.id, parsed);
+              }
+            }}
+          />
+          min &middot; <span className="font-mono">{tag.credit_value.toFixed(2)} credits</span>
+        </label>
         {canRemove && (
           <button onClick={() => onRemoveTag(tag.id)} className="text-xs text-ink-soft hover:text-red-700 transition-colors">
             Remove
@@ -166,6 +186,7 @@ export default function RecordCard({
   onChangeTag,
   onRemoveTag,
   onAddTag,
+  onChangeHours,
 }: {
   entry: EntryWithTags;
   pending?: PendingEdit;
@@ -174,6 +195,7 @@ export default function RecordCard({
   onChangeTag: (tagId: string, patch: { subjectArea?: string; courseTitle?: string }) => void;
   onRemoveTag: (tagId: string) => void;
   onAddTag: (input: { subjectArea: string; courseTitle: string; creditValue: number }) => Promise<void>;
+  onChangeHours: (tagId: string, minutes: number) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const tags = entry.entry_subject_tags;
@@ -256,7 +278,14 @@ export default function RecordCard({
         {panelOpen && (
           <div className="mt-2 flex flex-col gap-2 border-t border-parchment-line pt-3">
             {tags.map((tag) => (
-              <TagRow key={tag.id} tag={tag} canRemove={tags.length > 1} onChangeTag={onChangeTag} onRemoveTag={onRemoveTag} />
+              <TagRow
+                key={tag.id}
+                tag={tag}
+                canRemove={tags.length > 1}
+                onChangeTag={onChangeTag}
+                onRemoveTag={onRemoveTag}
+                onChangeHours={onChangeHours}
+              />
             ))}
             <AddTagForm onAdd={onAddTag} />
           </div>
@@ -292,6 +321,7 @@ export function GroupedRecordCard({
   onChangeTag,
   onRemoveTag,
   onAddTag,
+  onChangeHours,
 }: {
   entries: EntryWithTags[];
   edits: Record<string, PendingEdit>;
@@ -299,6 +329,7 @@ export function GroupedRecordCard({
   onChangeTag: (tagId: string, patch: { subjectArea?: string; courseTitle?: string }) => void;
   onRemoveTag: (tagId: string) => void;
   onAddTag: (entry: EntryWithTags, input: { subjectArea: string; courseTitle: string; creditValue: number }) => Promise<void>;
+  onChangeHours: (tagId: string, minutes: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   // entries arrives most-recent-first (the feed's own query order) -- that
@@ -337,6 +368,7 @@ export function GroupedRecordCard({
               onChangeTag={onChangeTag}
               onRemoveTag={onRemoveTag}
               onAddTag={(input) => onAddTag(entry, input)}
+              onChangeHours={onChangeHours}
             />
           ))}
         </div>

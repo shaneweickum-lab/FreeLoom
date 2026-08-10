@@ -162,8 +162,8 @@ export default function PrivacyPage() {
         <p className="text-sm text-muted">
           The fastest way to reach us is through the Messages feature in your account, if you&apos;re signed in.
           Otherwise, email{" "}
-          <a href="mailto:shane@sowedandrooted.com" className="text-gold hover:underline">
-            shane@sowedandrooted.com
+          <a href="mailto:support@freeloom.io" className="text-gold hover:underline">
+            support@freeloom.io
           </a>
           .
         </p>
