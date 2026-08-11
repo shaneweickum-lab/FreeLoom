@@ -29,3 +29,12 @@ uvicorn>=0.30
 # checkpoints without needing MLX (or torch), so the export step is a plain
 # numpy script that can be reviewed/run anywhere, not just on the Mac.
 safetensors>=0.4
+
+# Only needed to run ml/scripts/freeloom_scraper.py -- pulls academic
+# citations from the public ERIC/Crossref APIs and writes them to a plain
+# spreadsheet. Requires real network access to api.eric.ed.gov and
+# api.crossref.org; not needed for anything else in this directory.
+requests>=2.31
+pandas>=2.2
+openpyxl>=3.1
+
