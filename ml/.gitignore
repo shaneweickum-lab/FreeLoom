@@ -14,3 +14,7 @@ serve/web_weights/
 # to SQL by hand each time, not something to keep re-committing wholesale.
 scripts/*.csv
 scripts/*.xlsx
+
+# convert_research_spreadsheet.py's output -- a generated migration applied
+# directly against Supabase, not app source, so it isn't committed here.
+scripts/*.sql
