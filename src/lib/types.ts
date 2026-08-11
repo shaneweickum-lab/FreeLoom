@@ -350,3 +350,25 @@ export type AppNotification = {
   read_at: string | null;
   created_at: string;
 };
+
+/** One real academic citation backing up an alternative-schooling approach
+ * (unschooling, wildschooling, neurodivergent-affirming practice, game-
+ * based/interest-led learning, etc.) -- browsable/searchable reference
+ * material for a parent's own confidence or to cite if their approach is
+ * ever questioned. Deliberately separate from PipelineClass/PipelineEntry
+ * and from knowledge_base: this is a citation ABOUT a pedagogy, not an
+ * activity a specific kid did, so it never feeds the classify pipeline. */
+export type ResearchCitation = {
+  id: string;
+  title: string;
+  category: string;
+  topic: string;
+  primary_subject: string;
+  secondary_subject: string | null;
+  summary: string;
+  keywords: string[];
+  source: string;
+  evidence_level: string;
+  source_url: string | null;
+  created_at: string;
+};

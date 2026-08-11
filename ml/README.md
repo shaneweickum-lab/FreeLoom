@@ -29,6 +29,8 @@ cleanly along what that container can and can't run:
 | `train/prepare_dataset.py` | |
 | `eval/validate_output.py` + `test_validate_output.py` | |
 | `eval/validate_kb_entry.py` + `test_validate_kb_entry.py` | |
+| `scripts/freeloom_scraper.py` (needs real network access to `api.eric.ed.gov`/`api.crossref.org`) | |
+| `scripts/convert_research_spreadsheet.py` | |
 
 Confirmed, not assumed: `mlx` installs via pip on Linux x86_64 but its shared library
 (`libmlx.so`) is Apple/Metal-only and fails to import. Also confirmed: this container's

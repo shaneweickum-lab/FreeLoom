@@ -20,6 +20,7 @@ const LINKS = [
   { href: "/log", label: "Learning Log" },
   { href: "/transcript", label: "Transcript" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/research", label: "Research Library" },
   { href: "/messages", label: "Messages" },
   { href: "/notifications", label: "Notifications" },
   { href: "/settings", label: "Settings" },

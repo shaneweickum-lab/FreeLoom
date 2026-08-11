@@ -9,3 +9,12 @@ data/base_corpus/
 # copied into wherever the Next.js app actually bundles it from (decided once
 # the TS runtime lands), not committed from here directly.
 serve/web_weights/
+
+# freeloom_scraper.py's output -- a research artifact reviewed and converted
+# to SQL by hand each time, not something to keep re-committing wholesale.
+scripts/*.csv
+scripts/*.xlsx
+
+# convert_research_spreadsheet.py's output -- a generated migration applied
+# directly against Supabase, not app source, so it isn't committed here.
+scripts/*.sql
