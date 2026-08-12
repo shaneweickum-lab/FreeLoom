@@ -23,12 +23,34 @@ not-null column with nothing to put there) and counted in the stats report.
 Duplicate titles within the sheet are kept -- ERIC and Crossref cover
 different, non-overlapping records, and freeloom_scraper.py's own
 drop_duplicates() already ran before this file was produced.
+
+Also drops any row touching gender/sex/sexuality/religion topics (checked
+across every text field, not just the title) -- FreeLoom's Research Library
+is scoped to pedagogy/methodology evidence, deliberately excluding those
+subject areas regardless of how a citation got pulled in by the scraper's
+broad keyword search.
 """
 
+import re
 import sys
 from openpyxl import load_workbook
 
 CHUNK_SIZE = 100
+
+EXCLUDED_TOPIC_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r"\bgender\b", r"\btransgender\b", r"\bnonbinary\b", r"\bnon-binary\b",
+    r"\blgbtq?\b", r"\bqueer\b", r"\bsex\b", r"\bsexual\w*\b", r"\bheterosexual\b",
+    r"\bhomosexual\b", r"\bgay\b", r"\blesbian\b", r"\bbisexual\b",
+    r"\breligio\w*\b", r"\bchristian\w*\b", r"\bcatholic\w*\b", r"\bmuslim\w*\b",
+    r"\bislam\w*\b", r"\bjewish\b", r"\bjudaism\b", r"\bhindu\w*\b", r"\bbuddhis\w*\b",
+    r"\batheis\w*\b", r"\btheolog\w*\b", r"\bscripture\b", r"\bbible\b", r"\bquran\b",
+    r"\bchurch\w*\b", r"\bfaith-based\b", r"\bevangelical\w*\b",
+]]
+
+
+def is_excluded_topic(row):
+    blob = " ".join(str(cell) for cell in row if cell)
+    return any(p.search(blob) for p in EXCLUDED_TOPIC_PATTERNS)
 
 COLUMNS = [
     "title",
@@ -75,6 +97,7 @@ def main():
 
     total = 0
     skipped_missing = 0
+    skipped_topic = 0
     values_rows = []
 
     for row in rows:
@@ -96,6 +119,10 @@ def main():
 
         if not title or not category or not summary or not primary_subject or not source or not evidence_level:
             skipped_missing += 1
+            continue
+
+        if is_excluded_topic(row):
+            skipped_topic += 1
             continue
 
         values_rows.append(
@@ -131,6 +158,7 @@ def main():
     print("=== research_citations conversion report ===", file=sys.stderr)
     print(f"Rows read:            {total}", file=sys.stderr)
     print(f"Skipped (missing required field): {skipped_missing}", file=sys.stderr)
+    print(f"Skipped (gender/sex/sexuality/religion topic): {skipped_topic}", file=sys.stderr)
     print(f"Rows written:         {len(values_rows)}", file=sys.stderr)
     print(f"Output:               {out_path}", file=sys.stderr)
 

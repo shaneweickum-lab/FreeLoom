@@ -105,6 +105,48 @@ describe("classifyWordDump", () => {
     });
   });
 
+  describe("supporting citations", () => {
+    const gameBasedCitation = {
+      id: "1",
+      title: "Universal Strategy Game",
+      category: "Digital & Game-Based",
+      topic: "Applied Educational Research",
+      primary_subject: "Computer Science & Technology",
+      secondary_subject: null,
+      summary: "A study of Minecraft as a game-based learning platform.",
+      keywords: ["game-based learning minecraft"],
+      source: "Some Journal (2020)",
+      evidence_level: "Peer-Reviewed Journal Article",
+      source_url: "https://doi.org/10.0/example",
+      created_at: "2026-01-01T00:00:00Z",
+    };
+
+    it("attaches matching research citations to a knowledge-base tag when citations are passed in", () => {
+      const result = classifyWordDump(
+        { rawWordDump: "Spent 2 hours building things in Minecraft" },
+        undefined,
+        [gameBasedCitation]
+      );
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      expect(result.tags[0].citations).toEqual([gameBasedCitation]);
+    });
+
+    it("attaches nothing when no citations are passed in", () => {
+      const result = classifyWordDump({ rawWordDump: "Spent 2 hours building things in Minecraft" });
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      expect(result.tags[0].citations).toEqual([]);
+    });
+
+    it("attaches nothing when no citation matches the tag's subject or keyword", () => {
+      const result = classifyWordDump({ rawWordDump: "Played chess with a sibling" }, undefined, [gameBasedCitation]);
+      expect(result.confident).toBe(true);
+      if (!result.confident) throw new Error("expected a confident match");
+      expect(result.tags[0].citations).toEqual([]);
+    });
+  });
+
   describe("keyword-latching guard", () => {
     it("prefers a specific multi-word technical phrase over an incidental single-word match", () => {
       // "guitar" alone would match the Music cluster, but the activity

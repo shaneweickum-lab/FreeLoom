@@ -5,6 +5,8 @@ import { findRetrievalMatch } from "@/lib/pipeline/retrieve";
 import { composeFromFragments } from "@/lib/pipeline/compose";
 import { callEntryDraftingAdapter } from "@/lib/pipeline/slmDraft";
 import { getKnowledgeBase, KNOWLEDGE_BASE, type KnowledgeBaseEntry } from "@/lib/knowledgeBase";
+import { getResearchCitations } from "@/lib/research/matchCitations";
+import type { ResearchCitation } from "@/lib/types";
 
 /** Maps a retrieval match's similarity score to the same confidence
  * vocabulary the rest of the pipeline uses, instead of introducing a raw
@@ -55,6 +57,16 @@ export async function POST(req: NextRequest) {
     console.error("Knowledge base fetch failed, falling back to built-in defaults:", err);
   }
 
+  // Same degrade-gracefully reasoning as the knowledge-base fetch above --
+  // a citation-matching failure means tags come back without supporting
+  // research attached, not a 500 on the whole classify request.
+  let researchCitations: ResearchCitation[] = [];
+  try {
+    researchCitations = await getResearchCitations(supabase);
+  } catch (err) {
+    console.error("Research citations fetch failed, classifying without supporting citations:", err);
+  }
+
   const stage1 = classifyWordDump(
     {
       rawWordDump,
@@ -62,7 +74,8 @@ export async function POST(req: NextRequest) {
       sourcePlatform: typeof body?.source_platform === "string" ? body.source_platform : null,
       timeSpentMinutes: typeof body?.time_spent_minutes === "number" ? body.time_spent_minutes : null,
     },
-    kbEntries
+    kbEntries,
+    researchCitations
   );
 
   // A knowledge-base hit on any tag is already as specific an answer as v0

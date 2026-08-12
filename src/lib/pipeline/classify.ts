@@ -15,6 +15,8 @@
 import { findAllKnowledgeBaseMatches, KNOWLEDGE_BASE, type KnowledgeBaseEntry } from "@/lib/knowledgeBase";
 import { extractQuotedPhrase, findKeywordMatch } from "@/lib/keywordMatch";
 import { creditFromHours, guessIsLabScience } from "@/lib/pipeline/credit-calculation";
+import { findSupportingCitations } from "@/lib/research/matchCitations";
+import type { ResearchCitation } from "@/lib/types";
 
 export type WordDumpInput = {
   rawWordDump: string;
@@ -67,6 +69,12 @@ export type SubjectTagDraft = {
    * entry's text, or Stage 3's generic fragment fallback). */
   quotedPhrase: string | null;
   source: DraftSource;
+  /** Research Library citations backing this tag up, if any matched --
+   * optional so every existing tag-construction site (manual tags, quick-add,
+   * older stored retrieval snapshots predating this field) doesn't need to
+   * start passing one. Absent, not just empty, when nothing was even
+   * attempted (see findSupportingCitations in matchCitations.ts). */
+  citations?: ResearchCitation[];
 };
 
 export type ConfidentDraft = {
@@ -216,7 +224,11 @@ function dedupeBySubject<T>(matches: T[], getSubjectArea: (match: T) => string):
  * No silent guessing: a low-confidence draft that LOOKS like a real answer
  * is worse than an honest "needs your input."
  */
-export function classifyWordDump(input: WordDumpInput, kbEntries: KnowledgeBaseEntry[] = KNOWLEDGE_BASE): ClassifyResult {
+export function classifyWordDump(
+  input: WordDumpInput,
+  kbEntries: KnowledgeBaseEntry[] = KNOWLEDGE_BASE,
+  citations: ResearchCitation[] = []
+): ClassifyResult {
   const extractedSlots: ExtractedSlots = {
     activity_type: input.activityType ?? null,
     source_platform: input.sourcePlatform ?? null,
@@ -238,6 +250,7 @@ export function classifyWordDump(input: WordDumpInput, kbEntries: KnowledgeBaseE
         confidence: "high",
         quotedPhrase: extractQuotedPhrase(input.rawWordDump, { keyword: matchedKeyword, index: matchIndex }),
         source: "knowledge_base",
+        citations: findSupportingCitations({ subjectArea: entry.subjectArea, matchedKeyword }, citations),
       })),
       extractedSlots,
     };
@@ -257,6 +270,7 @@ export function classifyWordDump(input: WordDumpInput, kbEntries: KnowledgeBaseE
         confidence: "medium",
         quotedPhrase: extractQuotedPhrase(input.rawWordDump, { keyword: matchedKeyword, index: matchIndex }),
         source: "heuristic_cluster",
+        citations: findSupportingCitations({ subjectArea: cluster.subjectArea, matchedKeyword }, citations),
       })),
       extractedSlots,
     };
