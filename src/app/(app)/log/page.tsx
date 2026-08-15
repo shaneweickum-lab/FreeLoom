@@ -8,6 +8,7 @@ import type { ActivityType, EntryStatus, EntryTagCitation, PipelineEntry, Resear
 import type { DraftSource } from "@/lib/pipeline/classify";
 import type { ClassifyResultWithDraft } from "@/lib/pipeline/slmDraft";
 import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
+import { findLikelyDuplicate, type LikelyDuplicate } from "@/lib/pipeline/duplicateDetection";
 import { sumCredits, creditFromHours, guessIsLabScience } from "@/lib/pipeline/credit-calculation";
 import { findCurrentSession, type AcademicSession } from "@/lib/academicSessions";
 import CaptureCard, { type CaptureForm } from "@/components/CaptureCard";
@@ -120,6 +121,11 @@ function LogPageInner() {
   const [form, setForm] = useState<CaptureForm>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Set when submitWordDump finds a same-day entry with suspiciously
+  // similar wording -- held here, unsubmitted, until the parent either
+  // confirms via proceedWithSubmit() or dismisses it and edits the form.
+  const [duplicateWarning, setDuplicateWarning] = useState<LikelyDuplicate | null>(null);
 
   // Set only when Stage 4's confidence check comes back empty-handed — the
   // word dump is held here, unsaved, until the parent resolves it via the
@@ -331,6 +337,38 @@ function LogPageInner() {
   async function submitWordDump(e: React.FormEvent) {
     e.preventDefault();
     if (!currentStudent || !form.rawWordDump.trim() || !form.minutes) return;
+    setSubmitting(true);
+    setError(null);
+
+    // Checked against only today's entries, not the student's whole
+    // history -- see duplicateDetection.ts's header comment for why a
+    // recurring activity on a different day must never trigger this.
+    const supabase = createClient();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const { data: recentEntries } = await supabase
+      .from("entries")
+      .select("id, raw_word_dump, created_at")
+      .eq("student_id", currentStudent.id)
+      .gte("created_at", startOfToday.toISOString());
+
+    const duplicate = findLikelyDuplicate(form.rawWordDump, recentEntries ?? []);
+    if (duplicate) {
+      setDuplicateWarning(duplicate);
+      setSubmitting(false);
+      return;
+    }
+
+    await proceedWithSubmit();
+  }
+
+  /** The actual classify+insert flow -- runs immediately when
+   * submitWordDump finds nothing suspicious, or directly from the
+   * duplicate-warning banner's "Log it anyway" button, which already knows
+   * about the match it's confirming past. */
+  async function proceedWithSubmit() {
+    if (!currentStudent) return;
+    setDuplicateWarning(null);
     setSubmitting(true);
     setError(null);
     try {
@@ -745,7 +783,23 @@ function LogPageInner() {
       )}
 
       {!needsReview ? (
-        <CaptureCard form={form} onChange={setForm} onSubmit={submitWordDump} submitting={submitting} error={error} />
+        <>
+          <CaptureCard form={form} onChange={setForm} onSubmit={submitWordDump} submitting={submitting} error={error} />
+          {duplicateWarning && (
+            <div className="flex flex-col gap-2 rounded-lg border border-gold/40 bg-surface shadow-sm p-4 text-sm">
+              <p className="font-medium">Looks like you may have already logged this today</p>
+              <p className="text-xs text-muted italic">&quot;{duplicateWarning.entry.raw_word_dump}&quot;</p>
+              <div className="flex gap-2">
+                <button type="button" className="btn-primary text-xs" onClick={proceedWithSubmit}>
+                  Log it anyway
+                </button>
+                <button type="button" className="btn-secondary text-xs" onClick={() => setDuplicateWarning(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <form onSubmit={submitManualResolution} className="flex flex-col gap-3 rounded-lg border border-gold/40 bg-surface shadow-sm p-4">
           <p className="text-sm font-medium">Needs your input</p>
