@@ -103,7 +103,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Best-effort, same reasoning as the transcripts bucket above.
-  const { data: brandingFiles } = await admin.storage.from("branding").list(userId).catch(() => ({ data: null }));
+  const { data: brandingFiles } = await admin.storage
+    .from("branding")
+    .list(userId)
+    .catch((err) => {
+      console.error("Failed to list branding files during account deletion:", err);
+      return { data: null };
+    });
   if (brandingFiles && brandingFiles.length > 0) {
     await admin.storage
       .from("branding")
