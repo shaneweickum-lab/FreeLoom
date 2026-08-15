@@ -12,7 +12,7 @@ import PageHeader from "@/components/ui/PageHeader";
 type ClassWithEntries = PipelineClass & { entries: PipelineEntry[] };
 
 export default function PortfolioPage() {
-  const { currentStudent } = useStudents();
+  const { currentStudent, refreshSubjectLedger } = useStudents();
   const [classes, setClasses] = useState<ClassWithEntries[]>([]);
   // Keyed by id -- classes.session_id is a foreign key, not the session
   // itself, so this is a lightweight lookup for the label shown next to
@@ -23,6 +23,12 @@ export default function PortfolioPage() {
   const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [savingLabScience, setSavingLabScience] = useState<string | null>(null);
+  // Draft text for the target-credits input, keyed by class id -- kept
+  // separate from the loaded classes state so an in-progress edit doesn't
+  // get clobbered by a background reload, matching the `edits` pattern
+  // already used for entry-level fields below.
+  const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
+  const [savingTarget, setSavingTarget] = useState<string | null>(null);
   // Which classes have their individual entries expanded -- collapsed by
   // default, so this page shows just the one accumulated total per
   // class/session rather than every entry that fed into it. The
@@ -70,6 +76,30 @@ export default function PortfolioPage() {
     await supabase.from("classes").update({ is_lab_science: nextValue }).eq("id", cls.id);
     setClasses((prev) => prev.map((c) => (c.id === cls.id ? { ...c, is_lab_science: nextValue } : c)));
     setSavingLabScience(null);
+  }
+
+  /** Blank clears the goal back to "no fabricated denominator" (see
+   * LedgerRow in AppRail.tsx); anything else has to parse as a positive
+   * number or the edit is silently dropped rather than saving garbage. */
+  async function saveTargetCredits(cls: ClassWithEntries, raw: string) {
+    const trimmed = raw.trim();
+    const nextValue = trimmed === "" ? null : Number(trimmed);
+    if (nextValue !== null && (!Number.isFinite(nextValue) || nextValue <= 0)) return;
+
+    setSavingTarget(cls.id);
+    const supabase = createClient();
+    await supabase.from("classes").update({ target_credits: nextValue }).eq("id", cls.id);
+    setClasses((prev) => prev.map((c) => (c.id === cls.id ? { ...c, target_credits: nextValue } : c)));
+    setTargetDrafts((prev) => {
+      const next = { ...prev };
+      delete next[cls.id];
+      return next;
+    });
+    setSavingTarget(null);
+    // The app rail's left-hand ledger reads target_credits independently --
+    // it needs its own refresh or a saved goal wouldn't show its progress
+    // bar until some unrelated action happened to reload it.
+    await refreshSubjectLedger();
   }
 
   useEffect(() => {
@@ -165,7 +195,22 @@ export default function PortfolioPage() {
                   />
                   Lab science (180 hrs/credit)
                 </label>
-                <span className="text-xs text-muted">{classCredits.toFixed(2)} credits</span>
+                <label className="flex items-center gap-1.5 text-xs text-muted">
+                  {classCredits.toFixed(2)}
+                  <span aria-hidden="true">/</span>
+                  <input
+                    type="number"
+                    step={0.25}
+                    min={0}
+                    placeholder="goal"
+                    className="input w-16 text-xs px-1.5 py-0.5"
+                    value={targetDrafts[cls.id] ?? cls.target_credits ?? ""}
+                    disabled={savingTarget === cls.id}
+                    onChange={(e) => setTargetDrafts((prev) => ({ ...prev, [cls.id]: e.target.value }))}
+                    onBlur={(e) => saveTargetCredits(cls, e.target.value)}
+                  />
+                  credits
+                </label>
                 <button
                   type="button"
                   onClick={() => toggleExpanded(cls.id)}
