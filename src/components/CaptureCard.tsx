@@ -2,6 +2,7 @@
 
 import { ACTIVITY_TYPES, type ActivityType } from "@/lib/types";
 import VoiceInputButton from "@/components/VoiceInputButton";
+import { cardClassName } from "@/components/ui/Card";
 
 export type CaptureForm = { rawWordDump: string; activityType: ActivityType; sourcePlatform: string; minutes: string };
 
@@ -24,7 +25,7 @@ export default function CaptureCard({
   error: string | null;
 }) {
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4">
+    <form onSubmit={onSubmit} className={`flex flex-col gap-3 ${cardClassName()}`}>
       <div className="relative">
         <textarea
           className="input min-h-24 pr-10"

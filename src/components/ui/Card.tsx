@@ -18,6 +18,28 @@ import type { HTMLAttributes } from "react";
  * plan/danger/attention box) -- those carry meaning this neutral
  * container isn't meant to express.
  */
+export type CardVariantProps = {
+  variant?: "surface" | "flat";
+  active?: boolean;
+  /** Only meaningful on the "surface" variant -- "flat" always uses p-3. */
+  padding?: "md" | "lg";
+};
+
+/**
+ * The same class-building logic Card itself renders with, exported
+ * separately for the handful of surface-card-styled elements that can't be
+ * a `<div>` -- CaptureCard/StudentForm/OnboardingWizard are `<form>`s, so
+ * they use this directly (`className={cardClassName({...})}`) rather than
+ * `<Card>`, without hand-maintaining a second copy of the class string.
+ */
+export function cardClassName({ variant = "surface", active = false, padding }: CardVariantProps = {}): string {
+  return variant === "flat"
+    ? "rounded-lg border border-navy-line p-3 transition-colors"
+    : `rounded-lg border ${padding === "lg" ? "p-6" : "p-4"} shadow-sm ${
+        active ? "border-gold bg-surface" : "border-border bg-surface"
+      } transition-colors`;
+}
+
 export default function Card({
   variant = "surface",
   active = false,
@@ -25,21 +47,9 @@ export default function Card({
   className = "",
   children,
   ...rest
-}: HTMLAttributes<HTMLDivElement> & {
-  variant?: "surface" | "flat";
-  active?: boolean;
-  /** Only meaningful on the "surface" variant -- "flat" always uses p-3. */
-  padding?: "md" | "lg";
-}) {
-  const variantClass =
-    variant === "flat"
-      ? "rounded-lg border border-navy-line p-3"
-      : `rounded-lg border ${padding === "lg" ? "p-6" : "p-4"} shadow-sm ${
-          active ? "border-gold bg-surface" : "border-border bg-surface"
-        }`;
-
+}: HTMLAttributes<HTMLDivElement> & CardVariantProps) {
   return (
-    <div className={`${variantClass} transition-colors ${className}`} {...rest}>
+    <div className={`${cardClassName({ variant, active, padding })} ${className}`} {...rest}>
       {children}
     </div>
   );
