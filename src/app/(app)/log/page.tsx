@@ -13,6 +13,7 @@ import { findCurrentSession, type AcademicSession } from "@/lib/academicSessions
 import CaptureCard, { type CaptureForm } from "@/components/CaptureCard";
 import RecordCard, { GroupedRecordCard, type EntryWithTags } from "@/components/RecordCard";
 import VoiceInputButton from "@/components/VoiceInputButton";
+import PageHeader from "@/components/ui/PageHeader";
 
 type TagInput = {
   subjectArea: string;
@@ -648,14 +649,10 @@ function LogPageInner() {
 
   return (
     <div className="flex flex-col gap-10">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Log an Activity</h1>
-        <p className="text-muted text-sm">
-          Describe it in plain language. FreeLoom matches it against a curated knowledge base and a
-          set of keyword rules — no model call, just a lookup — and drafts a class entry with its
-          reasoning shown alongside it. If nothing matches, you write it yourself instead.
-        </p>
-      </div>
+      <PageHeader
+        title="Log an Activity"
+        subtitle="Describe it in plain language. FreeLoom matches it against a curated knowledge base and a set of keyword rules — no model call, just a lookup — and drafts a class entry with its reasoning shown alongside it. If nothing matches, you write it yourself instead."
+      />
 
       {quickAdd && (
         <form onSubmit={submitQuickAdd} className="flex flex-col gap-3 rounded-lg border border-gold/40 bg-surface shadow-sm p-4">

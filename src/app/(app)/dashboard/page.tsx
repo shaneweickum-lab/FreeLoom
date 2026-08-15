@@ -10,6 +10,8 @@ import StudentForm, {
   studentToFormValues,
   type StudentFormValues,
 } from "@/components/StudentForm";
+import PageHeader from "@/components/ui/PageHeader";
+import Card from "@/components/ui/Card";
 
 export default function DashboardPage() {
   return (
@@ -96,24 +98,16 @@ function DashboardPageInner() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Your students</h1>
-        <p className="text-muted text-sm">
-          One FreeLoom account for your whole family — switch between student profiles any time from the nav bar.
-          Every student gets their own discovery notes, learning log, transcript, and portfolio.
-        </p>
-      </div>
+      <PageHeader
+        title="Your students"
+        subtitle="One FreeLoom account for your whole family — switch between student profiles any time from the nav bar. Every student gets their own discovery notes, learning log, transcript, and portfolio."
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         {students.map((s) => {
           const stat = stats[s.id];
           return (
-            <div
-              key={s.id}
-              className={`rounded-lg border p-4 shadow-sm transition-colors ${
-                currentStudent?.id === s.id ? "border-gold bg-surface" : "border-border bg-surface"
-              }`}
-            >
+            <Card key={s.id} active={currentStudent?.id === s.id}>
               <button onClick={() => selectStudent(s.id)} className="text-left w-full">
                 <div className="font-medium">{s.name}</div>
                 <div className="text-sm text-muted">{s.grade_level || "Grade level not set"}</div>
@@ -134,7 +128,7 @@ function DashboardPageInner() {
                   Remove
                 </button>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>

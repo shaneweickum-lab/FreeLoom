@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
 import type { PipelineClass, PipelineEntry, SchoolProfile, Transcript } from "@/lib/types";
+import PageHeader from "@/components/ui/PageHeader";
 
 type EntryWithClass = PipelineEntry & { classes: Pick<PipelineClass, "subject_area"> | null };
 
@@ -213,15 +214,15 @@ export default function TranscriptPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold mb-1">Transcript</h1>
-          <p className="text-muted text-sm">Accepted entries for {currentStudent.name}, with cumulative GPA and credit hours.</p>
-        </div>
-        <button onClick={generateTranscript} className="btn-primary" disabled={generating || courses.length === 0}>
-          {generating ? "Generating…" : "Generate transcript"}
-        </button>
-      </div>
+      <PageHeader
+        title="Transcript"
+        subtitle={`Accepted entries for ${currentStudent.name}, with cumulative GPA and credit hours.`}
+        actions={
+          <button onClick={generateTranscript} className="btn-primary" disabled={generating || courses.length === 0}>
+            {generating ? "Generating…" : "Generate transcript"}
+          </button>
+        }
+      />
 
       <div className="rounded-lg border border-border bg-surface shadow-sm p-4">
         <button
