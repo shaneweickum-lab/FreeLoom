@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import { classifyWordDump, type ClassifyResult, type TagConfidence } from "@/lib/pipeline/classify";
 import { findRetrievalMatch } from "@/lib/pipeline/retrieve";
 import { composeFromFragments } from "@/lib/pipeline/compose";
@@ -42,7 +43,13 @@ export async function POST(req: NextRequest) {
   // alone to scope the lookup to the caller's own students, which made a
   // misconfigured students RLS policy the only thing standing between one
   // account and running classification against another account's student.
-  const { data: student } = await supabase.from("students").select("id").eq("id", studentId).eq("user_id", user.id).maybeSingle();
+  // Resolved to the household's owner id -- an accepted guardian's own
+  // auth id was never the owning students.user_id (see
+  // resolveHouseholdOwnerId()'s own doc comment).
+  const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+  const { data: student } = ownerId
+    ? await supabase.from("students").select("id").eq("id", studentId).eq("user_id", ownerId).maybeSingle()
+    : { data: null };
   if (!student) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
   }

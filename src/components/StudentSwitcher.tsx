@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useStudents } from "@/lib/studentContext";
 import { createClient } from "@/lib/supabase/client";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import { getStudentCap } from "@/lib/billing/tier";
 import type { Student } from "@/lib/types";
 
@@ -77,12 +78,15 @@ export default function StudentSwitcher() {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
+      const ownerId = await resolveHouseholdOwnerId(supabase, data.user.id);
       const [{ data: profile }, { data: adminRow }] = await Promise.all([
-        supabase
-          .from("school_profiles")
-          .select("subscription_tier, subscription_status, grandfathered_until, current_period_end")
-          .eq("user_id", data.user.id)
-          .maybeSingle(),
+        ownerId
+          ? supabase
+              .from("school_profiles")
+              .select("subscription_tier, subscription_status, grandfathered_until, current_period_end")
+              .eq("user_id", ownerId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
         supabase.from("admin_users").select("user_id").eq("user_id", data.user.id).maybeSingle(),
       ]);
       setCap(

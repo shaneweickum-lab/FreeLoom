@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import { PortfolioDocument, type PortfolioPdfClass } from "@/lib/PortfolioDocument";
 
 /** Builds a portfolio PDF from a parent-chosen subset of a student's
@@ -29,11 +30,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "studentId and at least one entryId are required." }, { status: 400 });
   }
 
+  // Resolved to the household's owner id -- an accepted guardian's own
+  // auth id was never the owning students.user_id these rows are keyed by
+  // (see resolveHouseholdOwnerId()'s own doc comment).
+  const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+  if (!ownerId) {
+    return NextResponse.json({ error: "Student not found." }, { status: 404 });
+  }
+
   const { data: student } = await supabase
     .from("students")
     .select("id, name")
     .eq("id", studentId)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .maybeSingle();
   if (!student) {
     return NextResponse.json({ error: "Student not found." }, { status: 404 });
@@ -42,7 +51,7 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase
     .from("school_profiles")
     .select("school_name, logo_url, accent_color")
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .maybeSingle();
 
   // Only accepted entries belonging to this specific student can ever end

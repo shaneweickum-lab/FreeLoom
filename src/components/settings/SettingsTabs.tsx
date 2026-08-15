@@ -7,18 +7,27 @@ import AppearanceTab from "@/components/settings/AppearanceTab";
 import NotificationsTab from "@/components/settings/NotificationsTab";
 import AcademicTab from "@/components/settings/AcademicTab";
 import BillingTab from "@/components/settings/BillingTab";
+import HouseholdTab from "@/components/settings/HouseholdTab";
 import AboutTab from "@/components/settings/AboutTab";
 import type { SchoolProfile } from "@/lib/types";
 import type { PriceTable } from "@/lib/billing/prices";
 
 export default function SettingsTabs({
   userId,
+  isOwner,
   initialProfile,
   isAdmin,
   prices,
   authEmail,
 }: {
+  /** The household's owner id -- every tab's writes to school_profiles are
+   * keyed to this, not necessarily the signed-in user's own id (see
+   * household.ts). */
   userId: string;
+  /** Whether the signed-in user is the literal owner vs. an accepted
+   * guardian -- gates billing/account-deletion, which stay owner-only even
+   * though everything else here is shared. */
+  isOwner: boolean;
   initialProfile: SchoolProfile | null;
   isAdmin: boolean;
   prices: PriceTable;
@@ -32,7 +41,9 @@ export default function SettingsTabs({
         {
           id: "account",
           label: "Account",
-          content: <AccountTab userId={userId} initialProfile={initialProfile} isAdmin={isAdmin} authEmail={authEmail} />,
+          content: (
+            <AccountTab userId={userId} isOwner={isOwner} initialProfile={initialProfile} isAdmin={isAdmin} authEmail={authEmail} />
+          ),
         },
         { id: "appearance", label: "Appearance", content: <AppearanceTab /> },
         {
@@ -46,10 +57,19 @@ export default function SettingsTabs({
           content: <AcademicTab userId={userId} initialProfile={initialProfile} />,
         },
         {
-          id: "billing",
-          label: "Billing",
-          content: <BillingTab userId={userId} initialProfile={initialProfile} isAdmin={isAdmin} prices={prices} />,
+          id: "household",
+          label: "Household",
+          content: <HouseholdTab userId={userId} isOwner={isOwner} />,
         },
+        ...(isOwner
+          ? [
+              {
+                id: "billing",
+                label: "Billing",
+                content: <BillingTab userId={userId} initialProfile={initialProfile} isAdmin={isAdmin} prices={prices} />,
+              },
+            ]
+          : []),
         { id: "about", label: "About", content: <AboutTab /> },
       ]}
     />

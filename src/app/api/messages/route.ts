@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/adminAuth";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import { buildMessageNotificationEmail } from "@/lib/email/messageNotification";
 import { APP_URL } from "@/lib/appUrl";
 import { isRateLimited } from "@/lib/rateLimit";
@@ -55,7 +56,11 @@ export async function POST(req: NextRequest) {
   if (threadError || !thread) {
     return NextResponse.json({ error: "Thread not found." }, { status: 404 });
   }
-  if (!isAdmin && thread.parent_user_id !== user.id) {
+  // Resolved to the household's owner id -- an accepted guardian's own
+  // auth id was never this thread's real parent_user_id (see
+  // resolveHouseholdOwnerId()'s own doc comment).
+  const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+  if (!isAdmin && thread.parent_user_id !== ownerId) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
 
@@ -166,7 +171,8 @@ export async function PATCH(req: NextRequest) {
   if (threadError || !thread) {
     return NextResponse.json({ error: "Thread not found." }, { status: 404 });
   }
-  if (!isAdmin && thread.parent_user_id !== user.id) {
+  const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+  if (!isAdmin && thread.parent_user_id !== ownerId) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
 

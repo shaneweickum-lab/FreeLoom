@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
 import type { PipelineClass, PipelineEntry, SchoolProfile, Transcript } from "@/lib/types";
 import PageHeader from "@/components/ui/PageHeader";
@@ -69,7 +70,10 @@ export default function TranscriptPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      const { data: school } = await supabase.from("school_profiles").select("*").eq("user_id", user.id).maybeSingle();
+      const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+      const { data: school } = ownerId
+        ? await supabase.from("school_profiles").select("*").eq("user_id", ownerId).maybeSingle()
+        : { data: null };
       setSchoolProfile(school);
       setSchoolForm({
         schoolName: school?.school_name || "",
@@ -137,12 +141,18 @@ export default function TranscriptPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
+    // Resolved to the household's owner id -- both the DB row and the
+    // branding storage folder are keyed to this, so a guardian's upload
+    // lands on the shared school's branding instead of a phantom folder
+    // under their own id (see household.ts's own doc comment).
+    const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+    if (!ownerId) return;
     setSavingSchool(true);
 
     let logoUrl = schoolProfile?.logo_url ?? null;
     if (logoFile && ALLOWED_LOGO_TYPES.includes(logoFile.type) && logoFile.size <= MAX_LOGO_BYTES) {
       const ext = logoFile.name.split(".").pop() || "png";
-      const path = `${user.id}/logo.${ext}`;
+      const path = `${ownerId}/logo.${ext}`;
       const { error: uploadError } = await supabase.storage.from("branding").upload(path, logoFile, { upsert: true });
       if (!uploadError) {
         const { data: publicUrlData } = supabase.storage.from("branding").getPublicUrl(path);
@@ -155,7 +165,7 @@ export default function TranscriptPage() {
     const { data } = await supabase
       .from("school_profiles")
       .upsert({
-        user_id: user.id,
+        user_id: ownerId,
         school_name: schoolForm.schoolName || null,
         parent_name: schoolForm.parentName || null,
         address: schoolForm.address || null,

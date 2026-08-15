@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import { getEffectiveTier } from "@/lib/billing/tier";
 
 const ACTION_TO_STATUS = {
@@ -31,12 +32,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // IS the target when this action is "approve"; deny/revoke stay allowed
   // regardless of tier (a parent can always say no / close it out).
   if (action === "approve") {
+    // Resolved to the household's owner id -- an accepted guardian has no
+    // school_profiles row of their own, so checking tier by their own
+    // literal id would always read "free" regardless of the household's
+    // real plan (see resolveHouseholdOwnerId()'s own doc comment).
+    const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
     const [{ data: callerProfile }, { data: callerAdminRow }] = await Promise.all([
-      supabase
-        .from("school_profiles")
-        .select("subscription_tier, subscription_status, grandfathered_until, current_period_end")
-        .eq("user_id", user.id)
-        .maybeSingle(),
+      ownerId
+        ? supabase
+            .from("school_profiles")
+            .select("subscription_tier, subscription_status, grandfathered_until, current_period_end")
+            .eq("user_id", ownerId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       supabase.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle(),
     ]);
     const callerTier = getEffectiveTier({

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import MessageThread from "@/components/MessageThread";
 import type { SupportThread } from "@/lib/types";
 
@@ -29,7 +30,10 @@ export default function MessageThreads({ parentUserId }: { parentUserId?: string
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      resolvedOwnerId = user?.id ?? null;
+      // Resolved to the household's owner id -- a guardian's own auth id
+      // was never the shared thread's real parent_user_id (see
+      // resolveHouseholdOwnerId()'s own doc comment).
+      resolvedOwnerId = user ? await resolveHouseholdOwnerId(supabase, user.id) : null;
     }
     setOwnerId(resolvedOwnerId);
     if (!resolvedOwnerId) {

@@ -37,6 +37,18 @@ vi.mock("@/lib/rateLimit", () => ({
   isRateLimited: () => isRateLimitedMock(),
 }));
 
+// Defaults to "this caller owns their own household" (identical to this
+// route's pre-guardian-access behavior) -- overridden per-test to prove a
+// guardian (whose own id differs from the thread's parent_user_id) is
+// still authorized once resolveHouseholdOwnerId resolves them to the
+// actual owner.
+const resolveHouseholdOwnerIdMock = vi.fn<(supabase: unknown, userId: string) => Promise<string | null>>(
+  async (_supabase, userId) => userId
+);
+vi.mock("@/lib/household", () => ({
+  resolveHouseholdOwnerId: (supabase: unknown, userId: string) => resolveHouseholdOwnerIdMock(supabase, userId),
+}));
+
 import { PATCH, POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -55,6 +67,7 @@ describe("POST /api/messages", () => {
     fromQueue = [];
     adminFromQueue = [];
     isRateLimitedMock.mockReturnValue(false);
+    resolveHouseholdOwnerIdMock.mockImplementation(async (_supabase, userId) => userId);
   });
 
   it("rejects when signed out", async () => {
@@ -94,6 +107,15 @@ describe("POST /api/messages", () => {
     expect(res.status).toBe(403);
   });
 
+  it("lets an accepted household guardian send into the owner's thread", async () => {
+    getUserResult = { data: { user: { id: "guardian-1", email: "guardian@example.com" } } };
+    resolveHouseholdOwnerIdMock.mockImplementation(async () => PARENT.id);
+    fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: null }, { data: { parent_name: "Jane Doe" } }];
+    adminFromQueue = [{ data: [{ user_id: "admin-1" }], error: null }, { error: null }];
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "Something's broken" }));
+    expect(res.status).toBe(200);
+  });
+
   it("lets a parent send into their own thread and fans out notifications to admins via service role", async () => {
     fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: null }, { data: { parent_name: "Jane Doe" } }];
     adminFromQueue = [
@@ -129,6 +151,7 @@ describe("PATCH /api/messages", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: PARENT } };
     fromQueue = [];
+    resolveHouseholdOwnerIdMock.mockImplementation(async (_supabase, userId) => userId);
   });
 
   it("rejects when signed out", async () => {
@@ -153,6 +176,14 @@ describe("PATCH /api/messages", () => {
     fromQueue = [{ data: null }, { data: { id: THREAD_ID, parent_user_id: "someone-else" } }];
     const res = await PATCH(makeRequest({ threadId: THREAD_ID }));
     expect(res.status).toBe(403);
+  });
+
+  it("lets an accepted household guardian mark the owner's thread read", async () => {
+    getUserResult = { data: { user: { id: "guardian-1", email: "guardian@example.com" } } };
+    resolveHouseholdOwnerIdMock.mockImplementation(async () => PARENT.id);
+    fromQueue = [{ data: null }, { data: PARENT_THREAD }, { error: null }];
+    const res = await PATCH(makeRequest({ threadId: THREAD_ID }));
+    expect(res.status).toBe(200);
   });
 
   it("marks the admin team's messages read for a parent", async () => {
