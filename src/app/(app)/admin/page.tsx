@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import AdminUsersPanel from "@/components/AdminUsersPanel";
 import AnnouncementComposer from "@/components/AnnouncementComposer";
 import FamiliesList, { type FamilyRow } from "@/components/FamiliesList";
+import CoverageGapsPanel, { type CoverageGapRow } from "@/components/CoverageGapsPanel";
 import Tabs from "@/components/Tabs";
 import UsageDashboard from "@/components/UsageDashboard";
 import type { SchoolingType } from "@/lib/types";
@@ -39,19 +40,24 @@ export default async function AdminPage() {
     return <p className="text-sm text-muted">Not authorized.</p>;
   }
 
-  const [{ data: signups, error: signupsError }, { data: admins }, { data: profiles }, usageResult] = await Promise.all([
-    supabase.from("waitlist_signups").select("id, email, created_at").order("created_at", { ascending: false }),
-    supabase.from("admin_users").select("user_id, email, approved_by, created_at").order("created_at", { ascending: true }),
-    supabase
-      .from("school_profiles")
-      .select("user_id, parent_name, schooling_type, subscription_tier, subscription_status, grandfathered_until, current_period_end"),
-    supabase.rpc("admin_db_usage"),
-  ]);
+  const [{ data: signups, error: signupsError }, { data: admins }, { data: profiles }, usageResult, coverageGapsResult] =
+    await Promise.all([
+      supabase.from("waitlist_signups").select("id, email, created_at").order("created_at", { ascending: false }),
+      supabase.from("admin_users").select("user_id, email, approved_by, created_at").order("created_at", { ascending: true }),
+      supabase
+        .from("school_profiles")
+        .select("user_id, parent_name, schooling_type, subscription_tier, subscription_status, grandfathered_until, current_period_end"),
+      supabase.rpc("admin_db_usage"),
+      supabase.rpc("admin_coverage_gaps"),
+    ]);
 
   const usage = usageResult.data as
     | { db_size_bytes: number; storage_size_bytes: number; computed_at: string }
     | null;
   const usageError = usageResult.error?.message ?? null;
+
+  const coverageGaps = (coverageGapsResult.data as CoverageGapRow[] | null) ?? [];
+  const coverageGapsError = coverageGapsResult.error?.message ?? null;
 
   // Enumerating every account is the one thing only the service-role Auth
   // admin API can do -- everything else here (school_profiles) goes
@@ -167,6 +173,12 @@ export default async function AdminPage() {
                 <AnnouncementComposer />
               </div>
             ),
+          },
+          {
+            id: "coverage-gaps",
+            label: "Coverage gaps",
+            badge: coverageGaps.length,
+            content: <CoverageGapsPanel rows={coverageGaps} error={coverageGapsError ?? undefined} />,
           },
           {
             id: "usage",

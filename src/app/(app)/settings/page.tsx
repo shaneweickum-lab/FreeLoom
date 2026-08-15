@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchPriceTable } from "@/lib/billing/prices";
+import { isHouseholdOwner, resolveHouseholdOwnerId } from "@/lib/household";
 import SettingsTabs from "@/components/settings/SettingsTabs";
 
 export default async function SettingsPage() {
@@ -13,8 +14,17 @@ export default async function SettingsPage() {
     return <p className="text-sm text-muted">Not signed in.</p>;
   }
 
+  // Resolved to the household's owner id, not necessarily user.id -- every
+  // settings tab upserts school_profiles keyed to this value, so an
+  // accepted guardian's saves land on the shared row instead of forking a
+  // phantom one under their own id (see household.ts's own doc comment).
+  const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+  const isOwner = isHouseholdOwner(user.id, ownerId);
+
   const [{ data: profile }, { data: adminRow }, prices] = await Promise.all([
-    supabase.from("school_profiles").select("*").eq("user_id", user.id).maybeSingle(),
+    ownerId
+      ? supabase.from("school_profiles").select("*").eq("user_id", ownerId).maybeSingle()
+      : Promise.resolve({ data: null }),
     supabase.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle(),
     fetchPriceTable(),
   ]);
@@ -27,7 +37,8 @@ export default async function SettingsPage() {
       </div>
       <Suspense fallback={null}>
         <SettingsTabs
-          userId={user.id}
+          userId={ownerId ?? user.id}
+          isOwner={isOwner}
           initialProfile={profile ?? null}
           isAdmin={!!adminRow}
           prices={prices}

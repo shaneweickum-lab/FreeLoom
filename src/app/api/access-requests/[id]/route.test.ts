@@ -23,6 +23,18 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
+// Defaults to "this caller owns their own household" (identical to this
+// route's pre-guardian-access behavior) -- mocked directly rather than
+// via fromQueue, since resolveHouseholdOwnerId's own queries would
+// otherwise consume items out of order against every existing test's
+// carefully-sequenced queue.
+const resolveHouseholdOwnerIdMock = vi.fn<(supabase: unknown, userId: string) => Promise<string | null>>(
+  async (_supabase, userId) => userId
+);
+vi.mock("@/lib/household", () => ({
+  resolveHouseholdOwnerId: (supabase: unknown, userId: string) => resolveHouseholdOwnerIdMock(supabase, userId),
+}));
+
 import { PATCH } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -37,6 +49,7 @@ describe("PATCH /api/access-requests/[id]", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: PARENT } };
     fromQueue = [];
+    resolveHouseholdOwnerIdMock.mockImplementation(async (_supabase, userId) => userId);
   });
 
   function callWithId(body: unknown, id = "req-1") {
@@ -79,6 +92,19 @@ describe("PATCH /api/access-requests/[id]", () => {
     ];
     const res = await callWithId({ action: "approve" });
     expect(res.status).toBe(400);
+  });
+
+  it("approves on behalf of a household guardian, checking the owner's tier rather than the guardian's own (nonexistent) profile", async () => {
+    getUserResult = { data: { user: { id: "guardian-1", email: "guardian@example.com" } } };
+    resolveHouseholdOwnerIdMock.mockResolvedValue(PARENT.id);
+    fromQueue = [
+      NOT_FREE,
+      { data: null }, // guardian isn't an admin
+      { data: { id: "req-1", requested_by: ADMIN.id, target_user_id: PARENT.id }, error: null },
+      { error: null },
+    ];
+    const res = await callWithId({ action: "approve" });
+    expect(res.status).toBe(200);
   });
 
   it("approves the request and marks its notification read", async () => {

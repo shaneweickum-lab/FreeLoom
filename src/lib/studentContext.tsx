@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { createClient } from "@/lib/supabase/client";
 import type { Student } from "@/lib/types";
 import { computeSubjectLedger } from "@/lib/pipeline/ledger";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 
 const CURRENT_STUDENT_KEY = "freeloom-current-student-id";
 
@@ -60,10 +61,21 @@ export function StudentProvider({ children }: { children: ReactNode }) {
     // this explicit filter is a second, defense-in-depth backstop rather
     // than relying on RLS alone for the one query the rest of the app is
     // built on top of.
+    //
+    // Resolved to the household's owner id, not necessarily user.id itself
+    // -- an accepted second guardian's own auth id was never the owning
+    // school_profiles.user_id these rows are actually keyed by (see
+    // resolveHouseholdOwnerId()'s own doc comment).
+    const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+    if (!ownerId) {
+      setStudents([]);
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase
       .from("students")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", ownerId)
       .order("created_at", { ascending: true });
     if (!error && data) {
       setStudents(data);
@@ -158,9 +170,16 @@ export function StudentProvider({ children }: { children: ReactNode }) {
     } = await supabase.auth.getUser();
     if (!user) return null;
     setCreateError(null);
+    // A new student a guardian creates belongs to the same shared
+    // household, not a fresh one under the guardian's own id.
+    const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+    if (!ownerId) {
+      setCreateError("Couldn't create that profile: no household set up yet.");
+      return null;
+    }
     const { data, error } = await supabase
       .from("students")
-      .insert({ ...input, user_id: user.id })
+      .insert({ ...input, user_id: ownerId })
       .select()
       .single();
     if (error || !data) {
@@ -178,11 +197,13 @@ export function StudentProvider({ children }: { children: ReactNode }) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return null;
+    const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+    if (!ownerId) return null;
     const { data, error } = await supabase
       .from("students")
       .update(patch)
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("user_id", ownerId)
       .select()
       .single();
     if (error || !data) return null;
@@ -196,7 +217,9 @@ export function StudentProvider({ children }: { children: ReactNode }) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return false;
-    const { error } = await supabase.from("students").delete().eq("id", id).eq("user_id", user.id);
+    const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+    if (!ownerId) return false;
+    const { error } = await supabase.from("students").delete().eq("id", id).eq("user_id", ownerId);
     if (error) return false;
     setStudents((prev) => {
       const next = prev.filter((s) => s.id !== id);

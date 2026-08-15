@@ -57,6 +57,18 @@ vi.mock("@/lib/pipeline/slmDraft", () => ({
   callEntryDraftingAdapter: (input: unknown) => callEntryDraftingAdapterMock(input),
 }));
 
+// Defaults to "this caller owns their own household" (identical to this
+// route's pre-guardian-access behavior) -- the mocked supabase client
+// above has a fixed single-shape chain that doesn't distinguish tables, so
+// resolveHouseholdOwnerId's own (differently-shaped) queries are mocked
+// away entirely rather than trying to match its chain shape too.
+const resolveHouseholdOwnerIdMock = vi.fn<(supabase: unknown, userId: string) => Promise<string | null>>(
+  async (_supabase, userId) => userId
+);
+vi.mock("@/lib/household", () => ({
+  resolveHouseholdOwnerId: (supabase: unknown, userId: string) => resolveHouseholdOwnerIdMock(supabase, userId),
+}));
+
 import { POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -76,6 +88,7 @@ describe("POST /api/pipeline/classify", () => {
     findRetrievalMatchMock.mockResolvedValue(null);
     composeFromFragmentsMock.mockResolvedValue(null);
     callEntryDraftingAdapterMock.mockResolvedValue(null);
+    resolveHouseholdOwnerIdMock.mockImplementation(async (_supabase, userId) => userId);
   });
 
   it("400s when raw_word_dump is missing", async () => {
@@ -98,6 +111,18 @@ describe("POST /api/pipeline/classify", () => {
     studentRow = { data: null };
     const res = await POST(makeRequest({ raw_word_dump: "Played chess", student_id: STUDENT_ID }));
     expect(res.status).toBe(404);
+  });
+
+  it("404s when the signed-in user has no household at all (resolveHouseholdOwnerId returns null)", async () => {
+    resolveHouseholdOwnerIdMock.mockResolvedValue(null);
+    const res = await POST(makeRequest({ raw_word_dump: "Played chess", student_id: STUDENT_ID }));
+    expect(res.status).toBe(404);
+  });
+
+  it("still succeeds for an accepted household guardian whose own id differs from the owner's", async () => {
+    resolveHouseholdOwnerIdMock.mockResolvedValue("owner-1");
+    const res = await POST(makeRequest({ raw_word_dump: "Played chess with dad", student_id: STUDENT_ID }));
+    expect(res.status).toBe(200);
   });
 
   it("returns a confident knowledge-base match without touching Stage 2/3/4", async () => {

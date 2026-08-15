@@ -6,13 +6,14 @@ import { useStudents } from "@/lib/studentContext";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
 import type { AcademicSession } from "@/lib/academicSessions";
 import PortfolioPdfModal from "@/components/PortfolioPdfModal";
+import ImportEntriesModal from "@/components/ImportEntriesModal";
 import type { PipelineClass, PipelineEntry } from "@/lib/types";
 import PageHeader from "@/components/ui/PageHeader";
 
 type ClassWithEntries = PipelineClass & { entries: PipelineEntry[] };
 
 export default function PortfolioPage() {
-  const { currentStudent } = useStudents();
+  const { currentStudent, refreshSubjectLedger } = useStudents();
   const [classes, setClasses] = useState<ClassWithEntries[]>([]);
   // Keyed by id -- classes.session_id is a foreign key, not the session
   // itself, so this is a lightweight lookup for the label shown next to
@@ -22,7 +23,14 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [savingLabScience, setSavingLabScience] = useState<string | null>(null);
+  // Draft text for the target-credits input, keyed by class id -- kept
+  // separate from the loaded classes state so an in-progress edit doesn't
+  // get clobbered by a background reload, matching the `edits` pattern
+  // already used for entry-level fields below.
+  const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
+  const [savingTarget, setSavingTarget] = useState<string | null>(null);
   // Which classes have their individual entries expanded -- collapsed by
   // default, so this page shows just the one accumulated total per
   // class/session rather than every entry that fed into it. The
@@ -70,6 +78,30 @@ export default function PortfolioPage() {
     await supabase.from("classes").update({ is_lab_science: nextValue }).eq("id", cls.id);
     setClasses((prev) => prev.map((c) => (c.id === cls.id ? { ...c, is_lab_science: nextValue } : c)));
     setSavingLabScience(null);
+  }
+
+  /** Blank clears the goal back to "no fabricated denominator" (see
+   * LedgerRow in AppRail.tsx); anything else has to parse as a positive
+   * number or the edit is silently dropped rather than saving garbage. */
+  async function saveTargetCredits(cls: ClassWithEntries, raw: string) {
+    const trimmed = raw.trim();
+    const nextValue = trimmed === "" ? null : Number(trimmed);
+    if (nextValue !== null && (!Number.isFinite(nextValue) || nextValue <= 0)) return;
+
+    setSavingTarget(cls.id);
+    const supabase = createClient();
+    await supabase.from("classes").update({ target_credits: nextValue }).eq("id", cls.id);
+    setClasses((prev) => prev.map((c) => (c.id === cls.id ? { ...c, target_credits: nextValue } : c)));
+    setTargetDrafts((prev) => {
+      const next = { ...prev };
+      delete next[cls.id];
+      return next;
+    });
+    setSavingTarget(null);
+    // The app rail's left-hand ledger reads target_credits independently --
+    // it needs its own refresh or a saved goal wouldn't show its progress
+    // bar until some unrelated action happened to reload it.
+    await refreshSubjectLedger();
   }
 
   useEffect(() => {
@@ -120,13 +152,30 @@ export default function PortfolioPage() {
         title="Portfolio"
         subtitle={`Every class ${currentStudent.name} has built up, and the reasoning behind each entry — edit anything that needs a second look. New activities are logged from the Learning Log page.`}
         actions={
-          classes.length > 0 && (
-            <button onClick={() => setPdfModalOpen(true)} className="btn-secondary text-sm shrink-0">
-              Download PDF
+          <div className="flex gap-2 shrink-0">
+            <button onClick={() => setImportModalOpen(true)} className="btn-secondary text-sm shrink-0">
+              Import records
             </button>
-          )
+            {classes.length > 0 && (
+              <button onClick={() => setPdfModalOpen(true)} className="btn-secondary text-sm shrink-0">
+                Download PDF
+              </button>
+            )}
+          </div>
         }
       />
+
+      {importModalOpen && (
+        <ImportEntriesModal
+          studentId={currentStudent.id}
+          userId={currentStudent.user_id}
+          onClose={() => setImportModalOpen(false)}
+          onImported={async () => {
+            await load();
+            await refreshSubjectLedger();
+          }}
+        />
+      )}
 
       {pdfModalOpen && (
         <PortfolioPdfModal
@@ -165,7 +214,22 @@ export default function PortfolioPage() {
                   />
                   Lab science (180 hrs/credit)
                 </label>
-                <span className="text-xs text-muted">{classCredits.toFixed(2)} credits</span>
+                <label className="flex items-center gap-1.5 text-xs text-muted">
+                  {classCredits.toFixed(2)}
+                  <span aria-hidden="true">/</span>
+                  <input
+                    type="number"
+                    step={0.25}
+                    min={0}
+                    placeholder="goal"
+                    className="input w-16 text-xs px-1.5 py-0.5"
+                    value={targetDrafts[cls.id] ?? cls.target_credits ?? ""}
+                    disabled={savingTarget === cls.id}
+                    onChange={(e) => setTargetDrafts((prev) => ({ ...prev, [cls.id]: e.target.value }))}
+                    onBlur={(e) => saveTargetCredits(cls, e.target.value)}
+                  />
+                  credits
+                </label>
                 <button
                   type="button"
                   onClick={() => toggleExpanded(cls.id)}

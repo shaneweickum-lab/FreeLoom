@@ -66,11 +66,16 @@ function ReadOnlyField({ label, value }: { label: string; value: string | null }
 
 export default function AccountTab({
   userId,
+  isOwner,
   initialProfile,
   isAdmin,
   authEmail,
 }: {
   userId: string;
+  /** Whether the signed-in user is the household's literal owner --
+   * account deletion stays owner-only even for an otherwise full-access
+   * accepted guardian (see household.ts's own doc comment). */
+  isOwner: boolean;
   initialProfile: SchoolProfile | null;
   isAdmin: boolean;
   /** The real sign-in email (auth.users), distinct from form.email above
@@ -525,6 +530,7 @@ export default function AccountTab({
       </a>
     </Card>
 
+    {isOwner && (
     <div className="rounded-lg border border-red-900/40 bg-red-950/10 p-3 flex flex-col gap-3">
       <div>
         <h3 className="font-medium text-sm text-red-400">Delete account</h3>
@@ -578,6 +584,7 @@ export default function AccountTab({
         </div>
       )}
     </div>
+    )}
     </div>
   );
 }

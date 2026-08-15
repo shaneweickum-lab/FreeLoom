@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import AppShell from "@/components/AppShell";
 import type { Theme } from "@/lib/themeContext";
 
@@ -14,12 +15,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   let initialTheme: Theme = "dark";
   if (user) {
-    const { data: profile } = await supabase
-      .from("school_profiles")
-      .select("theme_preference")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (profile?.theme_preference === "light") initialTheme = "light";
+    const ownerId = await resolveHouseholdOwnerId(supabase, user.id);
+    if (ownerId) {
+      const { data: profile } = await supabase
+        .from("school_profiles")
+        .select("theme_preference")
+        .eq("user_id", ownerId)
+        .maybeSingle();
+      if (profile?.theme_preference === "light") initialTheme = "light";
+    }
   }
 
   return <AppShell initialTheme={initialTheme}>{children}</AppShell>;

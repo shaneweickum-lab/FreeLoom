@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
+import { resolveHouseholdOwnerId } from "@/lib/household";
 import { useBennyPanel } from "@/lib/bennyPanelContext";
 import { BENNY_ASSISTANT_MODE_LAUNCHED, isBennyAvailable } from "@/lib/billing/tier";
 import StudentSwitcher from "@/components/StudentSwitcher";
@@ -88,6 +89,8 @@ function BennyTriggerButton() {
     supabase.auth.getUser().then(async ({ data }) => {
       const userId = data.user?.id;
       if (!userId || cancelled) return;
+      const ownerId = await resolveHouseholdOwnerId(supabase, userId);
+      if (!ownerId || cancelled) return;
 
       const [{ data: profile }, { data: adminRow }] = await Promise.all([
         supabase
@@ -95,7 +98,7 @@ function BennyTriggerButton() {
           .select(
             "benny_assistant_enabled, subscription_tier, subscription_status, grandfathered_until, current_period_end, benny_trial_ends_at"
           )
-          .eq("user_id", userId)
+          .eq("user_id", ownerId)
           .maybeSingle(),
         supabase.from("admin_users").select("user_id").eq("user_id", userId).maybeSingle(),
       ]);
@@ -121,10 +124,10 @@ function BennyTriggerButton() {
       setEnabled(computeEnabled(profile));
 
       channel = supabase
-        .channel(`benny-enabled:${userId}:${instanceId}`)
+        .channel(`benny-enabled:${ownerId}:${instanceId}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "school_profiles", filter: `user_id=eq.${userId}` },
+          { event: "UPDATE", schema: "public", table: "school_profiles", filter: `user_id=eq.${ownerId}` },
           (payload) => setEnabled(computeEnabled(payload.new as BennyGateProfile))
         )
         .subscribe();
