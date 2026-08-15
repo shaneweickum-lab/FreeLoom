@@ -13,6 +13,7 @@ import {
   type SchoolingStructure,
 } from "@/lib/academicSessions";
 import type { SchoolProfile } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 const EMPTY_SESSION_FORM = { label: "", startDate: "", endDate: "" };
 
@@ -37,7 +38,7 @@ function AddStudentSection({ autoOpen }: { autoOpen: boolean }) {
   }
 
   return (
-    <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+    <Card variant="flat" className="flex flex-col gap-3">
       <div>
         <h2 className="text-sm font-medium">Students</h2>
         <p className="text-muted/70 text-[11px]">
@@ -62,7 +63,7 @@ function AddStudentSection({ autoOpen }: { autoOpen: boolean }) {
           + Add a student
         </button>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -220,7 +221,7 @@ export default function AcademicTab({ userId, initialProfile }: { userId: string
     <div className="flex flex-col gap-4">
       <AddStudentSection autoOpen={autoOpenAddStudent} />
 
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-2">
+      <Card variant="flat" className="flex flex-col gap-2">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">How do you structure your school year?</span>
           <select
@@ -242,9 +243,9 @@ export default function AcademicTab({ userId, initialProfile }: { userId: string
           accumulating credit and when it stops.
         </span>
         {structureSaved && !structureSaving && <p className="text-xs text-gold">Saved.</p>}
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-2">
+      <Card variant="flat" className="flex flex-col gap-2">
         <div>
           <span className="font-medium text-sm">School year dates</span>
           <p className="text-muted/70 text-[11px]">
@@ -279,7 +280,7 @@ export default function AcademicTab({ userId, initialProfile }: { userId: string
         {!structure && yearStart && yearEnd && (
           <p className="text-muted/70 text-[11px]">Pick a school-year structure above to get a proposed breakdown.</p>
         )}
-      </div>
+      </Card>
 
       {proposedSessions && proposedSessions.length > 0 && (
         <div className="rounded-lg border border-gold/40 bg-gold/5 p-3 flex flex-col gap-3">
@@ -340,7 +341,7 @@ export default function AcademicTab({ userId, initialProfile }: { userId: string
         </div>
       )}
 
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+      <Card variant="flat" className="flex flex-col gap-3">
         <div>
           <h2 className="text-sm font-medium">Sessions</h2>
           <p className="text-muted/70 text-[11px]">
@@ -418,7 +419,7 @@ export default function AcademicTab({ userId, initialProfile }: { userId: string
           </button>
         </form>
         {error && <p className="text-xs text-red-400">{error}</p>}
-      </div>
+      </Card>
     </div>
   );
 }

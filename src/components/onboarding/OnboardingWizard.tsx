@@ -9,6 +9,7 @@ import { featuresFor, PLAN_NAMES } from "@/lib/billing/tier";
 import type { SubscriptionTier } from "@/lib/billing/tier";
 import type { PriceTable } from "@/lib/billing/prices";
 import type { SchoolProfile } from "@/lib/types";
+import { cardClassName } from "@/components/ui/Card";
 
 const SCHOOLING_TYPE_OPTIONS = [
   { value: "", label: "Not set" },
@@ -124,10 +125,7 @@ function OnboardingWizardInner({ userId, initialProfile, prices }: Props) {
       </div>
 
       {step === "profile" ? (
-        <form
-          onSubmit={handleProfileSubmit}
-          className="flex flex-col gap-4 rounded-lg border border-border bg-surface shadow-sm p-6"
-        >
+        <form onSubmit={handleProfileSubmit} className={`flex flex-col gap-4 ${cardClassName({ padding: "lg" })}`}>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="text-muted">Your name</span>
             <input className="input" value={parentName} onChange={(e) => setParentName(e.target.value)} />

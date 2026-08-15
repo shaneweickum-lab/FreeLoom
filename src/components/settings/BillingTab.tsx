@@ -5,6 +5,7 @@ import { getEffectiveTier, featuresFor, PLAN_NAMES } from "@/lib/billing/tier";
 import type { SubscriptionTier } from "@/lib/billing/tier";
 import type { PriceTable } from "@/lib/billing/prices";
 import type { SchoolProfile } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 type Interval = "month" | "quarter" | "year";
 
@@ -147,7 +148,7 @@ export default function BillingTab({
   if (isAdmin) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="rounded-lg border border-navy-line p-4 flex flex-col gap-2">
+        <Card variant="flat" className="flex flex-col gap-2">
           <h2 className="font-serif text-lg font-bold">Billing</h2>
           <p className="text-sm text-muted">
             Admin account -- the entire platform is available to you regardless of billing status. No subscription
@@ -158,7 +159,7 @@ export default function BillingTab({
               {loadingPortal ? "Opening…" : "Manage billing"}
             </button>
           )}
-        </div>
+        </Card>
         {error && <p className="text-xs text-red-400">{error}</p>}
       </div>
     );
@@ -166,7 +167,7 @@ export default function BillingTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-lg border border-navy-line p-4 flex flex-col gap-2">
+      <Card variant="flat" className="flex flex-col gap-2">
         <h2 className="font-serif text-lg font-bold">Billing</h2>
         <p className="text-sm text-muted">
           Current plan: <span className="font-medium text-foreground capitalize">{tier}</span>
@@ -190,7 +191,7 @@ export default function BillingTab({
             {loadingPortal ? "Opening…" : "Manage billing"}
           </button>
         )}
-      </div>
+      </Card>
 
       <div className="flex items-center gap-1 rounded-lg border border-navy-line p-1 w-fit">
         {(["month", "quarter", "year"] as Interval[]).map((opt) => (

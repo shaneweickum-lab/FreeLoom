@@ -2,6 +2,7 @@
 
 import type { Student } from "@/lib/types";
 import { GRADE_LEVEL_OPTIONS, type SchoolLevel } from "@/lib/gradeLevels";
+import { cardClassName } from "@/components/ui/Card";
 
 const GRADE_LEVEL_GROUPS: SchoolLevel[] = ["Elementary", "Middle School", "High School"];
 
@@ -71,7 +72,7 @@ export default function StudentForm({
   showCancel: boolean;
 }) {
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3 rounded-lg border border-border bg-surface shadow-sm p-4 max-w-lg">
+    <form onSubmit={onSubmit} className={`flex flex-col gap-3 max-w-lg ${cardClassName()}`}>
       <h2 className="font-semibold">{isEditing ? "Edit student profile" : "New student profile"}</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <input

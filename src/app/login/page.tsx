@@ -14,7 +14,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/dashboard";
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(
@@ -41,6 +41,24 @@ function LoginForm() {
 
     setSubmitting(true);
     const supabase = createClient();
+
+    if (mode === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/confirm?next=/auth/reset-password`,
+      });
+      if (error) {
+        setError(error.message);
+        setSubmitting(false);
+        return;
+      }
+      // Deliberately the same notice regardless of whether the email
+      // actually has an account -- confirming existence either way would
+      // let anyone enumerate registered emails.
+      setNotice("If an account exists for that email, a reset link is on its way.");
+      setMode("signin");
+      setSubmitting(false);
+      return;
+    }
 
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -84,11 +102,15 @@ function LoginForm() {
         <Link href="/" className="inline-flex mb-4">
           <LogoMark size={48} />
         </Link>
-        <h1 className="text-2xl font-bold font-serif">{mode === "signin" ? "Sign in" : "Create your parent account"}</h1>
+        <h1 className="text-2xl font-bold font-serif">
+          {mode === "signin" ? "Sign in" : mode === "signup" ? "Create your parent account" : "Reset your password"}
+        </h1>
         <p className="text-muted text-sm mt-2">
           {mode === "signin"
             ? "One account for your whole family."
-            : "Add a profile for each of your students once you're in."}
+            : mode === "signup"
+            ? "Add a profile for each of your students once you're in."
+            : "Enter the email on your account and we'll send you a link to set a new password."}
         </p>
       </div>
 
@@ -103,27 +125,44 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-muted">Password</span>
-          <input
-            type="password"
-            required
-            minLength={mode === "signup" ? 8 : 6}
-            className="input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
+        {mode !== "forgot" && (
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="text-muted">Password</span>
+            <input
+              type="password"
+              required
+              minLength={mode === "signup" ? 8 : 6}
+              className="input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+        )}
+        {mode === "signin" && (
+          <button
+            type="button"
+            onClick={() => {
+              setMode("forgot");
+              setError(null);
+              setNotice(null);
+            }}
+            className="text-xs text-muted hover:text-foreground text-left -mt-2 w-fit"
+          >
+            Forgot password?
+          </button>
+        )}
         {mode === "signup" && <PasswordStrengthMeter password={password} />}
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={keepSignedIn}
-            onChange={(e) => setKeepSignedIn(e.target.checked)}
-            className="h-4 w-4 shrink-0 accent-gold"
-          />
-          <span className="text-muted">Keep me signed in</span>
-        </label>
+        {mode !== "forgot" && (
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={keepSignedIn}
+              onChange={(e) => setKeepSignedIn(e.target.checked)}
+              className="h-4 w-4 shrink-0 accent-gold"
+            />
+            <span className="text-muted">Keep me signed in</span>
+          </label>
+        )}
         {mode === "signup" && (
           <label className="flex items-start gap-2 text-xs text-muted">
             <input
@@ -149,13 +188,13 @@ function LoginForm() {
         {error && <p className="text-sm text-red-600">{error}</p>}
         {notice && <p className="text-sm text-gold">{notice}</p>}
         <button type="submit" className="btn-primary" disabled={submitting || (mode === "signup" && !agreedToTerms)}>
-          {submitting ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+          {submitting ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
         </button>
       </form>
 
       <button
         onClick={() => {
-          setMode(mode === "signin" ? "signup" : "signin");
+          setMode(mode === "signup" ? "signin" : mode === "forgot" ? "signin" : "signup");
           setError(null);
           setNotice(null);
         }}

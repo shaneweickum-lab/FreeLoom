@@ -6,6 +6,7 @@ import { useStudents } from "@/lib/studentContext";
 import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
 import type { PipelineClass, PipelineEntry, SchoolProfile, Transcript } from "@/lib/types";
 import PageHeader from "@/components/ui/PageHeader";
+import Card from "@/components/ui/Card";
 
 type EntryWithClass = PipelineEntry & { classes: Pick<PipelineClass, "subject_area"> | null };
 
@@ -339,7 +340,7 @@ export default function TranscriptPage() {
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-surface shadow-sm p-6 flex flex-col gap-8">
+      <Card padding="lg" className="flex flex-col gap-8">
         <div>
           <div className="text-xl font-semibold mb-1">{currentStudent.name}</div>
           <div className="text-muted text-sm">{currentStudent.grade_level || "Grade level not set"}</div>
@@ -432,13 +433,13 @@ export default function TranscriptPage() {
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {transcripts.length > 0 && (
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold">Generated transcripts</h2>
           {transcripts.map((t) => (
-            <div key={t.id} className="rounded-lg border border-border bg-surface shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
+            <Card key={t.id} className="flex flex-wrap items-center justify-between gap-4">
               <div className="text-sm">
                 <div>{new Date(t.generated_at).toLocaleString()}</div>
                 <div className="text-muted text-xs">
@@ -464,7 +465,7 @@ export default function TranscriptPage() {
                   {t.share_revoked ? "Re-enable share link" : "Revoke share link"}
                 </button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
