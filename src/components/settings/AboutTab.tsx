@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { APP_VERSION } from "@/lib/appVersion";
 import CookiePreferencesButton from "@/components/CookiePreferencesButton";
+import Card from "@/components/ui/Card";
 
 const ABOUT_FEATURES = [
   "Learning Log with AI-assisted subject tagging and plain-language reasoning",
@@ -13,7 +14,7 @@ const ABOUT_FEATURES = [
 
 export default function AboutTab() {
   return (
-    <div className="rounded-lg border border-navy-line p-4 flex flex-col gap-3">
+    <Card variant="flat" className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-serif text-lg font-bold">About FreeLoom</h2>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold font-mono">
@@ -37,6 +38,6 @@ export default function AboutTab() {
         </Link>
         <CookiePreferencesButton className="text-muted hover:text-foreground hover:underline" />
       </div>
-    </div>
+    </Card>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BENNY_ASSISTANT_MODE_LAUNCHED, isBennyAvailable } from "@/lib/billing/tier";
 import type { SchoolProfile } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 const SCHOOLING_TYPE_OPTIONS = [
   { value: "", label: "Not set" },
@@ -262,7 +263,7 @@ export default function AccountTab({
         </>
       )}
 
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+      <Card variant="flat" className="flex flex-col gap-3">
         <label className="flex items-start gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
@@ -293,10 +294,10 @@ export default function AccountTab({
           Same admin read-only access as above, but for birthdates -- shown as a fixed placeholder instead of the
           real date.
         </span>
-      </div>
+      </Card>
 
       {BENNY_ASSISTANT_MODE_LAUNCHED && (
-        <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+        <Card variant="flat" className="flex flex-col gap-3">
           <label className={`flex items-center gap-2 text-sm ${bennyLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
             <input
               type="checkbox"
@@ -331,7 +332,7 @@ export default function AccountTab({
               </>
             )}
           </span>
-        </div>
+        </Card>
       )}
 
       {editing && (
@@ -355,7 +356,7 @@ export default function AccountTab({
       {saved && !editing && <p className="text-xs text-gold">Saved.</p>}
     </form>
 
-    <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+    <Card variant="flat" className="flex flex-col gap-3">
       <div>
         <h3 className="font-medium text-sm">Your data</h3>
         <p className="text-muted/70 text-[11px]">
@@ -366,7 +367,7 @@ export default function AccountTab({
       <a href="/api/account/export" className="btn-secondary w-fit text-sm">
         Download my data
       </a>
-    </div>
+    </Card>
 
     <div className="rounded-lg border border-red-900/40 bg-red-950/10 p-3 flex flex-col gap-3">
       <div>

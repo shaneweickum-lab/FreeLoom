@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getEffectiveTier, MAX_RETENTION_DAYS } from "@/lib/billing/tier";
 import type { SchoolProfile } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 const ALL_RETENTION_OPTIONS = [
   { value: "", label: "Never", days: null as number | null },
@@ -77,7 +78,7 @@ export default function NotificationsTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+      <Card variant="flat" className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Email me about</h2>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
@@ -99,9 +100,9 @@ export default function NotificationsTab({
           />
           <span>Announcements</span>
         </label>
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-3">
+      <Card variant="flat" className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Show in my notifications inbox</h2>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
@@ -123,9 +124,9 @@ export default function NotificationsTab({
           />
           <span>Announcements</span>
         </label>
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-navy-line p-3 flex flex-col gap-2">
+      <Card variant="flat" className="flex flex-col gap-2">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium">Delete inactive message threads</span>
           <select
@@ -146,7 +147,7 @@ export default function NotificationsTab({
           not just hidden. Checked once a day.
           {tier !== "premium" && " Longer windows (and \"Never\") are available on higher plans."}
         </span>
-      </div>
+      </Card>
 
       {saved && !saving && <p className="text-xs text-gold">Saved.</p>}
       {error && <p className="text-xs text-red-400">{error}</p>}

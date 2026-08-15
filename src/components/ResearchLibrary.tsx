@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ResearchCitation } from "@/lib/types";
+import Card from "@/components/ui/Card";
 
 const PAGE_SIZE = 20;
 
@@ -25,7 +26,7 @@ const EVIDENCE_LEVEL_BADGE: Record<string, string> = {
 
 function CitationCard({ citation }: { citation: ResearchCitation }) {
   return (
-    <div className="rounded-lg border border-navy-line bg-surface p-4 flex flex-col gap-2">
+    <Card className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-mono uppercase tracking-wide text-muted">{citation.category}</span>
@@ -51,7 +52,7 @@ function CitationCard({ citation }: { citation: ResearchCitation }) {
           </a>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 

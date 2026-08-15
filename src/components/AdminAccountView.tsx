@@ -4,6 +4,7 @@ import { useState } from "react";
 import { computeGpa, GRADE_LEVELS, groupByGradeLevel } from "@/lib/gpa";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
 import Tabs from "@/components/Tabs";
+import Card from "@/components/ui/Card";
 import type {
   ProfileNote,
   PipelineClass,
@@ -309,7 +310,7 @@ function TranscriptTab({
         </div>
       </div>
 
-      <div className="rounded-lg border border-navy-line p-6 flex flex-col gap-8">
+      <Card padding="lg" className="flex flex-col gap-8">
         <div>
           <div className="text-xl font-semibold mb-1">{student.name}</div>
           <div className="text-muted text-sm">{student.grade_level || "Grade level not set"}</div>
@@ -386,7 +387,7 @@ function TranscriptTab({
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {studentTranscripts.length > 0 && (
         <div className="flex flex-col gap-3">
