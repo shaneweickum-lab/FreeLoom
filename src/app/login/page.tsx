@@ -3,7 +3,6 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { meetsMinimumStrength } from "@/lib/passwordStrength";
 import { recordRememberMeChoice } from "@/lib/authSession";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
@@ -40,14 +39,22 @@ function LoginForm() {
     }
 
     setSubmitting(true);
-    const supabase = createClient();
 
+    // Every auth action here goes through a server-side proxy route rather
+    // than calling supabase.auth.* directly from the browser -- that route
+    // adds an app-specific rate limit (see src/lib/rateLimit.ts) on top of
+    // Supabase's own generic, project-wide one, and for signin/signup still
+    // sets the real session cookie on its response, same as a direct
+    // client-side call would.
     if (mode === "forgot") {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/confirm?next=/auth/reset-password`,
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, redirectTo: `${window.location.origin}/auth/confirm?next=/auth/reset-password` }),
       });
-      if (error) {
-        setError(error.message);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong -- try again.");
         setSubmitting(false);
         return;
       }
@@ -61,9 +68,14 @@ function LoginForm() {
     }
 
     if (mode === "signin") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setError(error.message);
+      const res = await fetch("/api/auth/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong -- try again.");
         setSubmitting(false);
         return;
       }
@@ -74,17 +86,22 @@ function LoginForm() {
       // A brand-new account always goes through onboarding (set up profile,
       // then pick a plan) rather than the caller-supplied `next` -- that's
       // only meant for signin's "come back to what you were doing".
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/onboarding` },
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/onboarding`,
+        }),
       });
-      if (error) {
-        setError(error.message);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong -- try again.");
         setSubmitting(false);
         return;
       }
-      if (data.session) {
+      if (data.hasSession) {
         recordRememberMeChoice(keepSignedIn);
         router.push("/onboarding");
         router.refresh();
