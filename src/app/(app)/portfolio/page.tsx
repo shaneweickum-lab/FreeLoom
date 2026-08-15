@@ -6,6 +6,7 @@ import { useStudents } from "@/lib/studentContext";
 import { sumCredits } from "@/lib/pipeline/credit-calculation";
 import type { AcademicSession } from "@/lib/academicSessions";
 import PortfolioPdfModal from "@/components/PortfolioPdfModal";
+import ImportEntriesModal from "@/components/ImportEntriesModal";
 import type { PipelineClass, PipelineEntry } from "@/lib/types";
 import PageHeader from "@/components/ui/PageHeader";
 
@@ -22,6 +23,7 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState<Record<string, { finalDescription?: string; finalReasoning?: string; creditValue?: number }>>({});
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [savingLabScience, setSavingLabScience] = useState<string | null>(null);
   // Draft text for the target-credits input, keyed by class id -- kept
   // separate from the loaded classes state so an in-progress edit doesn't
@@ -150,13 +152,30 @@ export default function PortfolioPage() {
         title="Portfolio"
         subtitle={`Every class ${currentStudent.name} has built up, and the reasoning behind each entry — edit anything that needs a second look. New activities are logged from the Learning Log page.`}
         actions={
-          classes.length > 0 && (
-            <button onClick={() => setPdfModalOpen(true)} className="btn-secondary text-sm shrink-0">
-              Download PDF
+          <div className="flex gap-2 shrink-0">
+            <button onClick={() => setImportModalOpen(true)} className="btn-secondary text-sm shrink-0">
+              Import records
             </button>
-          )
+            {classes.length > 0 && (
+              <button onClick={() => setPdfModalOpen(true)} className="btn-secondary text-sm shrink-0">
+                Download PDF
+              </button>
+            )}
+          </div>
         }
       />
+
+      {importModalOpen && (
+        <ImportEntriesModal
+          studentId={currentStudent.id}
+          userId={currentStudent.user_id}
+          onClose={() => setImportModalOpen(false)}
+          onImported={async () => {
+            await load();
+            await refreshSubjectLedger();
+          }}
+        />
+      )}
 
       {pdfModalOpen && (
         <PortfolioPdfModal
