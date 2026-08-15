@@ -21,6 +21,7 @@
 
 import { isSlmEntryDraftingEnabled } from "@/lib/flags";
 import { draftEntry } from "@/lib/benny/inference/model";
+import { agreesWithClassicalClassifier } from "@/lib/pipeline/subjectClassifier";
 import type { ClassifyResult, ExtractedSlots } from "@/lib/pipeline/classify";
 
 export type DraftCandidate = {
@@ -51,9 +52,12 @@ const GENERIC_TITLE_PHRASES = new Set(["learning skills", "general studies", "mi
 /** docs/slm-strategy.md Section 7's first safeguard: "reject a draft that
  * doesn't have a valid subject_area, a plausible credit_value, or all
  * required fields; fall through to Stage 5 same as any other low-confidence
- * case." No classical-subject-area cross-check here yet -- that classifier
- * (Section 1/7) doesn't exist in this codebase yet either (see
- * ml/README.md's known gaps); wire that in here once it does. */
+ * case." Shape/range only -- the second safeguard (cross-checking the
+ * drafted subject_area against the classical classifier) is a separate,
+ * independent check; see agreesWithClassicalClassifier() in
+ * pipeline/subjectClassifier.ts, called from callEntryDraftingAdapter()
+ * below rather than folded into this function, since Section 7 treats them
+ * as two distinct signals, not one combined validity check. */
 export function validateDraftCandidate(candidate: unknown): candidate is DraftCandidate {
   if (!candidate || typeof candidate !== "object") return false;
   const c = candidate as Record<string, unknown>;
@@ -98,7 +102,13 @@ export async function callEntryDraftingAdapter(input: {
       creditValue: result.creditValue,
       rationale: result.rationale,
     };
-    return validateDraftCandidate(candidate) ? candidate : null;
+    if (!validateDraftCandidate(candidate)) return null;
+    // Section 7's second safeguard: an independent classical signal has to
+    // agree the subject is at least plausible before this draft is trusted
+    // -- a substantial disagreement flags for human review the same way a
+    // shape-validation failure does, rather than trusting the SLM silently.
+    if (!agreesWithClassicalClassifier(candidate.subjectArea, input.rawWordDump)) return null;
+    return candidate;
   } catch (err) {
     console.error("entry-drafting adapter call failed:", err);
     return null;

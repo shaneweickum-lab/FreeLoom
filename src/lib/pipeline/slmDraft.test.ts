@@ -10,6 +10,16 @@ vi.mock("@/lib/benny/inference/model", () => ({
   draftEntry: (...args: unknown[]) => draftEntryMock(...args),
 }));
 
+// Mocked so callEntryDraftingAdapter's own tests are deterministic and
+// don't depend on the real hashed-vector classifier's actual similarity
+// scores for arbitrary test fixture text -- subjectClassifier.ts has its
+// own dedicated test suite for the real classification behavior.
+const agreesWithClassicalClassifierMock = vi.fn<(subjectArea: string, rawWordDump: string) => boolean>(() => true);
+vi.mock("@/lib/pipeline/subjectClassifier", () => ({
+  agreesWithClassicalClassifier: (subjectArea: string, rawWordDump: string) =>
+    agreesWithClassicalClassifierMock(subjectArea, rawWordDump),
+}));
+
 import { callEntryDraftingAdapter, validateDraftCandidate } from "./slmDraft";
 
 const VALID_CANDIDATE = {
@@ -64,6 +74,7 @@ describe("callEntryDraftingAdapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     isSlmEntryDraftingEnabledMock.mockReturnValue(true);
+    agreesWithClassicalClassifierMock.mockReturnValue(true);
   });
 
   it("returns null without calling the model when the feature flag is off", async () => {
@@ -90,6 +101,22 @@ describe("callEntryDraftingAdapter", () => {
     draftEntryMock.mockReturnValue({ ...VALID_CANDIDATE, creditValue: 5 });
     const result = await callEntryDraftingAdapter({ rawWordDump: "text", extractedSlots: { activity_type: null, source_platform: null, time_spent_minutes: null } });
     expect(result).toBeNull();
+    // Shape validation fails first -- the classical cross-check never even runs.
+    expect(agreesWithClassicalClassifierMock).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the classical subject-area classifier substantially disagrees with the draft", async () => {
+    draftEntryMock.mockReturnValue(VALID_CANDIDATE);
+    agreesWithClassicalClassifierMock.mockReturnValue(false);
+    const result = await callEntryDraftingAdapter({ rawWordDump: "did algebra", extractedSlots: { activity_type: null, source_platform: null, time_spent_minutes: null } });
+    expect(result).toBeNull();
+    expect(agreesWithClassicalClassifierMock).toHaveBeenCalledWith("Mathematics", "did algebra");
+  });
+
+  it("only runs the classical cross-check after shape validation has already passed", async () => {
+    draftEntryMock.mockReturnValue(VALID_CANDIDATE);
+    await callEntryDraftingAdapter({ rawWordDump: "did algebra", extractedSlots: { activity_type: null, source_platform: null, time_spent_minutes: null } });
+    expect(agreesWithClassicalClassifierMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns null instead of throwing when the model call itself throws", async () => {
