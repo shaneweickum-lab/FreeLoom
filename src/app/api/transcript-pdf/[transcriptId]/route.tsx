@@ -99,8 +99,9 @@ export async function GET(
       const { data: publicUrlData } = supabase.storage.from("transcripts").getPublicUrl(path);
       await supabase.from("transcripts").update({ pdf_url: publicUrlData.publicUrl }).eq("id", transcriptId);
     }
-  } catch {
+  } catch (err) {
     // Non-fatal: the caller still gets the PDF below.
+    console.error("Failed to cache rendered transcript PDF:", err);
   }
 
   return new NextResponse(new Uint8Array(buffer), {

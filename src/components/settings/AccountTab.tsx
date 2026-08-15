@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BENNY_ASSISTANT_MODE_LAUNCHED, isBennyAvailable } from "@/lib/billing/tier";
+import { meetsMinimumStrength } from "@/lib/passwordStrength";
 import type { SchoolProfile } from "@/lib/types";
 import Card from "@/components/ui/Card";
+import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
 
 const SCHOOLING_TYPE_OPTIONS = [
   { value: "", label: "Not set" },
@@ -66,10 +68,15 @@ export default function AccountTab({
   userId,
   initialProfile,
   isAdmin,
+  authEmail,
 }: {
   userId: string;
   initialProfile: SchoolProfile | null;
   isAdmin: boolean;
+  /** The real sign-in email (auth.users), distinct from form.email above
+   * (school_profiles' contact-email field) -- changing one has no effect
+   * on the other. */
+  authEmail: string | null;
 }) {
   const [form, setForm] = useState(formFromProfile(initialProfile));
   // Snapshot of the last successfully-saved form -- Cancel reverts to this,
@@ -85,6 +92,18 @@ export default function AccountTab({
   // NotificationsTab.tsx's checkboxes) rather than requiring edit mode + Save.
   const [bennyEnabled, setBennyEnabled] = useState(initialProfile?.benny_assistant_enabled ?? false);
   const [bennySaving, setBennySaving] = useState(false);
+
+  const [authEmailEditing, setAuthEmailEditing] = useState(false);
+  const [newAuthEmail, setNewAuthEmail] = useState(authEmail ?? "");
+  const [authEmailSaving, setAuthEmailSaving] = useState(false);
+  const [authEmailNotice, setAuthEmailNotice] = useState("");
+  const [authEmailError, setAuthEmailError] = useState("");
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -147,6 +166,51 @@ export default function AccountTab({
   }
 
   const schoolingLabel = form.schoolingType ? SCHOOLING_TYPE_LABEL[form.schoolingType] : "Not set";
+
+  async function handleChangeAuthEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthEmailError("");
+    setAuthEmailNotice("");
+    setAuthEmailSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ email: newAuthEmail });
+    setAuthEmailSaving(false);
+    if (error) {
+      setAuthEmailError(error.message);
+      return;
+    }
+    // Supabase confirms an email change via a link (to the new address,
+    // and to the old one too if "secure email change" is on) -- the
+    // change isn't live until that's clicked, so nothing here has
+    // actually taken effect yet.
+    setAuthEmailNotice("Check your inbox to confirm this change -- it won't take effect until you click the link.");
+    setAuthEmailEditing(false);
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSaved(false);
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError("Passwords don't match.");
+      return;
+    }
+    if (!meetsMinimumStrength(newPassword)) {
+      setPasswordError("Choose a stronger password -- add more length or mix in a number/symbol.");
+      return;
+    }
+    setPasswordSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setPasswordSaving(false);
+    if (error) {
+      setPasswordError(error.message);
+      return;
+    }
+    setPasswordSaved(true);
+    setNewPassword("");
+    setConfirmNewPassword("");
+  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -355,6 +419,98 @@ export default function AccountTab({
       )}
       {saved && !editing && <p className="text-xs text-gold">Saved.</p>}
     </form>
+
+    <Card variant="flat" className="flex flex-col gap-3">
+      <div>
+        <h3 className="font-medium text-sm">Login email</h3>
+        <p className="text-muted/70 text-[11px]">
+          What you sign in with -- separate from the contact email above, which is just what shows up on
+          announcements.
+        </p>
+      </div>
+      {!authEmailEditing ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm">{authEmail ?? "—"}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setNewAuthEmail(authEmail ?? "");
+              setAuthEmailEditing(true);
+              setAuthEmailError("");
+              setAuthEmailNotice("");
+            }}
+            className="btn-secondary text-xs shrink-0"
+          >
+            Change
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleChangeAuthEmail} className="flex flex-col gap-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted text-xs">New email</span>
+            <input
+              type="email"
+              required
+              className="input"
+              value={newAuthEmail}
+              onChange={(e) => setNewAuthEmail(e.target.value)}
+            />
+          </label>
+          {authEmailError && <p className="text-xs text-red-400">{authEmailError}</p>}
+          <div className="flex items-center gap-2">
+            <button type="submit" disabled={authEmailSaving} className="btn-primary text-sm w-fit">
+              {authEmailSaving ? "Sending…" : "Send confirmation"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthEmailEditing(false)}
+              disabled={authEmailSaving}
+              className="btn-secondary text-sm w-fit"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      {authEmailNotice && <p className="text-xs text-gold">{authEmailNotice}</p>}
+    </Card>
+
+    <Card variant="flat" className="flex flex-col gap-3">
+      <div>
+        <h3 className="font-medium text-sm">Change password</h3>
+        <p className="text-muted/70 text-[11px]">Set a new password for signing in.</p>
+      </div>
+      <form onSubmit={handleChangePassword} className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-muted text-xs">New password</span>
+          <input
+            type="password"
+            required
+            minLength={8}
+            className="input"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </label>
+        <PasswordStrengthMeter password={newPassword} />
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-muted text-xs">Confirm new password</span>
+          <input
+            type="password"
+            required
+            minLength={8}
+            className="input"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+          />
+        </label>
+        {passwordError && <p className="text-xs text-red-400">{passwordError}</p>}
+        {passwordSaved && <p className="text-xs text-gold">Password updated.</p>}
+        <button type="submit" disabled={passwordSaving} className="btn-primary text-sm w-fit">
+          {passwordSaving ? "Saving…" : "Update password"}
+        </button>
+      </form>
+    </Card>
 
     <Card variant="flat" className="flex flex-col gap-3">
       <div>

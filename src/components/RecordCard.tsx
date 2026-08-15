@@ -87,6 +87,24 @@ function TagRow({
       ) : (
         <p className="text-xs text-ink-soft/70">No specific phrase behind this match.</p>
       )}
+      {tag.citations.length > 0 && (
+        <div className="flex flex-col gap-1 border-t border-parchment-line pt-2">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-ink-soft/70">Backed by research</span>
+          {tag.citations.map((citation) => (
+            <p key={citation.id} className="text-xs text-ink-soft">
+              {citation.title} <span className="text-ink-soft/70">— {citation.source}</span>
+              {citation.source_url && (
+                <>
+                  {" "}
+                  <a href={citation.source_url} target="_blank" rel="noreferrer" className="text-gold hover:underline">
+                    View source
+                  </a>
+                </>
+              )}
+            </p>
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <label className="flex items-center gap-1.5 text-xs text-ink-soft">
           <input

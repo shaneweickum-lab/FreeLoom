@@ -30,6 +30,11 @@ vi.mock("@/lib/supabase/admin", () => ({
   })),
 }));
 
+const isRateLimitedMock = vi.fn(() => false);
+vi.mock("@/lib/rateLimit", () => ({
+  isRateLimited: () => isRateLimitedMock(),
+}));
+
 import { POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -44,6 +49,7 @@ describe("POST /api/admin/announcements", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: ADMIN } };
     fromQueue = [];
+    isRateLimitedMock.mockReturnValue(false);
   });
 
   it("rejects a non-admin", async () => {
@@ -51,6 +57,13 @@ describe("POST /api/admin/announcements", () => {
     fromQueue = [{ data: null }];
     const res = await POST(makeRequest({ title: "t", body: "b" }));
     expect(res.status).toBe(403);
+  });
+
+  it("429s once the rate limit is hit", async () => {
+    fromQueue = [{ data: { user_id: ADMIN.id } }];
+    isRateLimitedMock.mockReturnValue(true);
+    const res = await POST(makeRequest({ title: "t", body: "b" }));
+    expect(res.status).toBe(429);
   });
 
   it("requires both a title and a body", async () => {

@@ -32,6 +32,11 @@ vi.mock("@/lib/supabase/admin", () => ({
   })),
 }));
 
+const isRateLimitedMock = vi.fn(() => false);
+vi.mock("@/lib/rateLimit", () => ({
+  isRateLimited: () => isRateLimitedMock(),
+}));
+
 import { PATCH, POST } from "./route";
 
 function makeRequest(body: unknown): NextRequest {
@@ -49,12 +54,20 @@ describe("POST /api/messages", () => {
     getUserResult = { data: { user: PARENT } };
     fromQueue = [];
     adminFromQueue = [];
+    isRateLimitedMock.mockReturnValue(false);
   });
 
   it("rejects when signed out", async () => {
     getUserResult = { data: { user: null } };
     const res = await POST(makeRequest({ threadId: THREAD_ID, body: "hello" }));
     expect(res.status).toBe(401);
+  });
+
+  it("429s once the rate limit is hit", async () => {
+    fromQueue = [{ data: null }]; // requireAdmin's admin_users lookup: not an admin
+    isRateLimitedMock.mockReturnValue(true);
+    const res = await POST(makeRequest({ threadId: THREAD_ID, body: "hello" }));
+    expect(res.status).toBe(429);
   });
 
   it("requires a threadId", async () => {

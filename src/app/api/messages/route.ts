@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/adminAuth";
 import { buildMessageNotificationEmail } from "@/lib/email/messageNotification";
 import { APP_URL } from "@/lib/appUrl";
+import { isRateLimited } from "@/lib/rateLimit";
 
 async function sendMessageEmail(to: string, title: string, excerpt: string, linkPath: string) {
   if (!process.env.RESEND_API_KEY) return;
@@ -24,6 +25,13 @@ export async function POST(req: NextRequest) {
   const { supabase, user, isAdmin } = await requireAdmin();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // Every real send here fans out an email (and/or a notification insert)
+  // to at least one other person -- with no limit, a single account could
+  // drive real outbound email volume through FreeLoom's own Resend account.
+  if (isRateLimited(`messages:${user.id}`, 20, 60_000)) {
+    return NextResponse.json({ error: "Too many messages -- try again in a minute." }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);

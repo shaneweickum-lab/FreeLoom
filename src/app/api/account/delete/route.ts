@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getStripe } from "@/lib/stripe";
 
 /** Self-serve "delete my account" -- fulfills the promise made in
  * /privacy and /terms. Identity is verified via the normal session client
@@ -102,12 +103,35 @@ export async function POST(req: NextRequest) {
   }
 
   // Best-effort, same reasoning as the transcripts bucket above.
-  const { data: brandingFiles } = await admin.storage.from("branding").list(userId).catch(() => ({ data: null }));
+  const { data: brandingFiles } = await admin.storage
+    .from("branding")
+    .list(userId)
+    .catch((err) => {
+      console.error("Failed to list branding files during account deletion:", err);
+      return { data: null };
+    });
   if (brandingFiles && brandingFiles.length > 0) {
     await admin.storage
       .from("branding")
       .remove(brandingFiles.map((f) => `${userId}/${f.name}`))
       .catch((err) => console.error("Failed to remove branding files during account deletion:", err));
+  }
+
+  // Cancel any real Stripe subscription BEFORE dropping the row that
+  // points to it -- otherwise a subscribed user who deletes their account
+  // keeps being billed indefinitely with no FreeLoom account left to
+  // manage it from. Deleting the Stripe Customer immediately cancels every
+  // subscription on it (Stripe's own behavior), so one call covers both.
+  // A real Stripe failure blocks deletion (same as every DB step above)
+  // rather than silently leaving billing running.
+  const { data: billingProfiles } = await admin.from("school_profiles").select("stripe_customer_id").eq("user_id", userId);
+  const stripeCustomerId = billingProfiles?.[0]?.stripe_customer_id;
+  if (stripeCustomerId) {
+    try {
+      await getStripe().customers.del(stripeCustomerId);
+    } catch (err) {
+      return failedAt("canceling your subscription", err);
+    }
   }
 
   const { error: profileError } = await admin.from("school_profiles").delete().eq("user_id", userId);

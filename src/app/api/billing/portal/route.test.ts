@@ -29,6 +29,11 @@ vi.mock("@/lib/stripe", () => ({
   })),
 }));
 
+const isRateLimitedMock = vi.fn(() => false);
+vi.mock("@/lib/rateLimit", () => ({
+  isRateLimited: () => isRateLimitedMock(),
+}));
+
 import { POST } from "./route";
 
 const USER = { id: "user-1", email: "parent@example.com" };
@@ -38,12 +43,20 @@ describe("POST /api/billing/portal", () => {
     vi.clearAllMocks();
     getUserResult = { data: { user: USER } };
     fromQueue = [];
+    isRateLimitedMock.mockReturnValue(false);
   });
 
   it("rejects when signed out", async () => {
     getUserResult = { data: { user: null } };
     const res = await POST();
     expect(res.status).toBe(401);
+  });
+
+  it("429s once the rate limit is hit", async () => {
+    isRateLimitedMock.mockReturnValue(true);
+    const res = await POST();
+    expect(res.status).toBe(429);
+    expect(createPortalSession).not.toHaveBeenCalled();
   });
 
   it("400s when there's no Stripe customer yet", async () => {
