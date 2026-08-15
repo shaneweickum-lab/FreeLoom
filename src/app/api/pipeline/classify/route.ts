@@ -38,9 +38,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  // RLS scopes this to the authenticated user's own students; an unowned or
-  // missing id resolves to no row, which we treat as not found.
-  const { data: student } = await supabase.from("students").select("id").eq("id", studentId).maybeSingle();
+  // Explicit user_id filter, not just RLS -- this used to rely on RLS
+  // alone to scope the lookup to the caller's own students, which made a
+  // misconfigured students RLS policy the only thing standing between one
+  // account and running classification against another account's student.
+  const { data: student } = await supabase.from("students").select("id").eq("id", studentId).eq("user_id", user.id).maybeSingle();
   if (!student) {
     return NextResponse.json({ error: "Student not found" }, { status: 404 });
   }
