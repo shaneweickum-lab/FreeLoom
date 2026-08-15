@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import type { ProfileNote, SuggestedTrack } from "@/lib/types";
 import VoiceInputButton from "@/components/VoiceInputButton";
+import PageHeader from "@/components/ui/PageHeader";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -155,14 +156,10 @@ export default function ProfilePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Student Profile &amp; Discovery</h1>
-        <p className="text-muted text-sm">
-          Describe {currentStudent.name}&apos;s hobbies, personality, and how they learn. We&apos;ll suggest
-          classes tied to those interests — accept one to start logging entries for it in the Learning
-          Log, or dismiss it.
-        </p>
-      </div>
+      <PageHeader
+        title="Student Profile & Discovery"
+        subtitle={`Describe ${currentStudent.name}'s hobbies, personality, and how they learn. We'll suggest classes tied to those interests — accept one to start logging entries for it in the Learning Log, or dismiss it.`}
+      />
 
       <div className="flex flex-col gap-3">
         <div className="relative">
