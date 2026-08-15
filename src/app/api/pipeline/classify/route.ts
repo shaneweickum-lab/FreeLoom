@@ -143,10 +143,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // A confident result reaches here without having returned already
+  // exactly when worthRetrying was false from the start (stage1 already
+  // had a real knowledge-base-quality tag, so Stage 2/3 were never even
+  // attempted) -- Stage 4 must never run in that case, per this route's
+  // own contract, so return before it rather than wastefully calling the
+  // SLM adapter (and stapling an unused draftCandidate onto an already-
+  // confident response) on every single confident classification.
+  if (stage1.confident) {
+    return NextResponse.json(stage1);
+  }
+
   // Stage 4: everything above missed. Feature-flagged and best-effort --
-  // see src/lib/pipeline/slmDraft.ts for why this is a null no-op in every
-  // environment today. Never runs on a confident result (both branches
-  // above already returned before reaching here in that case).
+  // see src/lib/pipeline/slmDraft.ts for why this was a null no-op in
+  // every environment for a long time (no longer true once real weight
+  // files are bundled -- see hasWeights() in benny/inference/weights.ts).
   const draftCandidate = await callEntryDraftingAdapter({
     rawWordDump,
     extractedSlots: stage1.extractedSlots,

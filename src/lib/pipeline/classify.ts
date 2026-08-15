@@ -91,7 +91,7 @@ export type NeedsHumanReview = {
 
 export type ClassifyResult = ConfidentDraft | NeedsHumanReview;
 
-type HeuristicCluster = {
+export type HeuristicCluster = {
   keywords: string[];
   subjectArea: string;
   courseTitle: string;
@@ -104,7 +104,7 @@ type HeuristicCluster = {
  * activity types (reading, building, sports, music...) without pretending
  * to know anything specific about them.
  */
-const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
+export const HEURISTIC_CLUSTERS: HeuristicCluster[] = [
   { keywords: ["budget", "money", "sold", "selling", "business", "profit", "invest"], subjectArea: "Economics / Life Skills", courseTitle: "Applied Personal Finance" },
   { keywords: ["measure", "recipe", "bake", "cook", "kitchen"], subjectArea: "Family & Consumer Science", courseTitle: "Applied Kitchen Science" },
   {
