@@ -11,6 +11,7 @@ const TYPE_LABEL: Record<AppNotification["type"], string> = {
   message: "Message",
   announcement: "Announcement",
   access_request: "Access request",
+  streak_nudge: "Reminder",
 };
 
 type LiveRequest = { status: string; expires_at: string | null } | null;
@@ -181,7 +182,7 @@ export default function NotificationItem({
       {notification.type === "access_request" && notification.related_id && (
         <AccessRequestStatus requestId={notification.related_id} onResponded={onResponded} />
       )}
-      {notification.type === "message" && notification.link_path && (
+      {(notification.type === "message" || notification.type === "streak_nudge") && notification.link_path && (
         <Link
           href={notification.link_path}
           onClick={onOpenLink}

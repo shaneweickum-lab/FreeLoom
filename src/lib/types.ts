@@ -57,6 +57,11 @@ export type SchoolProfile = {
    * email also goes out. */
   mute_in_app_messages: boolean;
   mute_in_app_announcements: boolean;
+  /** Mutes the daily streak-nudge cron (src/app/api/cron/streak-nudge) from
+   * ever inserting a notification for this account -- in-app only, no
+   * matching email toggle, since a missed-logging nudge is low-stakes
+   * compared to messages/announcements and doesn't warrant an inbox email. */
+  mute_in_app_streak_nudges: boolean;
   /** Days of inactivity after which one of this account's support_threads
    * (and its messages) gets deleted by the daily cleanup-threads cron. Null
    * means never auto-delete -- the column default, so no existing account
@@ -356,7 +361,7 @@ export type AccountAccessRequest = {
   created_at: string;
 };
 
-export type NotificationType = "message" | "announcement" | "access_request";
+export type NotificationType = "message" | "announcement" | "access_request" | "streak_nudge";
 
 export type AppNotification = {
   id: string;

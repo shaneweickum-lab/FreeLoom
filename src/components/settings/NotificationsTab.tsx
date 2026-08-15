@@ -20,6 +20,7 @@ function formFromProfile(profile: SchoolProfile | null) {
     emailNotifyAnnouncements: profile?.email_notify_announcements ?? true,
     muteInAppMessages: profile?.mute_in_app_messages ?? false,
     muteInAppAnnouncements: profile?.mute_in_app_announcements ?? false,
+    muteInAppStreakNudges: profile?.mute_in_app_streak_nudges ?? false,
     threadRetentionDays: profile?.thread_retention_days ? String(profile.thread_retention_days) : "",
   };
 }
@@ -65,6 +66,7 @@ export default function NotificationsTab({
       email_notify_announcements: next.emailNotifyAnnouncements,
       mute_in_app_messages: next.muteInAppMessages,
       mute_in_app_announcements: next.muteInAppAnnouncements,
+      mute_in_app_streak_nudges: next.muteInAppStreakNudges,
       thread_retention_days: next.threadRetentionDays ? Number(next.threadRetentionDays) : null,
       updated_at: new Date().toISOString(),
     });
@@ -123,6 +125,16 @@ export default function NotificationsTab({
             onChange={(e) => save({ ...form, muteInAppAnnouncements: !e.target.checked })}
           />
           <span>Announcements</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 accent-gold"
+            checked={!form.muteInAppStreakNudges}
+            disabled={saving}
+            onChange={(e) => save({ ...form, muteInAppStreakNudges: !e.target.checked })}
+          />
+          <span>Logging streak reminders</span>
         </label>
       </Card>
 
