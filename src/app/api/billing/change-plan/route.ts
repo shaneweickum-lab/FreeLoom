@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, priceIdFor, type BillingTier, type BillingInterval } from "@/lib/stripe";
+import { isRateLimited } from "@/lib/rateLimit";
 
 const VALID_TIERS: BillingTier[] = ["pro", "premium"];
 const VALID_INTERVALS: BillingInterval[] = ["month", "quarter", "year"];
@@ -19,6 +20,13 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // Same reasoning as /api/billing/checkout -- signed in, so not an
+  // anonymous-scale target, but this still makes multiple real Stripe
+  // calls per request (retrieve + update).
+  if (isRateLimited(`change-plan:${user.id}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Too many requests -- try again in a minute." }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);

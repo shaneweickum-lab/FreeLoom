@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/adminAuth";
 import { stripMarkdown } from "@/lib/markdown";
 import { buildAnnouncementNotificationEmail } from "@/lib/email/announcementNotification";
 import { APP_URL } from "@/lib/appUrl";
+import { isRateLimited } from "@/lib/rateLimit";
 
 async function sendAnnouncementEmail(to: string, title: string, excerpt: string) {
   if (!process.env.RESEND_API_KEY) return;
@@ -34,6 +35,13 @@ export async function POST(req: NextRequest) {
   const { supabase, user, isAdmin } = await requireAdmin();
   if (!user || !isAdmin) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
+
+  // Admin-gated already, so lower risk than an anonymous route -- but this
+  // can fan out real email to every account on "everyone", so a compromised
+  // or careless admin session still shouldn't be able to hammer it unbounded.
+  if (isRateLimited(`announcements:${user.id}`, 5, 60_000)) {
+    return NextResponse.json({ error: "Too many announcements -- try again in a minute." }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);

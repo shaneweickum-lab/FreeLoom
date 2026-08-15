@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 import { APP_URL } from "@/lib/appUrl";
+import { isRateLimited } from "@/lib/rateLimit";
 
 export async function POST() {
   const supabase = await createClient();
@@ -10,6 +11,12 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // Same reasoning as /api/billing/checkout and /api/billing/change-plan --
+  // signed in, but still a real Stripe API call per request.
+  if (isRateLimited(`billing-portal:${user.id}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Too many requests -- try again in a minute." }, { status: 429 });
   }
 
   const { data: profile } = await supabase
