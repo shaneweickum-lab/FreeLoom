@@ -26,7 +26,13 @@ export default async function SettingsPage() {
         <p className="text-muted text-sm mt-1">Your account, preferences, and how FreeLoom reaches you.</p>
       </div>
       <Suspense fallback={null}>
-        <SettingsTabs userId={user.id} initialProfile={profile ?? null} isAdmin={!!adminRow} prices={prices} />
+        <SettingsTabs
+          userId={user.id}
+          initialProfile={profile ?? null}
+          isAdmin={!!adminRow}
+          prices={prices}
+          authEmail={user.email ?? null}
+        />
       </Suspense>
     </div>
   );

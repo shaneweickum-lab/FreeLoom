@@ -16,11 +16,13 @@ export default function SettingsTabs({
   initialProfile,
   isAdmin,
   prices,
+  authEmail,
 }: {
   userId: string;
   initialProfile: SchoolProfile | null;
   isAdmin: boolean;
   prices: PriceTable;
+  authEmail: string | null;
 }) {
   const searchParams = useSearchParams();
   return (
@@ -30,7 +32,7 @@ export default function SettingsTabs({
         {
           id: "account",
           label: "Account",
-          content: <AccountTab userId={userId} initialProfile={initialProfile} isAdmin={isAdmin} />,
+          content: <AccountTab userId={userId} initialProfile={initialProfile} isAdmin={isAdmin} authEmail={authEmail} />,
         },
         { id: "appearance", label: "Appearance", content: <AppearanceTab /> },
         {
