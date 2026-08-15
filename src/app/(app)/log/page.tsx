@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
-import type { ActivityType, EntryStatus, PipelineEntry, SourceStage, TagConfidence, TagSource } from "@/lib/types";
+import type { ActivityType, EntryStatus, EntryTagCitation, PipelineEntry, ResearchCitation, SourceStage, TagConfidence, TagSource } from "@/lib/types";
 import type { DraftSource } from "@/lib/pipeline/classify";
 import type { ClassifyResultWithDraft } from "@/lib/pipeline/slmDraft";
 import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
@@ -23,7 +23,24 @@ type TagInput = {
   confidence: TagConfidence;
   quotedPhrase: string | null;
   source: TagSource;
+  /** Only ever present on a tag straight out of the classify API response
+   * -- absent (not just empty) for manual/quick-add tags, same convention
+   * as SubjectTagDraft.citations itself. */
+  citations?: ResearchCitation[];
 };
+
+/** Slims a full research_citations row down to what entry_subject_tags
+ * actually snapshots -- see EntryTagCitation's own doc comment for why
+ * this is a copy taken at accept time, not a live join. */
+function toEntryTagCitation(citation: ResearchCitation): EntryTagCitation {
+  return {
+    id: citation.id,
+    title: citation.title,
+    source: citation.source,
+    source_url: citation.source_url,
+    evidence_level: citation.evidence_level,
+  };
+}
 
 const EMPTY_FORM = { rawWordDump: "", activityType: "other" as ActivityType, sourcePlatform: "", minutes: "" };
 // creditValue is no longer typed by hand on either form -- it's computed
@@ -303,6 +320,7 @@ function LogPageInner() {
         quoted_phrase: tag.quotedPhrase,
         reasoning: tag.reasoning,
         source_stage: tag.source,
+        citations: (tag.citations ?? []).map(toEntryTagCitation),
       });
       if (tagError) throw tagError;
     }

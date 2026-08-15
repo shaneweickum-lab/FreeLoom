@@ -218,6 +218,20 @@ export type TagConfidence = "high" | "medium" | "low" | "human";
  * "human" for a parent-authored tag). */
 export type TagSource = "knowledge_base" | "heuristic_cluster" | "retrieval" | "fragment_composition" | "human";
 
+/** A snapshot of a research_citations row as it looked at the moment a tag
+ * was accepted -- deliberately a copy, not a live join, same reasoning as
+ * quoted_phrase/reasoning already snapshotting the pipeline's state at
+ * accept time rather than re-deriving it later. Slimmed to just what the
+ * reasoning panel actually displays (see ResearchCitation in this same
+ * file for the full row shape findSupportingCitations() matches against). */
+export type EntryTagCitation = {
+  id: string;
+  title: string;
+  source: string;
+  source_url: string | null;
+  evidence_level: string;
+};
+
 /** One subject tag for an entry -- the "why this mapping" reasoning panel's
  * unit of display/edit. An entry can have more than one when the word dump
  * genuinely named more than one distinct subject. */
@@ -242,6 +256,11 @@ export type PipelineEntrySubjectTag = {
   quoted_phrase: string | null;
   reasoning: string;
   source_stage: TagSource;
+  /** Research Library citations that backed this tag up at classify time
+   * (see findSupportingCitations() in lib/research/matchCitations.ts) --
+   * always an array, empty when nothing matched or for a row created
+   * before this column existed. */
+  citations: EntryTagCitation[];
   created_at: string;
 };
 
