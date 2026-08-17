@@ -78,3 +78,80 @@ def test_novel_subject_area_is_not_penalized():
     draft = dict(GOOD_DRAFT, subject_area="Some Brand New Niche Subject")
     result = validate_kb_entry(draft)
     assert bool(result) is True
+
+
+# The checks below all guard against the same real failure mode: a
+# repetition-loop decode collapse that still trivially satisfies every
+# check above (a non-empty list, a long-enough rationale). Each example
+# is drawn from an actual early kb_authoring checkpoint's eval transcript,
+# not invented -- these are real degenerate completions that the
+# pre-repetition-check validator scored as "valid: True".
+
+
+def test_repeated_keywords_fail():
+    draft = dict(GOOD_DRAFT, keywords=["sailing"] * 8)
+    result = validate_kb_entry(draft)
+    assert bool(result) is False
+    assert any("keywords" in e and "repetitive" in e for e in result.errors)
+
+
+def test_repeated_skills_fail():
+    draft = dict(GOOD_DRAFT, skills=["procedural memory"] * 3 + ["fine motor control"])
+    result = validate_kb_entry(draft)
+    assert bool(result) is False
+    assert any("skills" in e and "repetitive" in e for e in result.errors)
+
+
+def test_keywords_with_a_couple_genuine_repeats_still_passes():
+    # A little natural overlap (e.g. a topic mentioned in two different
+    # phrasings) shouldn't be penalized the same as an outright loop --
+    # only when duplicates dominate the list.
+    draft = dict(GOOD_DRAFT, keywords=["hand-lettering", "hand-lettering", "brush lettering", "calligraphy", "copy"])
+    result = validate_kb_entry(draft)
+    assert bool(result) is True
+
+
+def test_echoed_field_label_as_keyword_fails():
+    draft = dict(GOOD_DRAFT, keywords=["keywords:"])
+    result = validate_kb_entry(draft)
+    assert bool(result) is False
+    assert any("field label" in e for e in result.errors)
+
+
+def test_word_repetition_loop_in_rationale_fails():
+    # Real completion from checkpoint eval, index [98] (sailing example).
+    draft = dict(
+        GOOD_DRAFT,
+        rationale=(
+            "Crafting, and the same time, and the same procedural and adjusting and adjusting and adjusting and "
+            "the same procedural and the same procedural memory and the same procedural memory and the same "
+            "procedural and the same time, and procedural memory and the same coursework."
+        ),
+    )
+    result = validate_kb_entry(draft)
+    assert bool(result) is False
+    assert any("decode loop" in e for e in result.errors)
+
+
+def test_phrase_repetition_loop_in_rationale_fails():
+    # Real completion from checkpoint eval, index [100] (speedcubing example).
+    draft = dict(
+        GOOD_DRAFT,
+        rationale=(
+            "Crafting, and testing and testing and testing and testing and testing and testing and testing and "
+            "testing and testing and testing and testing and testing and testing and testing and measuring, which "
+            "mirrors the same coursework."
+        ),
+    )
+    result = validate_kb_entry(draft)
+    assert bool(result) is False
+    assert any("decode loop" in e for e in result.errors)
+
+
+def test_genuinely_good_rationale_is_not_penalized_for_normal_word_reuse():
+    # Real prose naturally reuses common words ("and", "the") without that
+    # being a decode loop -- the good control draft itself should never
+    # trip these checks.
+    result = validate_kb_entry(GOOD_DRAFT)
+    assert bool(result) is True
+    assert result.errors == []
