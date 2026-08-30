@@ -4,7 +4,6 @@ import { resolveHouseholdOwnerId } from "@/lib/household";
 import { classifyWordDump, type ClassifyResult, type TagConfidence } from "@/lib/pipeline/classify";
 import { findRetrievalMatch } from "@/lib/pipeline/retrieve";
 import { composeFromFragments } from "@/lib/pipeline/compose";
-import { callEntryDraftingAdapter } from "@/lib/pipeline/slmDraft";
 import { getKnowledgeBase, KNOWLEDGE_BASE, type KnowledgeBaseEntry } from "@/lib/knowledgeBase";
 import { getResearchCitations } from "@/lib/research/matchCitations";
 import type { ResearchCitation } from "@/lib/types";
@@ -150,24 +149,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // A confident result reaches here without having returned already
-  // exactly when worthRetrying was false from the start (stage1 already
-  // had a real knowledge-base-quality tag, so Stage 2/3 were never even
-  // attempted) -- Stage 4 must never run in that case, per this route's
-  // own contract, so return before it rather than wastefully calling the
-  // SLM adapter (and stapling an unused draftCandidate onto an already-
-  // confident response) on every single confident classification.
-  if (stage1.confident) {
-    return NextResponse.json(stage1);
-  }
-
-  // Stage 4: everything above missed. Feature-flagged and best-effort --
-  // see src/lib/pipeline/slmDraft.ts for why this was a null no-op in
-  // every environment for a long time (no longer true once real weight
-  // files are bundled -- see hasWeights() in benny/inference/weights.ts).
-  const draftCandidate = await callEntryDraftingAdapter({
-    rawWordDump,
-    extractedSlots: stage1.extractedSlots,
-  });
-  return NextResponse.json({ ...stage1, draftCandidate });
+  // Everything above missed -- stage1.confident is false here regardless
+  // of whether worthRetrying ever ran. Stage 4 (drafting a candidate
+  // instead of handing back nothing) used to run here too, server-side,
+  // via this project's own hand-trained model -- it now runs client-side
+  // instead, in the browser, via src/lib/pipeline/webllmDraft.ts, since
+  // WebGPU has no server-side equivalent to call into from a Vercel/Node
+  // route. The caller (log/page.tsx) is the one that attempts Stage 4 now,
+  // after seeing `confident: false` here.
+  return NextResponse.json(stage1);
 }

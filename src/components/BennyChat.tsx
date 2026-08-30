@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { isMobileDevice } from "@/lib/benny/webllm/capabilities";
+import { generateBennyReply, type ChatMessage } from "@/lib/benny/webllm/chatCompletion";
+import { buildRetrievedContext } from "@/lib/benny/webllm/platformDocsRetrieval";
 import type { BennyMessage } from "@/lib/types";
 
 /** "Benny is thinking" -- same bounce-dot animation as MessageThread.tsx's
@@ -29,6 +32,7 @@ export default function BennyChat({ conversationId }: { conversationId: string }
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,18 +64,48 @@ export default function BennyChat({ conversationId }: { conversationId: string }
     setSending(true);
     setError("");
     setBody("");
-    const res = await fetch("/api/benny/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId, body: trimmed }),
-    });
-    const data = await res.json();
-    setSending(false);
-    if (!res.ok) {
-      setError(data.error ?? "Something went wrong.");
-      return;
+    try {
+      // Step 1: save the user's message server-side -- this is also where
+      // the launch switch, plan/tier, and usage-cap gates live, before any
+      // generation is attempted at all.
+      const sendRes = await fetch("/api/benny/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, body: trimmed }),
+      });
+      const sendData = await sendRes.json();
+      if (!sendRes.ok) {
+        setError(sendData.error ?? "Something went wrong.");
+        return;
+      }
+      setMessages((prev) => [...prev, sendData.userMessage]);
+
+      // Step 2: generate the reply client-side (WebLLM, Llama 3.2 1B or
+      // Qwen2.5 0.5B on mobile) -- no server involved, and always resolves
+      // to a real reply string (see chatCompletion.ts's own doc comment).
+      const reply = await generateBennyReply(sendData.messages as ChatMessage[], {
+        isMobile: isMobileDevice(navigator.userAgent),
+        onProgress: (report) => setStatus(report.text),
+        extraContext: buildRetrievedContext(trimmed),
+      });
+      setStatus(null);
+
+      // Step 3: save the generated reply and log its usage.
+      const replyRes = await fetch("/api/benny/messages/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, body: reply }),
+      });
+      const replyData = await replyRes.json();
+      if (!replyRes.ok) {
+        setError(replyData.error ?? "Something went wrong.");
+        return;
+      }
+      setMessages((prev) => [...prev, replyData.assistantMessage]);
+    } finally {
+      setSending(false);
+      setStatus(null);
     }
-    setMessages((prev) => [...prev, data.userMessage, data.assistantMessage]);
   }
 
   if (loading) {
@@ -97,6 +131,7 @@ export default function BennyChat({ conversationId }: { conversationId: string }
         ))}
         {sending && <ThinkingDots />}
       </div>
+      {status && <p className="text-xs text-muted italic">{status}</p>}
       <form onSubmit={handleSend} className="flex gap-2">
         <textarea
           value={body}

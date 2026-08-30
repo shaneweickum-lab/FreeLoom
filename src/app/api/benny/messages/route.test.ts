@@ -26,8 +26,9 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }));
 
-vi.mock("@/lib/benny/chat", () => ({
-  callBennyChat: vi.fn(async () => ({ reply: "a benny reply", tokens: 123 })),
+const isRateLimitedMock = vi.fn(() => false);
+vi.mock("@/lib/rateLimit", () => ({
+  isRateLimited: () => isRateLimitedMock(),
 }));
 
 // Every other test in this file is about the tier/cap/ownership logic
@@ -49,7 +50,6 @@ vi.mock("@/lib/billing/tier", async (importOriginal) => {
 });
 
 import { POST } from "./route";
-import { callBennyChat } from "@/lib/benny/chat";
 
 function makeRequest(body: unknown): NextRequest {
   return { json: async () => body } as unknown as NextRequest;
@@ -81,6 +81,24 @@ describe("POST /api/benny/messages", () => {
     getUserResult = { data: { user: USER } };
     fromQueue = [];
     bennyLaunched = true;
+    isRateLimitedMock.mockReturnValue(false);
+  });
+
+  it("rejects when signed out", async () => {
+    getUserResult = { data: { user: null } };
+    const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("429s once the rate limit is hit", async () => {
+    isRateLimitedMock.mockReturnValue(true);
+    const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
+    expect(res.status).toBe(429);
+  });
+
+  it("requires conversationId and body", async () => {
+    const res = await POST(makeRequest({ conversationId: CONVERSATION_ID }));
+    expect(res.status).toBe(400);
   });
 
   it("403s when the launch kill-switch is off, before ever checking plan/tier", async () => {
@@ -90,18 +108,6 @@ describe("POST /api/benny/messages", () => {
     fromQueue = [AVAILABLE_PROFILE, NO_ADMIN_ROW];
     const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
     expect(res.status).toBe(403);
-    expect(callBennyChat).not.toHaveBeenCalled();
-  });
-
-  it("rejects when signed out", async () => {
-    getUserResult = { data: { user: null } };
-    const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
-    expect(res.status).toBe(401);
-  });
-
-  it("requires conversationId and body", async () => {
-    const res = await POST(makeRequest({ conversationId: CONVERSATION_ID }));
-    expect(res.status).toBe(400);
   });
 
   it("403s when Benny isn't available on the account's plan", async () => {
@@ -112,7 +118,6 @@ describe("POST /api/benny/messages", () => {
     ];
     const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
     expect(res.status).toBe(403);
-    expect(callBennyChat).not.toHaveBeenCalled();
   });
 
   it("429s once the account's Benny token cap is used up", async () => {
@@ -124,7 +129,6 @@ describe("POST /api/benny/messages", () => {
     ];
     const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
     expect(res.status).toBe(429);
-    expect(callBennyChat).not.toHaveBeenCalled();
   });
 
   it("404s when the conversation doesn't exist", async () => {
@@ -139,22 +143,35 @@ describe("POST /api/benny/messages", () => {
     expect(res.status).toBe(403);
   });
 
-  it("inserts both messages, calls Benny, logs usage, and returns them", async () => {
+  it("saves the user's message and returns the full ordered messages list, without calling any model", async () => {
     fromQueue = [
       AVAILABLE_PROFILE,
       NO_ADMIN_ROW,
       { data: OWN_CONVERSATION, error: null }, // ownership check
-      { data: [], error: null }, // history
+      { data: [{ role: "user", body: "earlier question" }, { role: "assistant", body: "earlier answer" }], error: null }, // history
       { data: { id: "m-user", role: "user", body: "hi" }, error: null }, // user message insert
-      { data: { id: "m-assistant", role: "assistant", body: "a benny reply" }, error: null }, // assistant message insert
-      { error: null }, // usage insert
       { error: null }, // conversation update
     ];
     const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.userMessage).toEqual({ id: "m-user", role: "user", body: "hi" });
-    expect(data.assistantMessage).toEqual({ id: "m-assistant", role: "assistant", body: "a benny reply" });
-    expect(callBennyChat).toHaveBeenCalledWith({ history: [], message: "hi" });
+    expect(data.messages).toEqual([
+      { role: "user", content: "earlier question" },
+      { role: "assistant", content: "earlier answer" },
+      { role: "user", content: "hi" },
+    ]);
+  });
+
+  it("500s when the user message insert itself fails", async () => {
+    fromQueue = [
+      AVAILABLE_PROFILE,
+      NO_ADMIN_ROW,
+      { data: OWN_CONVERSATION, error: null },
+      { data: [], error: null },
+      { data: null, error: { message: "boom" } }, // user message insert fails
+    ];
+    const res = await POST(makeRequest({ conversationId: CONVERSATION_ID, body: "hi" }));
+    expect(res.status).toBe(500);
   });
 });

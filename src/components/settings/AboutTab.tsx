@@ -2,6 +2,7 @@ import Link from "next/link";
 import { APP_VERSION } from "@/lib/appVersion";
 import CookiePreferencesButton from "@/components/CookiePreferencesButton";
 import Card from "@/components/ui/Card";
+import { LLAMA_3_2_1B, QWEN_2_5_0_5B } from "@/lib/benny/webllm/models";
 
 const ABOUT_FEATURES = [
   "Learning Log with AI-assisted subject tagging and plain-language reasoning",
@@ -29,6 +30,17 @@ export default function AboutTab() {
           <li key={feature}>{feature}</li>
         ))}
       </ul>
+      <div className="border-t border-navy-line pt-3">
+        <h3 className="text-sm font-semibold">Benny&apos;s AI model</h3>
+        <p className="mt-1 text-sm text-muted">
+          Benny currently runs on <strong className="text-foreground">{LLAMA_3_2_1B.label}</strong> (or{" "}
+          <strong className="text-foreground">{QWEN_2_5_0_5B.label}</strong> automatically on mobile devices),
+          downloaded once and run directly in your browser using your device&apos;s graphics hardware (WebGPU) — not
+          on a FreeLoom server. This is a deliberate, current choice while FreeLoom&apos;s own from-scratch-trained
+          model gets better training infrastructure, not a permanent direction. Downloading the model requires your
+          consent — see the AI model option in cookie preferences below.
+        </p>
+      </div>
       <div className="flex items-center gap-4 border-t border-navy-line pt-3 text-sm">
         <Link href="/terms" className="text-gold hover:underline">
           Terms

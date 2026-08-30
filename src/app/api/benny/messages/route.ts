@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { callBennyChat, type ChatTurn } from "@/lib/benny/chat";
 import { BENNY_ASSISTANT_MODE_LAUNCHED, getBennyUsageWindow, isBennyAvailable } from "@/lib/billing/tier";
+import { isRateLimited } from "@/lib/rateLimit";
 
 const DEFAULT_TITLE = "New conversation";
 const TITLE_MAX_LEN = 50;
@@ -10,11 +10,24 @@ function formatResetDate(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
 
-// Conversation create/list/delete are plain client-side Supabase calls under
-// RLS (see BennyConversations.tsx), same as how MessageThreads.tsx handles
-// support_threads directly -- this route only covers the one step that
-// needs a server-only env var (SLM_CHAT_URL): sending a message and getting
-// Benny's reply.
+/**
+ * Saves a user's message and hands back everything the client needs to
+ * generate Benny's reply itself -- generation moved client-side (WebLLM,
+ * running Llama 3.2 1B or Qwen2.5 0.5B in the browser), so this route no
+ * longer calls a model at all; that's now BennyChat.tsx's job, using the
+ * `messages` array this returns. See ./reply/route.ts for the second half
+ * (saving the reply the client generated and logging its usage) --
+ * intentionally a separate route rather than one action-dispatching
+ * handler, matching this project's existing convention for a multi-step
+ * flow (see src/app/api/household/'s invite/accept/remove split).
+ *
+ * Conversation create/list/delete are plain client-side Supabase calls
+ * under RLS (see BennyConversations.tsx) -- this route (and ./reply)
+ * cover the two steps that need a server-only decision: whether this
+ * account is even allowed to use Benny right now (launch switch, plan
+ * tier, usage cap), and persisting what a client-only flow could
+ * otherwise skip or falsify.
+ */
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -22,6 +35,10 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  if (isRateLimited(`benny-messages:${user.id}`, 20, 60_000)) {
+    return NextResponse.json({ error: "Too many messages -- try again in a minute." }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);
@@ -113,28 +130,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't save that message." }, { status: 500 });
   }
 
-  const { reply, tokens } = await callBennyChat({
-    history: (history ?? []) as ChatTurn[],
-    message: messageBody,
-  });
-
-  const { data: assistantMessage, error: assistantInsertError } = await supabase
-    .from("benny_messages")
-    .insert({ conversation_id: conversationId, user_id: user.id, role: "assistant", body: reply })
-    .select("*")
-    .single();
-  if (assistantInsertError || !assistantMessage) {
-    console.error("benny assistant message insert error:", assistantInsertError);
-    return NextResponse.json({ error: "Couldn't get a reply." }, { status: 500 });
-  }
-
-  // tokens is 0 for a placeholder reply (weights not bundled / generation
-  // error, see callBennyChat) -- nothing real ran, so nothing to log.
-  if (tokens > 0) {
-    const { error: usageInsertError } = await supabase.from("benny_token_usage").insert({ user_id: user.id, tokens });
-    if (usageInsertError) console.error("benny token usage insert error:", usageInsertError);
-  }
-
   // Title is auto-derived from the first message and never changed again --
   // only bump it while it's still the default.
   const updates: { updated_at: string; title?: string } = { updated_at: new Date().toISOString() };
@@ -144,5 +139,14 @@ export async function POST(req: NextRequest) {
   const { error: updateError } = await supabase.from("benny_conversations").update(updates).eq("id", conversationId);
   if (updateError) console.error("benny conversation update error:", updateError);
 
-  return NextResponse.json({ userMessage, assistantMessage });
+  // Full ordered message list (history + the one just saved), already in
+  // the {role, content} shape a WebLLM chat.completions.create() call
+  // expects -- BennyChat.tsx doesn't need to re-derive ordering/shape
+  // itself, just append this to whatever system prompt it's using.
+  const messages = [...(history ?? []), { role: userMessage.role, body: userMessage.body }].map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.body,
+  }));
+
+  return NextResponse.json({ userMessage, messages });
 }

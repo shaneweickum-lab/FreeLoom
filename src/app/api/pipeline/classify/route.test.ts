@@ -52,11 +52,6 @@ vi.mock("@/lib/pipeline/compose", () => ({
   composeFromFragments: (supabase: unknown, input: unknown) => composeFromFragmentsMock(supabase, input),
 }));
 
-const callEntryDraftingAdapterMock = vi.fn<(input: unknown) => Promise<unknown>>(async () => null);
-vi.mock("@/lib/pipeline/slmDraft", () => ({
-  callEntryDraftingAdapter: (input: unknown) => callEntryDraftingAdapterMock(input),
-}));
-
 // Defaults to "this caller owns their own household" (identical to this
 // route's pre-guardian-access behavior) -- the mocked supabase client
 // above has a fixed single-shape chain that doesn't distinguish tables, so
@@ -87,7 +82,6 @@ describe("POST /api/pipeline/classify", () => {
     getResearchCitationsMock.mockResolvedValue([]);
     findRetrievalMatchMock.mockResolvedValue(null);
     composeFromFragmentsMock.mockResolvedValue(null);
-    callEntryDraftingAdapterMock.mockResolvedValue(null);
     resolveHouseholdOwnerIdMock.mockImplementation(async (_supabase, userId) => userId);
   });
 
@@ -133,7 +127,6 @@ describe("POST /api/pipeline/classify", () => {
     expect(body.tags[0].source).toBe("knowledge_base");
     expect(findRetrievalMatchMock).not.toHaveBeenCalled();
     expect(composeFromFragmentsMock).not.toHaveBeenCalled();
-    expect(callEntryDraftingAdapterMock).not.toHaveBeenCalled();
   });
 
   it("falls back to the built-in knowledge base when the DB fetch fails, instead of 500ing", async () => {
@@ -221,32 +214,11 @@ describe("POST /api/pipeline/classify", () => {
     expect(body.tags[0].source).toBe("heuristic_cluster");
   });
 
-  it("falls through to Stage 4 when Stage 1-3 all miss, attaching a draft candidate if the adapter produces one", async () => {
-    callEntryDraftingAdapterMock.mockResolvedValue({
-      subjectArea: "Science",
-      courseTitle: "Applied Chemistry Basics",
-      creditValue: 0.25,
-      rationale: "A plausible fallback rationale long enough to pass validation.",
-    });
+  it("returns confident: false with no draftCandidate field when Stage 1-3 all miss -- Stage 4 now runs client-side, not in this route", async () => {
     const res = await POST(makeRequest({ raw_word_dump: "Zzyzx quaplorp fribbet nonsense words", student_id: STUDENT_ID }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.confident).toBe(false);
-    expect(body.draftCandidate).toEqual(
-      expect.objectContaining({ subjectArea: "Science", courseTitle: "Applied Chemistry Basics" })
-    );
-  });
-
-  it("returns draftCandidate: null when Stage 4 also finds nothing", async () => {
-    const res = await POST(makeRequest({ raw_word_dump: "Zzyzx quaplorp fribbet nonsense words", student_id: STUDENT_ID }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.confident).toBe(false);
-    expect(body.draftCandidate).toBeNull();
-  });
-
-  it("never calls Stage 4 when Stage 1 already returned a confident result", async () => {
-    await POST(makeRequest({ raw_word_dump: "Played chess with dad", student_id: STUDENT_ID }));
-    expect(callEntryDraftingAdapterMock).not.toHaveBeenCalled();
+    expect(body).not.toHaveProperty("draftCandidate");
   });
 });
