@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isMobileDevice } from "@/lib/benny/webllm/capabilities";
 import { generateBennyReply, type ChatMessage } from "@/lib/benny/webllm/chatCompletion";
+import { buildRetrievedContext } from "@/lib/benny/webllm/platformDocsRetrieval";
 import type { BennyMessage } from "@/lib/types";
 
 /** "Benny is thinking" -- same bounce-dot animation as MessageThread.tsx's
@@ -85,6 +86,7 @@ export default function BennyChat({ conversationId }: { conversationId: string }
       const reply = await generateBennyReply(sendData.messages as ChatMessage[], {
         isMobile: isMobileDevice(navigator.userAgent),
         onProgress: (report) => setStatus(report.text),
+        extraContext: buildRetrievedContext(trimmed),
       });
       setStatus(null);
 
