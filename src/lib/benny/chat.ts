@@ -1,4 +1,15 @@
 /**
+ * DORMANT since the Llama 3.2 1B / WebLLM architecture swap -- kept in the
+ * repo rather than deleted (see slmDraft.ts's own dormant-marking comment
+ * for the same reasoning). No live route calls callBennyChat() anymore;
+ * /api/benny/messages/route.ts now only saves the user's message and hands
+ * the client everything it needs to generate a reply itself, client-side,
+ * via src/lib/benny/webllm/ -- ./reply/route.ts saves what comes back.
+ *
+ * Everything below describes how this file worked while it was the live
+ * chat backend, kept for whenever this project's own model training
+ * infrastructure is ready to return to it:
+ *
  * Benny assistant-mode chat backend. Mirrors src/lib/pipeline/slmDraft.ts's
  * feature-flagged, in-process pattern -- inference runs directly inside
  * this app's own Vercel/Node server (src/lib/benny/inference/), no external
@@ -15,7 +26,10 @@
  * open-ended conversation. `history` is accepted in the request contract
  * below for future use, but the current adapter has no multi-turn training
  * data, so each reply is generated from `message` alone (see
- * src/lib/benny/inference/model.ts's chatReply()).
+ * src/lib/benny/inference/model.ts's chatReply()). Llama 3.2 1B Instruct
+ * (the live model now) is a real general-purpose instruction-following
+ * model, so the live path actually does use full multi-turn history --
+ * see src/lib/benny/webllm/chatPrompt.ts.
  */
 
 import { isSlmChatEnabled } from "@/lib/flags";
