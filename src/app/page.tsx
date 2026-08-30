@@ -154,8 +154,8 @@ const FEATURES = [
     icon: IconTarget,
   },
   {
-    title: "Benny, a sovereign SLM",
-    body: "FreeLoom's built-in assistant runs on a small language model trained entirely in-house for this platform -- not a rented third-party API -- so your family's questions and data never have to leave FreeLoom to get an answer.",
+    title: "Benny, running right in your browser",
+    body: "FreeLoom's built-in assistant runs directly on your own device's graphics hardware (WebGPU) -- not a rented third-party API -- so your family's questions never have to leave your browser to get an answer.",
     icon: IconChip,
   },
 ];
