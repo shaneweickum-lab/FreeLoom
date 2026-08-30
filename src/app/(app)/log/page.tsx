@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import type { ActivityType, EntryStatus, EntryTagCitation, PipelineEntry, ResearchCitation, SourceStage, TagConfidence, TagSource } from "@/lib/types";
 import type { DraftSource } from "@/lib/pipeline/classify";
-import type { ClassifyResultWithDraft } from "@/lib/pipeline/slmDraft";
+import type { ClassifyResultWithDraft } from "@/lib/pipeline/draftValidation";
+import { draftEntryClientSide } from "@/lib/pipeline/webllmDraft";
 import { recordRetrievalCase } from "@/lib/pipeline/retrieve";
 import { findLikelyDuplicate, type LikelyDuplicate } from "@/lib/pipeline/duplicateDetection";
 import { sumCredits, creditFromHours, guessIsLabScience } from "@/lib/pipeline/credit-calculation";
@@ -130,9 +131,17 @@ function LogPageInner() {
   // Set only when Stage 4's confidence check comes back empty-handed — the
   // word dump is held here, unsaved, until the parent resolves it via the
   // manual form below (Stage 5).
-  const [needsReview, setNeedsReview] = useState<{ result: ClassifyResultWithDraft; rawWordDump: string } | null>(null);
+  const [needsReview, setNeedsReview] = useState<{ result: ClassifyResultWithDraft; rawWordDump: string; hadClientDraft: boolean } | null>(
+    null
+  );
   const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
   const [resolving, setResolving] = useState(false);
+  // Stage 4 now runs client-side (see webllmDraft.ts) -- a first-ever call
+  // on a fresh browser can mean a real, multi-hundred-MB model download
+  // before a draft candidate comes back, so this surfaces WebLLM's own
+  // loading-progress text instead of leaving the parent staring at an
+  // unexplained pause on top of the classify request's own submitting state.
+  const [draftStatus, setDraftStatus] = useState<string | null>(null);
 
   // Set when arriving from an accepted suggested class on the Profile page
   // (?subject=...&rationale=...) -- a fresh entry for an already-decided
@@ -388,14 +397,17 @@ function LogPageInner() {
 
       if (!result.confident) {
         // Stage 4 → 5: hold the word dump here rather than writing anything
-        // yet. The entry only gets created once the parent resolves it below.
-        // A draftCandidate (Stage 4 SLM fallback, only ever present once
-        // its weight files are bundled -- see isSlmEntryDraftingEnabled())
-        // pre-fills the same manual form a parent would otherwise start
-        // blank -- still fully editable, still requires their own Save
-        // click, never auto-submitted.
-        const draft = result.draftCandidate;
-        setNeedsReview({ result, rawWordDump: form.rawWordDump });
+        // yet. The entry only gets created once the parent resolves it
+        // below. Stage 4 itself runs client-side now (webllmDraft.ts) --
+        // the server route stops at Stage 1-3, since WebGPU has no
+        // server-side equivalent to call into. A draft candidate pre-fills
+        // the same manual form a parent would otherwise start blank --
+        // still fully editable, still requires their own Save click, never
+        // auto-submitted.
+        setDraftStatus("Getting Benny ready to help draft this…");
+        const draft = await draftEntryClientSide(form.rawWordDump, (report) => setDraftStatus(report.text));
+        setDraftStatus(null);
+        setNeedsReview({ result, rawWordDump: form.rawWordDump, hadClientDraft: !!draft });
         setManualForm(
           draft
             ? { subjectArea: draft.subjectArea, courseTitle: draft.courseTitle, description: draft.rationale }
@@ -785,6 +797,7 @@ function LogPageInner() {
       {!needsReview ? (
         <>
           <CaptureCard form={form} onChange={setForm} onSubmit={submitWordDump} submitting={submitting} error={error} />
+          {draftStatus && <p className="text-xs text-muted italic">{draftStatus}</p>}
           {duplicateWarning && (
             <div className="flex flex-col gap-2 rounded-lg border border-gold/40 bg-surface shadow-sm p-4 text-sm">
               <p className="font-medium">Looks like you may have already logged this today</p>
@@ -808,7 +821,7 @@ function LogPageInner() {
             Nothing in the knowledge base or keyword rules matched this one — write the class entry yourself. This also
             teaches the system: every entry resolved here becomes a candidate for a new rule down the line.
           </p>
-          {needsReview.result.draftCandidate && (
+          {needsReview.hadClientDraft && (
             <p className="text-xs font-medium text-gold w-fit rounded-full border border-gold/40 px-2 py-0.5">
               AI-drafted — please review carefully before saving
             </p>

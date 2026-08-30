@@ -1,4 +1,23 @@
 /**
+ * DORMANT since the Llama 3.2 1B / WebLLM architecture swap -- kept in the
+ * repo rather than deleted (see the batch history around that decision),
+ * but no live route calls callEntryDraftingAdapter() below anymore.
+ * /api/pipeline/classify/route.ts stops at Stage 1-3 server-side now;
+ * Stage 4 drafting runs entirely client-side, in the browser, via
+ * src/lib/pipeline/webllmDraft.ts -- WebGPU has no server-side equivalent
+ * to call into from a Vercel/Node route. This file's actual generator
+ * (src/lib/benny/inference/, this project's own hand-trained BitNet model)
+ * is the one being paused, not the Stage 4 safeguards -- validateDraftCandidate
+ * and its ClassifyResultWithDraft/DraftCandidate types now live in
+ * draftValidation.ts, re-exported here for this file's own (still-passing)
+ * tests and so this file's public API hasn't changed shape, and
+ * webllmDraft.ts imports that same shared implementation directly rather
+ * than a second copy that could drift from this one.
+ *
+ * Everything below this comment describes how this file worked while it
+ * was the live Stage 4 path, kept for whenever this project's own model
+ * training infrastructure is ready to return to it:
+ *
  * Stage 4 fallback: when Stage 1-3 all miss, ask the entry-drafting SLM
  * adapter for a candidate instead of handing the parent a blank form. Per
  * docs/slm-strategy.md Section 6/8: feature-flagged, never overrides a
@@ -22,60 +41,11 @@
 import { isSlmEntryDraftingEnabled } from "@/lib/flags";
 import { draftEntry } from "@/lib/benny/inference/model";
 import { agreesWithClassicalClassifier } from "@/lib/pipeline/subjectClassifier";
-import type { ClassifyResult, ExtractedSlots } from "@/lib/pipeline/classify";
+import { validateDraftCandidate, type DraftCandidate } from "@/lib/pipeline/draftValidation";
+import type { ExtractedSlots } from "@/lib/pipeline/classify";
 
-export type DraftCandidate = {
-  subjectArea: string;
-  courseTitle: string;
-  creditValue: number;
-  rationale: string;
-};
-
-/** What the classify API route actually returns once Stage 4 is wired in --
- * every existing ClassifyResult shape, plus an optional draft candidate
- * that's only ever present on the NeedsHumanReview branch. Kept as an
- * augmentation rather than a change to ClassifyResult itself so
- * classify.ts (Stage 1) stays exactly as unaware of Stage 4 as its own
- * header comment already says every other caller should be. */
-export type ClassifyResultWithDraft = ClassifyResult & { draftCandidate?: DraftCandidate | null };
-
-// Mirrors ml/eval/validate_output.py's validate_draft() -- same rules, TS
-// side, since a draft that fails this check needs to fall through to Stage
-// 5 before it ever reaches the UI, not after a round-trip through Python.
-// Keep these two in sync if either changes.
-const MIN_CREDIT_VALUE = 0.05;
-const MAX_CREDIT_VALUE = 1.0;
-const MIN_RATIONALE_LEN = 20;
-const MIN_COURSE_TITLE_LEN = 4;
-const GENERIC_TITLE_PHRASES = new Set(["learning skills", "general studies", "misc activity", "activity"]);
-
-/** docs/slm-strategy.md Section 7's first safeguard: "reject a draft that
- * doesn't have a valid subject_area, a plausible credit_value, or all
- * required fields; fall through to Stage 5 same as any other low-confidence
- * case." Shape/range only -- the second safeguard (cross-checking the
- * drafted subject_area against the classical classifier) is a separate,
- * independent check; see agreesWithClassicalClassifier() in
- * pipeline/subjectClassifier.ts, called from callEntryDraftingAdapter()
- * below rather than folded into this function, since Section 7 treats them
- * as two distinct signals, not one combined validity check. */
-export function validateDraftCandidate(candidate: unknown): candidate is DraftCandidate {
-  if (!candidate || typeof candidate !== "object") return false;
-  const c = candidate as Record<string, unknown>;
-
-  if (typeof c.subjectArea !== "string" || !c.subjectArea.trim()) return false;
-  if (typeof c.courseTitle !== "string" || !c.courseTitle.trim()) return false;
-  if (typeof c.rationale !== "string" || !c.rationale.trim()) return false;
-  if (typeof c.creditValue !== "number" || Number.isNaN(c.creditValue)) return false;
-
-  const courseTitle = c.courseTitle.trim();
-  if (courseTitle.length < MIN_COURSE_TITLE_LEN) return false;
-  if (GENERIC_TITLE_PHRASES.has(courseTitle.toLowerCase())) return false;
-
-  if (c.rationale.trim().length < MIN_RATIONALE_LEN) return false;
-  if (c.creditValue < MIN_CREDIT_VALUE || c.creditValue > MAX_CREDIT_VALUE) return false;
-
-  return true;
-}
+export { validateDraftCandidate };
+export type { DraftCandidate, ClassifyResultWithDraft } from "@/lib/pipeline/draftValidation";
 
 /** Runs the entry-drafting adapter in-process, if its weight files are
  * bundled with this deployment. Best-effort: not-yet-bundled, an unparseable
