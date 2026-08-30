@@ -14,6 +14,7 @@ export default function CookieConsentBanner() {
   const [customizing, setCustomizing] = useState(false);
   const [analytics, setAnalytics] = useState(consent?.analytics ?? false);
   const [marketing, setMarketing] = useState(consent?.marketing ?? false);
+  const [aiModel, setAiModel] = useState(consent?.aiModel ?? false);
 
   const hasExistingDecision = consent !== null;
 
@@ -44,11 +45,15 @@ export default function CookieConsentBanner() {
           <>
             <p className="text-sm text-foreground">
               FreeLoom uses one essential cookie to keep you signed in -- nothing else, no analytics or advertising
-              cookies today. See our{" "}
+              cookies today. Benny&apos;s AI features (assistant-mode chat and activity-drafting help) run a real AI
+              model downloaded straight into your browser and cached there -- a genuinely large one-time download,
+              not a cookie in the usual sense. &quot;Accept all&quot; below includes allowing that download to start
+              automatically the first time you use one of those features; choose Customize if you&apos;d rather
+              opt out of just that part. See our{" "}
               <Link href="/privacy" className="text-gold hover:underline">
                 Privacy &amp; Cookie Policy
               </Link>{" "}
-              for the full list and what it would mean if that ever changes.
+              for the full details.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={acceptAll} className="btn-primary text-sm">
@@ -109,9 +114,25 @@ export default function CookieConsentBanner() {
                   className="shrink-0"
                 />
               </label>
+              <label className="flex items-center justify-between gap-2 rounded-md border border-navy-line px-3 py-2">
+                <span>
+                  <span className="font-medium">Benny&apos;s AI model</span>
+                  <span className="block text-xs text-muted">
+                    Downloads and caches an AI model (Llama 3.2 1B, or a smaller Qwen2.5 model on mobile) in your
+                    browser to power assistant-mode chat and activity-drafting help. Off means those features stay
+                    unavailable until you turn this on.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={aiModel}
+                  onChange={(e) => setAiModel(e.target.checked)}
+                  className="shrink-0"
+                />
+              </label>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => savePreferences({ analytics, marketing })} className="btn-primary text-sm">
+              <button onClick={() => savePreferences({ analytics, marketing, aiModel })} className="btn-primary text-sm">
                 Save preferences
               </button>
               <button

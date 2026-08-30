@@ -29,6 +29,11 @@ export default function PrivacyPage() {
           <li>We store what you type in: parent account info, student profiles, learning entries, and support messages.</li>
           <li>Billing is handled by Stripe -- we never see or store your card number.</li>
           <li>
+            If you turn on Benny&apos;s AI features, your browser downloads and runs an AI model directly on your
+            own device -- that model never leaves your browser, and the word dumps/messages it processes for you
+            aren&apos;t sent to a separate AI provider to do so.
+          </li>
+          <li>
             We don&apos;t sell data, and we don&apos;t share it with anyone except the service providers listed
             below, who only process it on our behalf.
           </li>
@@ -37,7 +42,7 @@ export default function PrivacyPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="font-serif text-lg font-bold">Cookies &amp; local storage</h2>
-        <p className="text-sm text-muted">FreeLoom uses exactly two client-side storage mechanisms:</p>
+        <p className="text-sm text-muted">FreeLoom uses these client-side storage mechanisms:</p>
         <div className="rounded-lg border border-navy-line overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-navy-soft text-muted text-xs uppercase tracking-wide">
@@ -58,6 +63,20 @@ export default function PrivacyPage() {
                 <td className="px-4 py-2 text-muted">Remembers which student profile you last had selected.</td>
                 <td className="px-4 py-2 text-muted">Functional</td>
               </tr>
+              <tr className="border-t border-navy-line">
+                <td className="px-4 py-2 font-mono text-xs">freeloom-cookie-consent (local storage)</td>
+                <td className="px-4 py-2 text-muted">Remembers your cookie/AI-model choices so we don&apos;t ask every visit.</td>
+                <td className="px-4 py-2 text-muted">Strictly necessary</td>
+              </tr>
+              <tr className="border-t border-navy-line">
+                <td className="px-4 py-2 font-mono text-xs">AI model weights (browser cache / IndexedDB)</td>
+                <td className="px-4 py-2 text-muted">
+                  Benny&apos;s AI model (Llama 3.2 1B, or Qwen2.5 0.5B on mobile), downloaded once and reused across
+                  visits so it doesn&apos;t re-download every time. Only starts if you accept this in the cookie
+                  banner or turn on Benny in Settings.
+                </td>
+                <td className="px-4 py-2 text-muted">AI model (opt-in)</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -69,6 +88,26 @@ export default function PrivacyPage() {
           <span className="italic">Cookie preferences</span>
           {" "}
           link in the footer, or in Settings &gt; About if you&apos;re signed in.
+        </p>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-serif text-lg font-bold">Benny&apos;s AI model</h2>
+        <p className="text-sm text-muted">
+          Benny&apos;s assistant-mode chat and activity-drafting help run entirely on-device, using your browser&apos;s
+          own graphics hardware (WebGPU) rather than a server -- when you turn this on, your browser downloads a
+          real AI model (Meta&apos;s Llama 3.2 1B on most devices, Alibaba&apos;s smaller Qwen2.5 0.5B on mobile,
+          both distributed by the MLC/WebLLM project) and keeps it cached locally so it isn&apos;t re-downloaded on
+          later visits. This is a genuinely large one-time download -- expect it to use several hundred megabytes
+          to roughly a gigabyte of storage and bandwidth, and it needs a browser/device with WebGPU support; if
+          yours doesn&apos;t have it, these features stay unavailable rather than failing partway through.
+        </p>
+        <p className="text-sm text-muted">
+          Because generation happens on your own device, the word dumps and messages you send to Benny for this
+          purpose aren&apos;t transmitted to us or to a third-party AI provider to produce that reply -- they&apos;re
+          still saved to your account the same as any other entry or message, exactly as described elsewhere on
+          this page. This is a deliberate, current choice of models, not a permanent one -- see Settings &gt; About
+          for which model is actually running at any given time.
         </p>
       </section>
 
