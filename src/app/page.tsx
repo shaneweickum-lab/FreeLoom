@@ -269,12 +269,15 @@ export default async function Home() {
           <p className="text-muted text-sm max-w-lg">
             Create your parent account and add your first student in under two minutes.
           </p>
-          <Link
-            href="/login"
-            className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink shadow-sm hover:bg-gold-hover transition-colors"
+          {/* Sign-up is disconnected, not removed, during the redesign --
+              see ParallaxHero's maintenance banner. */}
+          <span
+            aria-disabled="true"
+            title="Sign-ups are paused during our redesign"
+            className="rounded-md bg-gold/50 px-5 py-2.5 font-medium text-ink/70 shadow-sm cursor-not-allowed"
           >
             Get Started
-          </Link>
+          </span>
         </section>
         </main>
 

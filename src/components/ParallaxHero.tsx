@@ -56,6 +56,13 @@ export default function ParallaxHero() {
 
   return (
     <>
+      {/* Maintenance-mode notice -- always visible regardless of scroll,
+          unlike the nav below it, so it can't be missed by fading in/out.
+          The nav's own top offset accounts for this bar's height (h-10). */}
+      <div className="fixed inset-x-0 top-0 z-40 flex h-10 items-center justify-center bg-gold px-4 text-center text-sm font-medium text-ink">
+        FreeLoom is undergoing a redesign — we&apos;ll be back online soon.
+      </div>
+
       <div aria-hidden className="fixed inset-0 -z-20 overflow-hidden">
         <Image src="/IMG_5290.png" alt="" fill preload sizes="100vw" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-background/20 via-background/10 to-background/70" />
@@ -64,7 +71,7 @@ export default function ParallaxHero() {
       </div>
 
       <nav
-        className="fixed inset-x-0 top-0 z-30 border-b border-navy-line bg-background/80 backdrop-blur"
+        className="fixed inset-x-0 top-10 z-30 border-b border-navy-line bg-background/80 backdrop-blur"
         style={{ opacity: reveal, pointerEvents: reveal > 0.05 ? "auto" : "none" }}
       >
         <div className="mx-auto max-w-5xl flex items-center justify-between px-4 sm:px-6 py-4">
@@ -79,12 +86,15 @@ export default function ParallaxHero() {
             <a href="#features" className="hidden sm:inline text-muted hover:text-foreground transition-colors">
               Features
             </a>
-            <Link
-              href="/login"
-              className="rounded-md border border-gold/40 px-4 py-1.5 font-medium text-gold hover:bg-gold/10 transition-colors"
+            {/* Sign-in is disconnected, not removed, during the redesign --
+                see the maintenance banner above. */}
+            <span
+              aria-disabled="true"
+              title="Sign-ins are paused during our redesign"
+              className="rounded-md border border-gold/40 px-4 py-1.5 font-medium text-gold/50 cursor-not-allowed"
             >
               Sign in
-            </Link>
+            </span>
           </div>
         </div>
       </nav>
@@ -120,12 +130,13 @@ export default function ParallaxHero() {
           not the thing you&apos;re stuck maintaining every day.
         </p>
         <div className="flex flex-wrap justify-center gap-4 mt-2">
-          <Link
-            href="/login"
-            className="rounded-md bg-gold px-5 py-2.5 font-medium text-ink shadow-sm hover:bg-gold-hover hover:shadow-md transition-all"
+          <span
+            aria-disabled="true"
+            title="Sign-ups are paused during our redesign"
+            className="rounded-md bg-gold/50 px-5 py-2.5 font-medium text-ink/70 shadow-sm cursor-not-allowed"
           >
             Get Started
-          </Link>
+          </span>
           <a
             href="#how-it-works"
             className="rounded-md border border-border bg-surface px-5 py-2.5 font-medium text-foreground shadow-sm hover:bg-surface-hover transition-colors"
