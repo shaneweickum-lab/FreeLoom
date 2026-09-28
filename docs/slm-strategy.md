@@ -56,7 +56,40 @@ negative-transfer failure mode that a naive shared-head design would risk. The
 application code — which already knows which job it needs — swaps in the right adapter.
 No learned gate, no ambiguity to resolve at inference time.
 
-## 3. Size and architecture: v0.7, ~51.3M parameters, native BitNet b1.58
+## 3. Size and architecture: v0.8, ~196.9M parameters, dense bf16 (v0.7 history below)
+
+v0.8 is a genuine architecture change, not another turn of v0.5-v0.7's same
+sizing staircase: it drops native BitNet b1.58 ternary quantization
+entirely in favor of a plain dense transformer trained in bf16, and grows
+from ~51.3M to ~196.9M parameters (1024 d_model, 15 layers, 16 heads,
+head_dim=64, vocab_size=8000 unchanged -- see `ml/model/config.py`).
+Reasons, in order:
+
+- **Ternary quantization's own training-time cost was the real bottleneck,
+  not model capacity.** Every v0.5-v0.7 sizing attempt (documented in full
+  below and in `ml/RESULTS.md`) ran into a throughput ceiling that turned
+  out to trace back to `BitLinear`'s straight-through-estimator
+  re-quantization on every forward pass -- compute-heavier per step than an
+  equivalent plain dense layer, on top of an otherwise-ordinary matmul. That
+  overhead exists specifically because training needs gradients to flow
+  through the quantization step; dropping quantization removes it outright,
+  rather than requiring another round of hardware bisection to work around
+  it at a bigger size.
+- **AdamW replaces Sophia as the default.** Sophia's second-order Hessian
+  estimate (`ml/model/sophia.py`) was adopted specifically to offset
+  BitNet's training-time overhead by converging in fewer steps -- a
+  reasonable trade when steps were expensive. With that overhead gone,
+  AdamW (the standard choice, and the one every other decision in this
+  section didn't have to be re-validated against) is the simpler default;
+  Sophia stays available via `--optimizer sophia` for anyone who wants to
+  compare the two on real data.
+- **40 tokens/parameter stays exactly the same ratio** (`TRAIN_TOKENS_PER_PARAM`
+  in `ml/model/config.py`) -- this is a size and training-mechanics change,
+  not a re-litigation of the deliberate-overtraining trade-off Section 3's
+  v0.7 discussion below already settled. At v0.8's ~196.9M params that's
+  **~7.88B tokens**, recomputed from the same formula, not a new ratio.
+
+### v0.5-v0.7 sizing history (native BitNet b1.58, superseded)
 
 - **~26.1M ternary parameters** (512 d_model, 7 layers, 8 heads, head_dim=64,
   vocab_size=8000 — see `ml/model/config.py`), trained natively at 1.58 bits (BitNet's
@@ -132,12 +165,19 @@ No learned gate, no ambiguity to resolve at inference time.
   + FineWeb-Edu ~1.1B filling the remainder), so this is again sized to consume
   essentially the whole packed corpus rather than waste most of it to subsampling.
 
+**v0.8 note**: the 40 tokens/parameter ratio itself is unchanged from v0.7 (see this
+section's top). At v0.8's ~196.9M params that recomputes to **~7.88B tokens** --
+Section 4's numbers below are v0.7's, kept for the historical reasoning; see
+`ml/data/prepare_base_corpus.py` and `ml/train/prepare_dataset.py` for the actual
+current pull/repeat targets (TinyStories still capped at ~950M/2 epochs, FineWeb-Edu
+raised to ~6.95B to fill the rest of the larger budget).
+
 ## 4. Training data: two separate pools for two separate jobs
 
 At v0.7's ~51.3M parameters, the base model's job (general English + broad academic
 register) and the adapters' job (FreeLoom's exact output format) call for genuinely
 different data — conflating them was the original open question here; the settled
-split:
+split (numbers below are v0.7's; see the v0.8 note above for the current targets):
 
 - **Base-pretraining pool — ~2.05B tokens, from already-generated open datasets, not a
   custom scrape**: `ml/data/prepare_base_corpus.py` streams **TinyStories**
@@ -245,42 +285,47 @@ split:
   budget (Section 3). A real number now, not a projection — see `ml/RESULTS.md`,
   2026-07-23, for the complete bisection log across every architecture and batch-size
   variant tried along the way.
-- **v0.7 (512/15/8, ~51.3M params) throughput — not yet measured**. Per this section's
-  own bisection findings above, the memory-pressure cliff tracked total model footprint
-  at d_model=512 growing with depth *and* batch size together (n_layers=5 stayed fast
-  at batch=64; n_layers=7 didn't) -- v0.7 is more than twice as deep as the config that
-  needed batch=16, so batch_size=16 is a starting point to test, not an assumption to
-  trust. Re-run the same halve-until-it-stops-helping bisection from Section 5's
-  earlier entries before committing to a long unattended run, and log the real result
-  in `ml/RESULTS.md` once it's found, same as v0.6's.
-- **Optimizer: Sophia instead of AdamW.** Sophia ("Sophia: A Scalable Stochastic
+- **v0.7 (512/15/8, ~51.3M params) throughput — never measured; superseded before a real
+  run happened.** Per this section's own bisection findings above, the memory-pressure
+  cliff tracked total model footprint at d_model=512 growing with depth *and* batch size
+  together (n_layers=5 stayed fast at batch=64; n_layers=7 didn't) -- v0.7 was more than
+  twice as deep as the config that needed batch=16, so batch_size=16 was flagged as a
+  starting point to re-test, not an assumption to trust. v0.8 (below) replaced the
+  architecture before that re-bisection happened.
+- **v0.8 (1024/15/16, ~196.9M params, dense bf16) — a genuine architecture change, not
+  another turn of this same staircase.** Drops native BitNet ternary quantization
+  entirely: every measurement in this section traced its throughput ceiling back to
+  `BitLinear`'s straight-through-estimator re-quantization overhead, not model capacity
+  or batch size beyond the memory ceiling already found at v0.6. A plain dense
+  transformer (`transformer_mlx.py`'s `DenseLinear`) removes that overhead outright.
+  **Throughput not yet measured** -- this is both a bigger model (1024 vs. 512 d_model)
+  and a fundamentally different compute profile per step (no quantization tax, but no
+  ternary-matmul savings either, which only ever applied at inference time regardless).
+  Start the same halve-until-it-stops-helping batch-size bisection from scratch rather
+  than assuming any prior batch_size value transfers -- see `train/train_base.py`'s
+  own `--batch-size` help text.
+- **Optimizer: AdamW instead of Sophia.** Sophia ("Sophia: A Scalable Stochastic
   Second-order Optimizer for Language Model Pre-training", Liu, Zhang, Basu, Chen, Ma,
-  Liang, Ma & Wang, 2023, https://arxiv.org/abs/2305.14342) replaces AdamW's EMA-of-
-  squared-gradients denominator with a periodically-refreshed diagonal Hessian
-  estimate, clipped before it's applied -- the paper reports reaching a given loss in
-  roughly half the steps AdamW needs at comparable model/data scale, for ~5% extra
-  per-step compute (the Hessian estimate is only recomputed every k=10 steps, not every
-  step). `ml/model/sophia_math.py` has the exact update-rule arithmetic and the
-  reasoning for why the clip matters (it bounds a single step to the learning rate no
-  matter how wrong the Hessian estimate is, the same worst-case guarantee AdamW's own
-  gradient normalization gives for free) -- verified with its own numpy-only unit tests
-  in this sandbox, the same way `bitlinear.py`'s BitNet quantization math is verified
-  without needing MLX. `ml/model/sophia.py` wires that verified arithmetic into an
-  `mlx.optimizers.Optimizer` subclass; unlike the math itself, **the MLX wiring has
-  never run on real hardware** -- validate it with a `--tiny` run before trusting it for
-  the real one, same as any other change to this training loop.
-  `train/train_base.py --optimizer adamw` is kept as a one-flag fallback to v0.6's
-  optimizer in case Sophia misbehaves on the first real run.
+  Liang, Ma & Wang, 2023, https://arxiv.org/abs/2305.14342) was adopted for v0.7
+  specifically to offset BitNet's training-time overhead -- its periodically-refreshed
+  diagonal Hessian estimate reaches a given loss in roughly half the steps AdamW needs
+  at comparable scale, for ~5% extra per-step compute, a reasonable trade when every
+  step was already expensive. With that overhead gone in v0.8's dense architecture,
+  AdamW (the standard choice) is the simpler default; Sophia stays available via
+  `--optimizer sophia` for anyone who wants to compare the two on real data.
+  `ml/model/sophia_math.py`'s update-rule arithmetic is still verified by its own
+  numpy-only unit tests, and `ml/model/sophia.py`'s MLX wiring still **has never run on
+  real hardware** -- unchanged facts, just no longer the default path.
 - **Validate the pipeline at tiny scale first**: `train/train_base.py --tiny` uses a
   deliberately small model (d_model=128, 2 layers) on a small data subsample (minutes,
-  not hours) to confirm the tokenizer, data loading, BitLinear layer, and loss curve all
+  not hours) to confirm the tokenizer, data loading, dense layers, and loss curve all
   behave correctly, before committing to the full run. Standard practice, not a
   shortcut — catches a pipeline bug in an
   hour instead of after days of training. `train/train_base.py`'s full run
   automatically subsamples the already-packed corpus down to whatever the current
-  config's own deliberate-overtraining budget calls for (Section 4) — at v0.6's sizing
-  that's ~2.45B of the ~2.46B packed tokens, effectively no subsampling — the
-  tiny-scale check validates the pipeline, not the data volume.
+  config's own deliberate-overtraining budget calls for (Section 4) — at v0.8's sizing
+  that's ~7.88B of the freshly-packed corpus (Section 4's v0.8 note), effectively no
+  subsampling — the tiny-scale check validates the pipeline, not the data volume.
 
 ## 6. Where it plugs into the pipeline
 

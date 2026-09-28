@@ -10,12 +10,12 @@ from tokenizers import Tokenizer
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 from config import BASE_CONFIG  # noqa: E402
 from lora import attach_lora_adapters, load_adapter  # noqa: E402
-from transformer_mlx import BitNetTransformer  # noqa: E402
+from transformer_mlx import DenseTransformer  # noqa: E402
 
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
 TOKENIZER_PATH = Path(__file__).parent.parent / "tokenizer" / "tokenizer.json"
 
-model = BitNetTransformer(BASE_CONFIG)
+model = DenseTransformer(BASE_CONFIG)
 model.load_weights(str(CKPT_DIR / "base.safetensors"))
 attach_lora_adapters(model)
 load_adapter(model, str(CKPT_DIR / "platform_help_adapter.safetensors"))

@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { useStudents } from "@/lib/studentContext";
 import { resolveHouseholdOwnerId } from "@/lib/household";
 import { useBennyPanel } from "@/lib/bennyPanelContext";
-import { detectWebGpuCapability } from "@/lib/benny/webllm/capabilities";
 import { BENNY_ASSISTANT_MODE_LAUNCHED, isBennyAvailable } from "@/lib/billing/tier";
 import StudentSwitcher from "@/components/StudentSwitcher";
 import LogoMark from "@/components/LogoMark";
@@ -73,20 +72,10 @@ type BennyGateProfile = Pick<
  * school_profiles row (same pattern as useNotifications.ts) -- flipping the
  * toggle in Settings, or a plan change taking effect, should make the chat
  * icon appear/disappear immediately in every open tab, not just after the
- * next full page load.
- *
- * Also gated on WebGPU support (see the architecture decision behind the
- * Llama 3.2 1B / WebLLM swap): chat runs entirely client-side now, so a
- * device without WebGPU genuinely can't run it at all -- the trigger just
- * doesn't render there rather than opening a panel that can only ever show
- * an error, matching the "hide/disable, don't half-show" choice made for
- * this feature specifically. Checked once per mount, independent of the
- * tier-based `enabled` state above it -- WebGPU support doesn't change
- * live the way a subscription toggle can. */
+ * next full page load. */
 function BennyTriggerButton() {
   const { toggle } = useBennyPanel();
   const [enabled, setEnabled] = useState(false);
-  const [webGpuSupported, setWebGpuSupported] = useState(false);
   // Two instances render at once (desktop rail + mobile top bar, one just
   // CSS-hidden) -- see useNotifications.ts's instanceId comment for why each
   // needs its own realtime channel topic.
@@ -150,17 +139,7 @@ function BennyTriggerButton() {
     };
   }, [instanceId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    detectWebGpuCapability().then((capability) => {
-      if (!cancelled) setWebGpuSupported(capability.supported);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!enabled || !webGpuSupported) return null;
+  if (!enabled) return null;
 
   return (
     <button

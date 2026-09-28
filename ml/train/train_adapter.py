@@ -34,7 +34,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 from config import BASE_CONFIG, LORA_ALPHA, LORA_RANK  # noqa: E402
 from lora import attach_lora_adapters, save_adapter_params, trainable_lora_params  # noqa: E402
-from transformer_mlx import BitNetTransformer  # noqa: E402
+from transformer_mlx import DenseTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
@@ -42,7 +42,7 @@ CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
 TASKS = ("entry_drafting", "kb_authoring", "platform_help")
 
 
-def masked_loss_fn(model: BitNetTransformer, inputs: mx.array, targets: mx.array, mask: mx.array) -> mx.array:
+def masked_loss_fn(model: DenseTransformer, inputs: mx.array, targets: mx.array, mask: mx.array) -> mx.array:
     logits = model(inputs)
     per_token = nn.losses.cross_entropy(
         logits.reshape(-1, logits.shape[-1]), targets.reshape(-1), reduction="none"
@@ -62,7 +62,7 @@ def iterate_batches(input_ids: np.ndarray, loss_mask: np.ndarray, batch_size: in
         yield ids[:, :-1], ids[:, 1:], mask[:, 1:]
 
 
-def evaluate(model: BitNetTransformer, input_ids: np.ndarray, loss_mask: np.ndarray, batch_size: int) -> float:
+def evaluate(model: DenseTransformer, input_ids: np.ndarray, loss_mask: np.ndarray, batch_size: int) -> float:
     if len(input_ids) == 0:
         return float("nan")
     rng = np.random.default_rng(0)
@@ -109,7 +109,7 @@ def main():
     train_data = np.load(train_path)
     val_data = np.load(val_path)
 
-    model = BitNetTransformer(BASE_CONFIG)
+    model = DenseTransformer(BASE_CONFIG)
     model.load_weights(args.base_checkpoint)
     # Falls back to attach_lora_adapters' own defaults (config.py's
     # LORA_RANK/LORA_ALPHA) when --rank isn't passed, rather than
@@ -118,7 +118,7 @@ def main():
     attach_lora_adapters(model, **lora_kwargs)
     model.freeze()
 
-    # Unfreeze exactly the LoRA params -- everything else (base BitLinear
+    # Unfreeze exactly the LoRA params -- everything else (base DenseLinear
     # weights, embeddings, layer norms) stays frozen throughout.
     for _, module in model.named_modules():
         if hasattr(module, "lora_a"):

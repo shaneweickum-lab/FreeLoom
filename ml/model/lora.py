@@ -1,8 +1,8 @@
 """
-LoRA adapters over the shared BitNetTransformer's BitLinear projections.
+LoRA adapters over the shared DenseTransformer's DenseLinear projections.
 
 One LoRAAdapterSet per task (entry-drafting, knowledge-base-authoring). The
-base model's BitLinear weights are frozen; only each adapter's own small
+base model's DenseLinear weights are frozen; only each adapter's own small
 A/B matrices train. This is what keeps the two jobs from negative-transfer
 risk (docs/slm-strategy.md Section 2/7) -- task specialization lives in a
 few hundred thousand adapter params each, not in a shared output head.
@@ -15,12 +15,12 @@ import mlx.core as mx
 import mlx.nn as nn
 
 from config import LORA_ALPHA, LORA_DROPOUT, LORA_RANK, ModelConfig
-from transformer_mlx import BitLinear, BitNetTransformer
+from transformer_mlx import DenseLinear, DenseTransformer
 
 
 class LoRALinear(nn.Module):
-    """Wraps a frozen BitLinear layer, adding a trainable low-rank residual:
-    output = BitLinear(x) + (alpha / rank) * (dropout(x) @ A.T @ B.T).
+    """Wraps a frozen DenseLinear layer, adding a trainable low-rank residual:
+    output = DenseLinear(x) + (alpha / rank) * (dropout(x) @ A.T @ B.T).
 
     A is initialized to a small random projection, B to zero, so the
     adapter starts as a true no-op identical to the unadapted base model
@@ -29,7 +29,7 @@ class LoRALinear(nn.Module):
     the very first checkpoint.
     """
 
-    def __init__(self, base: BitLinear, rank: int = LORA_RANK, alpha: int = LORA_ALPHA,
+    def __init__(self, base: DenseLinear, rank: int = LORA_RANK, alpha: int = LORA_ALPHA,
                  dropout: float = LORA_DROPOUT):
         super().__init__()
         self.base = base
@@ -49,9 +49,9 @@ class LoRALinear(nn.Module):
         return base_out + self.scale * lora_out
 
 
-def attach_lora_adapters(model: BitNetTransformer, rank: int = LORA_RANK,
+def attach_lora_adapters(model: DenseTransformer, rank: int = LORA_RANK,
                           alpha: int = LORA_ALPHA, dropout: float = LORA_DROPOUT) -> None:
-    """Replaces every BitLinear projection in-place with a LoRALinear
+    """Replaces every DenseLinear projection in-place with a LoRALinear
     wrapper. Call once per fresh adapter (a new randomly-initialized A, a
     zero-initialized B) -- entry-drafting and knowledge-base-authoring each
     get their own call against their own copy of the frozen base weights.
@@ -63,7 +63,7 @@ def attach_lora_adapters(model: BitNetTransformer, rank: int = LORA_RANK,
         block.mlp.fc_out = LoRALinear(block.mlp.fc_out, rank, alpha, dropout)
 
 
-def trainable_lora_params(model: BitNetTransformer) -> dict:
+def trainable_lora_params(model: DenseTransformer) -> dict:
     """Returns only the LoRA A/B matrices as a flat dict suitable for
     mlx.optimizers -- everything else (the frozen base) is excluded so an
     optimizer step never touches base weights during adapter fine-tuning."""
@@ -82,7 +82,7 @@ def trainable_lora_params(model: BitNetTransformer) -> dict:
     return params
 
 
-def save_adapter(model: BitNetTransformer, path: str) -> None:
+def save_adapter(model: DenseTransformer, path: str) -> None:
     """Saves only the trained LoRA params -- typically a few MB, not the
     ~58M-param base -- so entry_drafting.safetensors and
     kb_authoring.safetensors stay small, independent, swappable artifacts."""
@@ -97,7 +97,7 @@ def save_adapter_params(params: dict, path: str) -> None:
     mx.save_safetensors(path, params)
 
 
-def load_adapter(model: BitNetTransformer, path: str) -> None:
+def load_adapter(model: DenseTransformer, path: str) -> None:
     """Loads a saved adapter's params back onto a model whose LoRA layers
     were already attached via attach_lora_adapters with matching rank."""
     weights = mx.load(path)

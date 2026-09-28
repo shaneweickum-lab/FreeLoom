@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "train"))
 from config import BASE_CONFIG, LORA_ALPHA, LORA_RANK  # noqa: E402
 from lora import attach_lora_adapters, load_adapter  # noqa: E402
-from transformer_mlx import BitNetTransformer  # noqa: E402
+from transformer_mlx import DenseTransformer  # noqa: E402
 from validate_kb_entry import validate_kb_entry  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
@@ -58,7 +58,7 @@ def parse_completion(text: str) -> dict | None:
     return groups
 
 
-def generate(model: BitNetTransformer, tokenizer: Tokenizer, prompt_ids: list[int],
+def generate(model: DenseTransformer, tokenizer: Tokenizer, prompt_ids: list[int],
              max_new_tokens: int = 160, eos_id: int | None = None, repetition_penalty: float = 1.3) -> list[int]:
     """Greedy (argmax) decoding, same as every other generate() in this
     project -- but plain argmax has a well-known failure mode in small
@@ -108,7 +108,7 @@ def main():
     bos_id = tokenizer.token_to_id("<bos>")
     pad_id = tokenizer.token_to_id("<pad>")
 
-    model = BitNetTransformer(BASE_CONFIG)
+    model = DenseTransformer(BASE_CONFIG)
     model.load_weights(args.base_checkpoint)
     lora_kwargs = {"rank": args.rank, "alpha": args.alpha} if args.rank is not None else {}
     attach_lora_adapters(model, **lora_kwargs)

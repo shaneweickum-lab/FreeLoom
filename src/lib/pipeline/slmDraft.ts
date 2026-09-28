@@ -1,25 +1,6 @@
 /**
- * DORMANT since the Llama 3.2 1B / WebLLM architecture swap -- kept in the
- * repo rather than deleted (see the batch history around that decision),
- * but no live route calls callEntryDraftingAdapter() below anymore.
- * /api/pipeline/classify/route.ts stops at Stage 1-3 server-side now;
- * Stage 4 drafting runs entirely client-side, in the browser, via
- * src/lib/pipeline/webllmDraft.ts -- WebGPU has no server-side equivalent
- * to call into from a Vercel/Node route. This file's actual generator
- * (src/lib/benny/inference/, this project's own hand-trained BitNet model)
- * is the one being paused, not the Stage 4 safeguards -- validateDraftCandidate
- * and its ClassifyResultWithDraft/DraftCandidate types now live in
- * draftValidation.ts, re-exported here for this file's own (still-passing)
- * tests and so this file's public API hasn't changed shape, and
- * webllmDraft.ts imports that same shared implementation directly rather
- * than a second copy that could drift from this one.
- *
- * Everything below this comment describes how this file worked while it
- * was the live Stage 4 path, kept for whenever this project's own model
- * training infrastructure is ready to return to it:
- *
- * Stage 4 fallback: when Stage 1-3 all miss, ask the entry-drafting SLM
- * adapter for a candidate instead of handing the parent a blank form. Per
+ * Stage 4 fallback: when Stage 1-3 all miss, ask the entry-drafting adapter
+ * for a candidate instead of handing the parent a blank form. Per
  * docs/slm-strategy.md Section 6/8: feature-flagged, never overrides a
  * confident Stage 1-3 result (only ever called from the branch where none
  * of them matched), and never bypasses Stage 5 -- the candidate only ever

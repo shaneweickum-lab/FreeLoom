@@ -78,15 +78,20 @@ from train_tokenizer import format_example, iter_training_texts  # noqa: E402
 # repeated it 4x (~1.9B tokens) to keep it dominant per this project's design
 # intent (docs/slm-strategy.md Section 4: narrow/simple data should
 # dominate) and the original TinyStories paper's own precedent (training
-# small models over several epochs of this same small corpus). v0.7 repeats
-# it only 2x ("2 sets", ~950M tokens) instead, unchanged even after the
-# 30 -> 40 tokens/param bump below -- the extra tokens that ratio increase
-# calls for all come from raising FineWeb-Edu's own pull target (see
-# ml/data/prepare_base_corpus.py's DEFAULT_FINEWEB_TOKENS) rather than
-# repeating TinyStories a 3rd time, so FineWeb-Edu is now the *larger*
-# overall share of the mix (~54% vs. TinyStories' ~46%) despite TinyStories
-# still being the single dominant individual source. FineWeb-Edu hits its
-# own (now-larger) target in one pass and is never repeated.
+# small models over several epochs of this same small corpus). v0.7 settled
+# on repeating it only 2x ("2 sets", ~950M tokens); v0.8 keeps that same 2x
+# unchanged despite the token budget itself jumping ~4x (~2.05B -> ~7.88B at
+# the new ~196.9M-param, dense-bf16 sizing) -- TinyStories' ~475M-token
+# ceiling doesn't grow just because the model did, and repeating a fixed
+# small corpus indefinitely risks memorization well past what the
+# TinyStories paper's own precedent (a few epochs) actually validated. All
+# of v0.8's extra token budget comes from raising FineWeb-Edu's own pull
+# target instead (see ml/data/prepare_base_corpus.py's
+# DEFAULT_FINEWEB_TOKENS, now ~6.95B), making it the large majority of the
+# mix (~88% vs. TinyStories' ~12%) -- a much bigger swing than v0.6/v0.7's
+# gradual rebalancing, because a token-budget jump this size has to land
+# somewhere and TinyStories has a hard ceiling that isn't it. FineWeb-Edu
+# hits its own (now much larger) target in one pass and is never repeated.
 BASE_CORPUS_REPEATS = {"tinystories.jsonl": 2, "fineweb_edu.jsonl": 1}
 
 

@@ -1,15 +1,4 @@
 /**
- * DORMANT since the Llama 3.2 1B / WebLLM architecture swap -- kept in the
- * repo rather than deleted (see slmDraft.ts's own dormant-marking comment
- * for the same reasoning). No live route calls callBennyChat() anymore;
- * /api/benny/messages/route.ts now only saves the user's message and hands
- * the client everything it needs to generate a reply itself, client-side,
- * via src/lib/benny/webllm/ -- ./reply/route.ts saves what comes back.
- *
- * Everything below describes how this file worked while it was the live
- * chat backend, kept for whenever this project's own model training
- * infrastructure is ready to return to it:
- *
  * Benny assistant-mode chat backend. Mirrors src/lib/pipeline/slmDraft.ts's
  * feature-flagged, in-process pattern -- inference runs directly inside
  * this app's own Vercel/Node server (src/lib/benny/inference/), no external
@@ -26,14 +15,20 @@
  * open-ended conversation. `history` is accepted in the request contract
  * below for future use, but the current adapter has no multi-turn training
  * data, so each reply is generated from `message` alone (see
- * src/lib/benny/inference/model.ts's chatReply()). Llama 3.2 1B Instruct
- * (the live model now) is a real general-purpose instruction-following
- * model, so the live path actually does use full multi-turn history --
- * see src/lib/benny/webllm/chatPrompt.ts.
+ * src/lib/benny/inference/model.ts's chatReply()) -- retrieved platform-doc
+ * context (platformDocsRetrieval.ts) is composed onto that same single
+ * string via chatPrompt.ts's composeChatPrompt(), not modeled as a separate
+ * role. This is new plumbing the current (not-yet-retrained) adapter has
+ * never seen in its own training data -- the 200M-param redesign
+ * (docs/slm-strategy.md) is the point to actually teach it this format;
+ * until then it's inert in practice since nothing is served to a real user
+ * until hasWeights() is true and a retrained checkpoint backs it.
  */
 
 import { isSlmChatEnabled } from "@/lib/flags";
 import { chatReply } from "@/lib/benny/inference/model";
+import { composeChatPrompt } from "@/lib/benny/chatPrompt";
+import { buildRetrievedContext } from "@/lib/benny/platformDocsRetrieval";
 
 const NOT_READY_REPLY = "Benny's still growing and can't chat yet -- check back soon!";
 const TROUBLE_REPLY = "Benny's having trouble answering right now -- try again in a bit.";
@@ -52,7 +47,8 @@ export async function callBennyChat(input: { history: ChatTurn[]; message: strin
   if (!isSlmChatEnabled()) return { reply: NOT_READY_REPLY, tokens: 0 };
 
   try {
-    const result = chatReply(input.message);
+    const prompt = composeChatPrompt(input.message, buildRetrievedContext(input.message));
+    const result = chatReply(prompt);
     return result.reply.trim() ? result : { reply: TROUBLE_REPLY, tokens: 0 };
   } catch (err) {
     console.error("benny chat call failed:", err);

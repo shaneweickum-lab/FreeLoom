@@ -1,5 +1,5 @@
 """
-Architecture sizing for the shared ~51.3M-parameter BitNet base model.
+Architecture sizing for the shared ~196.9M-parameter (v0.8) dense base model.
 
 Pure-Python arithmetic, no MLX dependency -- verifiable in any environment,
 including this one. The MLX model (transformer_mlx.py) is built directly
@@ -16,29 +16,24 @@ class ModelConfig:
                             # sized for the original 76-example proof-of-concept corpus
                             # -- train_base.py asserts these stay in sync, since a
                             # mismatch here means a real token id the tokenizer can
-                            # produce falls outside the model's embedding table).
-    d_model: int = 512      # v0.7: another deliberate step up the staged-growth
-                            # staircase (docs/benny-case-study.md's "long-term vision"),
-                            # kept at v0.6's same d_model=512/head_dim=64 -- the width
-                            # confirmed fast and safe across the whole v0.6 bisection
-                            # (from a ~40x dimension-misalignment regression at
-                            # d_model=464/head_dim=58, through a ~829-tok/s
-                            # memory-pressure regression at n_layers=7/batch_size=64,
-                            # to a real, measured 15,200 tok/s at n_layers=7/
-                            # batch_size=16 -- see ml/RESULTS.md 2026-07-23 for the full
-                            # log). This size spends capacity on DEPTH instead of width
-                            # for exactly that reason: v0.6's bisection showed the memory
-                            # cliff was tied to total model footprint at this width, not
-                            # width itself, so going deeper at the same already-safe
-                            # d_model=512 is the best-evidenced way to grow further,
-                            # though a deeper/bigger model will very likely need an even
-                            # smaller --batch-size than v0.6's 16 to stay off that same
-                            # cliff -- expect to re-run v0.6's batch-size bisection
-                            # (halving from 16 until throughput stops improving) rather
-                            # than assuming 16 still works here untested.
-    n_layers: int = 15       # ~51.3M params (see estimate_param_count()) -- closest
-                            # clean value to the requested ~50M at this width.
-    n_heads: int = 8        # head_dim = 512/8 = 64, a clean power of 2, unchanged from v0.6.
+                            # produce falls outside the model's embedding table). Left
+                            # unchanged at v0.8's resize -- 8,000 tokens is plenty for
+                            # the same English-language corpus at any of these param
+                            # counts; a bigger vocab isn't the lever this resize pulls.
+    d_model: int = 1024     # v0.8: a genuine architecture change, not another step up
+                            # v0.5-v0.7's same staircase -- drops native BitNet ternary
+                            # quantization entirely in favor of a plain dense transformer
+                            # trained in bf16 (see transformer_mlx.py's own doc comment
+                            # for why: RESULTS.md already measured BitLinear's per-step
+                            # QAT overhead as the actual training-speed bottleneck at
+                            # every size tried, not model capacity). Widened from v0.7's
+                            # 512 to 1024 (head_dim stays 64 at 16 heads, still a clean
+                            # power of 2 -- see the alignment lesson from v0.6's ~40x
+                            # regression at head_dim=58, RESULTS.md 2026-07-23) to reach
+                            # ~200M params without an implausibly deep 30+ layer stack.
+    n_layers: int = 15      # ~196.9M params (see estimate_param_count()) -- closest
+                            # clean value to the requested ~200M at this width.
+    n_heads: int = 16       # head_dim = 1024/16 = 64, a clean power of 2.
     mlp_ratio: int = 4
     max_seq_len: int = 512
     dropout: float = 0.1
@@ -88,19 +83,13 @@ def estimate_lora_param_count(cfg: ModelConfig, rank: int = LORA_RANK) -> int:
 
 
 # Chinchilla (Hoffmann et al. 2022) found ~20 tokens/parameter compute-optimal.
-# v0.5/v0.6 both deliberately overtrained well past that (56, then 94
-# tokens/param) -- the same trade LLaMA made, cheap extra pretraining compute
-# for a smaller, cheaper-to-run model at a given quality bar, leaning on how
-# cheap extra TinyStories/FineWeb-Edu tokens are. v0.7 first reversed that
-# trend down to 30 tokens/param (much closer to Chinchilla-optimal), then
-# moved back up to 40 -- still a deliberate step back from v0.6's 94, not a
-# return to the old overtraining trend, just landing a bit further from pure
-# Chinchilla-optimal than the initial 30 attempt. At ~51.3M params that's
-# ~2.05B tokens -- landing almost exactly on the ~2.05B-token corpus v0.7
-# packs (TinyStories x2 ~950M, unchanged, + FineWeb-Edu ~1.1B filling the
-# remainder, see prepare_base_corpus.py/prepare_dataset.py), so this is
-# again sized to consume the whole packed corpus rather than waste most of
-# it to subsampling.
+# v0.5/v0.6 deliberately overtrained well past that (56, then 94 tokens/param),
+# v0.7 settled on 40 (still a real step back from v0.6's 94, not as close to
+# pure Chinchilla-optimal as an earlier 30 attempt) -- v0.8 keeps that same
+# 40:1 ratio unchanged, just recomputed at the new ~196.9M param count. At
+# v0.8's sizing that's ~7.88B tokens -- see prepare_base_corpus.py/
+# prepare_dataset.py for the corpus retargeted to reach this (previously
+# ~2.05B tokens, sized for v0.7's ~51.3M params).
 CHINCHILLA_TOKENS_PER_PARAM = 20
 TRAIN_TOKENS_PER_PARAM = 40
 
