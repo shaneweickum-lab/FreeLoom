@@ -1,13 +1,11 @@
 /**
  * Stage 4's shape/range validation (docs/slm-strategy.md Section 7's first
- * safeguard) -- pulled out of slmDraft.ts into its own module specifically
- * so it has NO dependency on src/lib/benny/inference/ (which reads bundled
- * weight files off disk via node:fs, and so can only ever run server-side).
- * Both the dormant server-side path (slmDraft.ts, re-exports from here)
- * and the live client-side WebLLM path (webllmDraft.ts) validate a
- * drafted candidate through this exact same function -- "same guardrails,
- * different generator" only holds if there's truly one shared
- * implementation, not two copies that can drift.
+ * safeguard). Lives in its own module, separate from slmDraft.ts (which
+ * re-exports from here), so the validation logic itself has no dependency
+ * on src/lib/benny/inference/ (which reads bundled weight files off disk
+ * via node:fs) -- kept this way even though nothing client-side needs
+ * that separation anymore, since it's still the right shape for testing
+ * this logic in isolation from the model-loading machinery around it.
  */
 
 import type { ClassifyResult } from "@/lib/pipeline/classify";
@@ -43,10 +41,9 @@ const GENERIC_TITLE_PHRASES = new Set(["learning skills", "general studies", "mi
  * case." Shape/range only -- the second safeguard (cross-checking the
  * drafted subject_area against the classical classifier) is a separate,
  * independent check; see agreesWithClassicalClassifier() in
- * pipeline/subjectClassifier.ts, called from each generator-specific
- * caller (slmDraft.ts, webllmDraft.ts) rather than folded into this
- * function, since Section 7 treats them as two distinct signals, not one
- * combined validity check. */
+ * pipeline/subjectClassifier.ts, called from slmDraft.ts rather than
+ * folded into this function, since Section 7 treats them as two distinct
+ * signals, not one combined validity check. */
 export function validateDraftCandidate(candidate: unknown): candidate is DraftCandidate {
   if (!candidate || typeof candidate !== "object") return false;
   const c = candidate as Record<string, unknown>;

@@ -1,25 +1,21 @@
 /**
  * Platform-help documentation corpus for Benny assistant-mode chat's RAG
- * grounding (docs/slm-strategy.md Section 1/7's spirit, now serving the
- * live model rather than the retired platform_help LoRA adapter it used
- * to be trained to answer this same category of question). Retrieved
- * chunks get injected into Benny's system prompt (see chatPrompt.ts) so
- * "how does FreeLoom actually work" answers are grounded in real,
- * currently-accurate facts about this codebase instead of the model
- * guessing or hallucinating a plausible-sounding wrong answer.
+ * grounding (docs/slm-strategy.md Section 1/7's spirit, feeding the
+ * platform_help adapter's prompt -- see chatPrompt.ts). Retrieved chunks
+ * get composed into what's fed to the model so "how does FreeLoom
+ * actually work" answers are grounded in real, currently-accurate facts
+ * about this codebase instead of the model guessing or hallucinating a
+ * plausible-sounding wrong answer.
  *
  * Written as plain TS string constants rather than loose .md files under
- * docs/ -- Next.js has no built-in loader for importing raw markdown into
- * a client bundle, and adding one for a handful of short files isn't
- * worth the extra build-tooling dependency. Each entry's `text` is still
- * genuinely markdown-formatted prose; only the storage location changed
- * from the original batch plan, not the content or its editability.
+ * docs/ -- there's no build-tooling reason to import raw markdown for a
+ * handful of short files. Each entry's `text` is still genuinely
+ * markdown-formatted prose.
  *
  * IMPORTANT: every fact below needs to actually be true of this codebase,
  * kept in sync as the product changes -- a stale doc chunk grounding a
  * confidently-wrong answer is arguably worse than no grounding at all.
- * Reviewed for accuracy as of the batch that added this file; re-check
- * this whenever the underlying behavior it describes changes.
+ * Re-check this whenever the underlying behavior it describes changes.
  */
 
 export type PlatformDocChunk = {
@@ -49,7 +45,7 @@ Credit values round to the nearest 0.01 (not a coarser 0.25 step), and a genuine
 1. It's checked against a knowledge base of known activities and keyword clusters. A confident match (a real knowledge-base entry, not just a generic keyword cluster) returns immediately with a subject, course title, and credit value already filled in.
 2. If only a generic cluster matched, FreeLoom checks whether a similar word dump was accepted before for this same student, and reuses that past decision if so.
 3. If neither of those found anything specific, a more detailed course title and reasoning gets composed from known building blocks for that generic cluster.
-4. If everything above misses entirely, Benny (running Llama 3.2 1B in your own browser) drafts a candidate subject/title/credit/reasoning -- but only ever offered if an independent, non-AI classifier agrees the drafted subject is at least plausible; if the two disagree, no draft is shown at all rather than risking a wrong one.
+4. If everything above misses entirely, Benny (FreeLoom's own in-house AI model) drafts a candidate subject/title/credit/reasoning -- but only ever offered if an independent, non-AI classifier agrees the drafted subject is at least plausible; if the two disagree, no draft is shown at all rather than risking a wrong one.
 5. Whatever's left is a blank (or Benny-drafted) form the parent fills in and saves themselves. Every entry resolved this way becomes a candidate for stage 2/3 to reuse on a future similar activity.
 
 FreeLoom also checks whether a new word dump looks suspiciously similar to something already logged for that student earlier the same day, and asks before saving it, to avoid accidentally double-crediting one activity logged twice.`,
@@ -73,7 +69,7 @@ About: which AI model is currently powering Benny, and general app information.`
   {
     id: "benny-ai-model",
     heading: "What model powers Benny",
-    text: `Benny's assistant-mode chat and activity-drafting help run Llama 3.2 1B (or a smaller Qwen2.5 model automatically on mobile devices) directly in your own browser, using your device's graphics hardware (WebGPU) -- not a server, and not FreeLoom's own from-scratch-trained model, which is a deliberate, current choice while better training infrastructure is being built, not a permanent one. The model downloads once (a genuinely large file) and stays cached in your browser for later visits. It needs a browser/device with WebGPU support, and your consent in the cookie banner (or turning it on in Settings) before it will download at all.`,
+    text: `Benny's assistant-mode chat and activity-drafting help run on FreeLoom's own AI model, trained from scratch in-house rather than a third-party service -- your questions and word dumps are processed on FreeLoom's own servers to produce a reply, never sent to an outside AI provider.`,
   },
   {
     id: "research-library",
