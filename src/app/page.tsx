@@ -292,6 +292,13 @@ export default async function Home() {
                 Privacy &amp; Cookie Policy
               </Link>
               <CookiePreferencesButton className="hover:text-foreground hover:underline" />
+              {/* The only working way into the app while the main CTAs are
+                  disconnected for the redesign (see ParallaxHero's
+                  maintenance banner) -- kept low-key so it reads as
+                  internal/testing access, not a public sign-in option. */}
+              <Link href="/login" className="hover:text-foreground hover:underline">
+                Team sign in
+              </Link>
             </div>
           </div>
         </footer>
