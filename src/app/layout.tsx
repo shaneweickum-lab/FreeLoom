@@ -52,7 +52,7 @@ export const metadata: Metadata = {
 // home screen) to match the app's own background instead of Safari's
 // default white/gray chrome.
 export const viewport: Viewport = {
-  themeColor: "#0a0d1c",
+  themeColor: "#f7f2e6",
 };
 
 export default function RootLayout({

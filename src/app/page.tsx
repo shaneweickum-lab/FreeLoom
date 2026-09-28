@@ -218,7 +218,7 @@ export default async function Home() {
                     }}
                   />
                 )}
-                <span className="relative z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gold text-ink text-sm font-semibold font-mono shadow-sm">
+                <span className="relative z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gold-surface text-ink text-sm font-semibold font-mono shadow-sm">
                   {i + 1}
                 </span>
                 <h3 className="font-semibold text-lg font-serif">{step.title}</h3>

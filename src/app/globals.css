@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Woven navy/gold/violet identity, ceremonial-but-clean. Two tiers of tokens
+ * Cream/gold/violet identity, ceremonial-but-clean. Two tiers of tokens
  * on purpose:
  *   - Semantic tokens (background/surface/foreground/muted/border) so every
  *     existing component that already uses bg-background/bg-surface/
@@ -9,21 +9,42 @@
  *   - The brief's explicitly-named tokens (navy-deep/navy/navy-soft/navy-line,
  *     parchment/parchment-line, ink/ink-soft, gold-bright, violet-soft) for new
  *     components that need precise control -- most notably "formal record"
- *     parchment cards, which are light-on-dark islands and need their own
- *     ink-on-parchment text color regardless of the app's dark theme.
+ *     parchment cards, which stay visually distinct regardless of theme.
+ *
+ * Cream/white is the default look (:root below); dark navy is now the
+ * opt-in [data-theme="dark"] override further down, kept for anyone who
+ * prefers it in Settings > Appearance.
+ *
+ * gold/violet are NOT simply carried over unchanged as "accents" -- their
+ * original values (still used in dark mode below) were tuned for contrast
+ * against a dark background (e.g. gold at 8.02:1 on navy-deep) and fall to
+ * a failing ~2.16:1 against the new cream background used as plain text.
+ * --gold/--violet/--violet-soft here are darkened versions of the exact
+ * same hues, each re-verified at >=4.5:1 (WCAG AA normal text) against both
+ * --navy-deep (cream) and --navy-soft (white card) below -- same brand
+ * color, legible on the new background.
+ *
+ * --gold-surface is a new token, not a replacement: a handful of places
+ * (`.btn-primary`, notification/progress dots, the numbered "how it works"
+ * circles) use gold as a SOLID fill with dark ink text drawn on top, not as
+ * text/border color -- that pairing needs gold to stay close to its
+ * original, lighter value for ink to read well against it, which directly
+ * conflicts with darkening --gold for legibility as text. Two tokens, two
+ * jobs: --gold for text/borders/tinted badge backgrounds (the vast
+ * majority of usages), --gold-surface for solid ink-on-gold fills.
+ * --gold-bright pairs with --gold-surface (its brighter gradient/highlight
+ * companion), unchanged from before.
  */
 :root {
-  --navy-deep: #0a0d1c;
-  --navy: #141935;
-  --navy-soft: #1c2242;
-  --navy-line: #2b3260;
-  --gold: #c7a252;
-  --gold-bright: #e6c878;
-  /* Borderline AA contrast against --navy-deep at small text sizes -- fine
-     for the accents/icons it's actually used for today, but don't use it
-     for body copy without checking contrast first. */
-  --violet: #8968c9;
-  --violet-soft: #b09cdc;
+  --navy-deep: #f7f2e6;
+  --navy: #f2ebd9;
+  --navy-soft: #ffffff;
+  --navy-line: #e3d6b8;
+  --gold: #86692b;          /* darkened from #c7a252 -- 4.62:1 vs cream, 5.16:1 vs white */
+  --gold-surface: #c7a252;  /* original value -- solid fills under ink text */
+  --gold-bright: #e6c878;   /* unchanged -- pairs with --gold-surface, not --gold */
+  --violet: #7d59c4;        /* darkened from #8968c9 -- 4.59:1 vs cream, 5.12:1 vs white */
+  --violet-soft: #86469e;   /* darkened from #b09cdc -- 5.56:1 vs cream, 6.21:1 vs white */
   --parchment: #f7f2e6;
   --parchment-line: #e3d6b8;
   --ink: #2c2620;
@@ -31,9 +52,9 @@
 
   --background: var(--navy-deep);
   --surface: var(--navy-soft);
-  --surface-hover: #242b52;
-  --foreground: #ece8de;
-  --muted: #9b96b3;
+  --surface-hover: #ede4cc;
+  --foreground: var(--ink);
+  --muted: var(--ink-soft);
   --gold-hover: var(--gold-bright);
   --border: var(--navy-line);
 }
@@ -45,6 +66,7 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-gold: var(--gold);
+  --color-gold-surface: var(--gold-surface);
   --color-gold-hover: var(--gold-hover);
   --color-gold-bright: var(--gold-bright);
   --color-violet: var(--violet);
@@ -64,26 +86,37 @@
 }
 
 /*
- * Light theme override, scoped to a wrapper div in (app)/layout.tsx (not
- * :root) via [data-theme="light"] -- CSS custom properties cascade from any
+ * Dark theme override, scoped to a wrapper div in (app)/layout.tsx (not
+ * :root) via [data-theme="dark"] -- CSS custom properties cascade from any
  * ancestor element, not just :root, so this re-themes every bg-navy-soft/
  * border-navy-line/etc. utility beneath that div with zero per-component
  * edits, since Tailwind resolves the variable at paint time. The public
  * marketing page never renders inside that div, so it structurally can't
- * inherit a logged-in user's theme -- it stays dark-only by construction.
+ * inherit a signed-in user's dark preference -- it stays cream by
+ * construction, matching :root above.
  * --parchment/--parchment-line/--ink/--ink-soft are deliberately NOT
  * overridden here: those are the "always-light island" tokens (e.g.
  * LogEntryCard's parchment panel) and need to stay visually distinct even
- * inside light mode, per this file's own header comment above.
+ * inside dark mode. --gold-surface/--gold-bright also don't need their own
+ * dark-mode entry (they equal --gold/--gold-bright's dark values below
+ * anyway), listed for clarity.
  */
-[data-theme="light"] {
-  --navy-deep: #f7f2e6;
-  --navy: #f2ebd9;
-  --navy-soft: #ffffff;
-  --navy-line: #e3d6b8;
-  --surface-hover: #ede4cc;
-  --foreground: #2c2620;
-  --muted: #6b6153;
+[data-theme="dark"] {
+  --navy-deep: #0a0d1c;
+  --navy: #141935;
+  --navy-soft: #1c2242;
+  --navy-line: #2b3260;
+  --surface-hover: #242b52;
+  --foreground: #ece8de;
+  --muted: #9b96b3;
+  /* Original values -- already had great contrast against this dark
+     background (gold 8.02:1, violet 4.50:1 against navy-deep), so no
+     darkening/lightening needed here the way :root's light theme required. */
+  --gold: #c7a252;
+  --gold-surface: #c7a252;
+  --gold-bright: #e6c878;
+  --violet: #8968c9;
+  --violet-soft: #b09cdc;
   --background: var(--navy-deep);
   --surface: var(--navy-soft);
   --border: var(--navy-line);
@@ -105,14 +138,18 @@ body {
 
 /* Explicit focus-visible ring rather than removing the browser default --
    the default blue outline still shows up if this fails to match a given
-   element, it's never silently stripped. */
+   element, it's never silently stripped. Uses --gold (not --gold-bright):
+   --gold-bright is unchanged between themes and reads fine against dark
+   navy (11.86:1) but is nearly invisible against the new cream background
+   (1.46:1) -- --gold is the token that's actually tuned per-theme for
+   contrast against whatever the current background is. */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--gold-bright);
+  outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 
@@ -123,17 +160,21 @@ textarea:focus-visible,
   @apply border-gold ring-2 ring-gold/15;
 }
 
-/* text-ink, not text-white: the brief's gold (#c7a252) is light enough that
-   white text falls well short of WCAG AA contrast against it (~2.5:1) --
-   dark ink text clears it easily (~6.9:1) and matches the parchment-card
-   ink convention used elsewhere in this palette. */
+/* text-ink, not text-white: the brief's gold (#c7a252, --gold-surface) is
+   light enough that white text falls well short of WCAG AA contrast
+   against it (~2.5:1) -- dark ink text clears it easily (~6.9:1) and
+   matches the parchment-card ink convention used elsewhere in this
+   palette. Uses --gold-surface, not --gold: this is a solid fill with ink
+   text drawn on top, the pairing --gold-surface exists for -- --gold
+   itself is deliberately darkened for legibility as text/borders and
+   would leave ink text with much lower contrast against it as a fill. */
 .btn-primary {
   @apply rounded-md px-4 py-2 text-sm font-medium text-ink shadow-sm transition-all;
-  background-image: linear-gradient(135deg, var(--gold), var(--gold-bright));
+  background-image: linear-gradient(135deg, var(--gold-surface), var(--gold-bright));
 }
 .btn-primary:hover:not(:disabled) {
   @apply shadow-md -translate-y-px;
-  background-image: linear-gradient(135deg, var(--gold-bright), var(--gold));
+  background-image: linear-gradient(135deg, var(--gold-bright), var(--gold-surface));
 }
 .btn-primary:disabled {
   @apply opacity-40 cursor-not-allowed;
