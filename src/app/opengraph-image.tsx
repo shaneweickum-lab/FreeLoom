@@ -31,16 +31,16 @@ export default async function Image() {
           alignItems: "center",
           justifyContent: "center",
           gap: 28,
-          background: "#0a0d1c",
+          background: "#f7f2e6",
           backgroundImage:
             "radial-gradient(circle at 30% 20%, rgba(199,162,82,0.16), transparent 55%), radial-gradient(circle at 75% 75%, rgba(137,104,201,0.16), transparent 55%)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           <img src={logoSrc} width={108} height={108} alt="" />
-          <div style={{ display: "flex", fontSize: 88, fontWeight: 700, color: "#ece8de" }}>FreeLoom</div>
+          <div style={{ display: "flex", fontSize: 88, fontWeight: 700, color: "#2c2620" }}>FreeLoom</div>
         </div>
-        <div style={{ display: "flex", fontSize: 32, color: "#9b96b3" }}>Real learning, formally recorded.</div>
+        <div style={{ display: "flex", fontSize: 32, color: "#6b6153" }}>Real learning, formally recorded.</div>
       </div>
     ),
     { ...size }

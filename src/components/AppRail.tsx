@@ -174,7 +174,7 @@ function LedgerRow({ subjectArea, creditHours, targetCredits }: { subjectArea: s
             width: `${targetCredits ? pct : 100}%`,
             opacity: targetCredits ? 1 : 0.45,
             backgroundImage:
-              "repeating-linear-gradient(45deg, rgba(10,13,28,0.18) 0 3px, transparent 3px 7px), linear-gradient(90deg, var(--gold), var(--gold-bright))",
+              "repeating-linear-gradient(45deg, rgba(10,13,28,0.18) 0 3px, transparent 3px 7px), linear-gradient(90deg, var(--gold-surface), var(--gold-bright))",
           }}
         />
       </div>

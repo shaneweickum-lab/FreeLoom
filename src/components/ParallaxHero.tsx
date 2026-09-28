@@ -59,7 +59,7 @@ export default function ParallaxHero() {
       {/* Maintenance-mode notice -- always visible regardless of scroll,
           unlike the nav below it, so it can't be missed by fading in/out.
           The nav's own top offset accounts for this bar's height (h-10). */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-10 items-center justify-center bg-gold px-4 text-center text-sm font-medium text-ink">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-10 items-center justify-center bg-gold-surface px-4 text-center text-sm font-medium text-ink">
         FreeLoom is undergoing a redesign — we&apos;ll be back online soon.
       </div>
 
@@ -99,15 +99,23 @@ export default function ParallaxHero() {
         </div>
       </nav>
 
+      {/* This section's text is a fixed light color (not text-foreground)
+          regardless of site theme -- it sits directly over the hero photo,
+          only lightly tinted at this scroll position (see the scrim div
+          above), a fundamentally different legibility problem than flat
+          cream/white cards elsewhere. The dark drop-shadow below is tuned
+          for light text on a photo, same reasoning. */}
       <section className="relative min-h-screen flex flex-col items-center justify-center gap-6 px-4 text-center">
-        <h1 className="font-serif text-6xl sm:text-8xl font-bold tracking-tight">FreeLoom</h1>
-        <p className="max-w-md text-base sm:text-lg text-foreground/85 tracking-wide [text-shadow:0_2px_16px_rgba(10,13,28,0.85)]">
+        <h1 className="font-serif text-6xl sm:text-8xl font-bold tracking-tight text-[#ece8de] [text-shadow:0_2px_20px_rgba(10,13,28,0.6)]">
+          FreeLoom
+        </h1>
+        <p className="max-w-md text-base sm:text-lg text-[#ece8de]/85 tracking-wide [text-shadow:0_2px_16px_rgba(10,13,28,0.85)]">
           Transcript builder and records keeper for alternative schooling families
         </p>
         <button
           onClick={scrollToReveal}
           aria-label="Scroll down"
-          className="absolute bottom-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-gold/40 text-gold animate-bounce hover:bg-gold/10 transition-colors"
+          className="absolute bottom-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#c7a252]/40 text-[#e6c878] animate-bounce hover:bg-[#c7a252]/10 transition-colors"
         >
           <ScrollArrowIcon className="h-5 w-5" />
         </button>
