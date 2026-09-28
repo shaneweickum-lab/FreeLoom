@@ -17,17 +17,22 @@ datasets already did):
 
 Pulls as much TinyStories as actually exists (its real train split holds
 only ~475M unique tokens -- a real ceiling discovered on the first real
-pull, not a target this script can raise) plus a 1.1B-token FineWeb-Edu
-target -- together sized for v0.7 (ml/model/config.py, ~51.3M params @ 40
-tokens/param -> ~2.05B tokens). ml/train/prepare_dataset.py's
-BASE_CORPUS_REPEATS packs TinyStories twice ("2 sets") to reach ~950M of
-the ~2.05B total, with FineWeb-Edu's 1.1B target filling the remainder --
-TinyStories is still the single dominant *individual* source per this
-project's own research precedent (narrow/simple data is what makes
-small-model coherence achievable), but FineWeb-Edu is now the larger
-overall share of the mix (~54% vs. TinyStories' ~46%), continuing (and
-extending) the same rebalancing v0.7 already started at 30 tokens/param
-(where the split was ~950M/~550M).
+pull, not a target this script can raise) plus a ~6.95B-token FineWeb-Edu
+target -- together sized for v0.8 (ml/model/config.py, ~196.9M params @ 40
+tokens/param -> ~7.88B tokens). ml/train/prepare_dataset.py's
+BASE_CORPUS_REPEATS still packs TinyStories twice ("2 sets", ~950M) --
+unchanged from v0.7, a deliberate choice: TinyStories' own ~475M-token
+ceiling doesn't grow just because the model did, and further repeating a
+fixed small corpus risks memorization past what the TinyStories paper's
+own precedent (a few epochs, not open-ended repetition) actually
+validated. FineWeb-Edu's target grows instead to fill essentially the
+entire ~6.93B-token remainder, making it the large majority of the mix now
+(~88% vs. TinyStories' ~12%) -- a much bigger swing than v0.6/v0.7's
+gradual rebalancing, because this resize's ~4x token-budget jump has to
+land somewhere and TinyStories has a hard ceiling that isn't it.
+TinyStories still teaches the "coherent generation at small scale" register
+this project's research precedent leans on; it's just a smaller slice of a
+much bigger pie than before.
 
 Both datasets are streamed (HF `streaming=True`) so this never downloads
 the full underlying dataset -- only as many shards as needed to satisfy
@@ -58,7 +63,7 @@ Usage:
                             # only needed to run this script
     python3 prepare_base_corpus.py
     python3 prepare_base_corpus.py --tinystories-tokens 1_750_000_000 \
-        --fineweb-tokens 1_100_000_000
+        --fineweb-tokens 6_950_000_000
 """
 
 import argparse
@@ -83,7 +88,10 @@ DEFAULT_CHARS_PER_TOKEN = 4.0
 # gets re-confirmed; ml/train/prepare_dataset.py's BASE_CORPUS_REPEATS is
 # what actually controls how many effective tokens TinyStories contributes.
 DEFAULT_TINYSTORIES_TOKENS = 1_750_000_000
-DEFAULT_FINEWEB_TOKENS = 1_100_000_000
+DEFAULT_FINEWEB_TOKENS = 6_950_000_000  # v0.8: fills the ~6.93B-token remainder after
+                                        # TinyStories' fixed ~950M (2 epochs) contribution,
+                                        # at v0.8's ~7.88B total budget (was 1.1B for v0.7's
+                                        # ~2.05B budget) -- see this file's own docstring.
 
 
 def stream_texts(

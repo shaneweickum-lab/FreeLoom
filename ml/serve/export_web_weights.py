@@ -5,26 +5,29 @@ pure-TypeScript port running inside FreeLoom's own Vercel deployment, so
 Benny no longer depends on a Mac staying on and tunneled to the internet
 (see ml/serve/inference_server.py, which this replaces).
 
-MLX-free by design (only needs numpy + safetensors), matching
-ml/model/bitlinear.py's "framework agnostic, verifiable in any environment"
-approach -- the actual quantization math run here is that file's
-weight_quant(), not a reimplementation.
+MLX-free by design (only needs numpy + safetensors).
 
-Why this is safe to do once, ahead of time, instead of at serve time: every
-BitLinear forward pass in transformer_mlx.py re-quantizes its full-precision
-*shadow* weight on every call, but that shadow weight is fixed at inference
-time (no gradient updates happening), so the quantized-and-rescaled result
-is the same dense float matrix on every single forward call. Baking it once
-here removes the need to reimplement weight quantization (or the straight-
-through estimator, which only matters for backpropagation) in the serving
-runtime at all -- the serving side only ever needs a plain dense matmul for
-these, and its own activation quantization (which DOES depend on the actual
-input at request time, ported separately in the TS runtime).
+v0.8 simplification: v0.7 and earlier trained native BitNet ternary weights
+(model/bitlinear.py's weight_quant(), now superseded), so this file had to
+dequantize each BitLinear projection's full-precision shadow weight into a
+dense matrix before handing it to the TS runtime. v0.8's DenseLinear
+(transformer_mlx.py) already IS a plain dense matrix -- nothing to
+dequantize, just cast bf16 -> float32 (the TS runtime has no native bf16
+support any more than plain numpy does) and copy through unchanged.
+
+UNVERIFIED on real hardware: whether safetensors.numpy.load_file can even
+read a bf16-dtype tensor at all (plain numpy has no native bfloat16 type;
+this may need the `ml_dtypes` package's bfloat16 registered with numpy, or
+MLX's own save path may already upcast on write) is genuinely untested --
+this is new territory v0.7's ternary checkpoints never exercised (BitLinear
+saved its full-precision *shadow* weights, not bf16 tensors). Confirm this
+actually loads before trusting the rest of this script on a real v0.8
+checkpoint.
 
 Output layout (all in ml/serve/web_weights/, not gitignored):
     base.safetensors            -- token/pos embeddings, every LayerNorm's
-                                    weight/bias, and each BitLinear
-                                    projection's dequantized dense weight.
+                                    weight/bias, and each DenseLinear
+                                    projection's weight, all as float32.
     entry_drafting_lora.safetensors / platform_help_lora.safetensors
                                  -- each adapter's LoRA A/B matrices, copied
                                     through unchanged (never quantized in
@@ -49,13 +52,12 @@ import numpy as np
 from safetensors.numpy import load_file, save_file
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
-from bitlinear import weight_quant  # noqa: E402
 from config import BASE_CONFIG  # noqa: E402
 
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
 OUT_DIR = Path(__file__).parent / "web_weights"
 
-BITLINEAR_PROJECTIONS = ("attn.qkv", "attn.out_proj", "mlp.fc_in", "mlp.fc_out")
+DENSE_PROJECTIONS = ("attn.qkv", "attn.out_proj", "mlp.fc_in", "mlp.fc_out")
 LORA_PROJECTIONS = (("attn", "qkv"), ("attn", "out_proj"), ("mlp", "fc_in"), ("mlp", "fc_out"))
 
 
@@ -72,29 +74,27 @@ def _require(weights: dict, key: str) -> np.ndarray:
 
 def export_base(base_checkpoint: Path) -> dict[str, np.ndarray]:
     raw = load_file(str(base_checkpoint))
+    token_emb = _require(raw, "token_emb.weight").astype(np.float32)
     out: dict[str, np.ndarray] = {
-        "token_emb.weight": _require(raw, "token_emb.weight"),
-        "pos_emb.weight": _require(raw, "pos_emb.weight"),
-        # NOT the same array as token_emb.weight by the time training
-        # finishes, despite transformer_mlx.py's `self.lm_head_weight =
-        # self.token_emb.weight` aliasing them at construction time -- MLX's
-        # parameter tree treats them as two independent leaves by attribute
-        # path, so each accumulates its own gradient (from the embedding
-        # lookup vs. the output-projection usage) and they drift apart
-        # during training. Using token_emb.weight for both here would silently
-        # run inference against the wrong output head.
-        "lm_head_weight": _require(raw, "lm_head_weight"),
-        "ln_f.weight": _require(raw, "ln_f.weight"),
-        "ln_f.bias": _require(raw, "ln_f.bias"),
+        "token_emb.weight": token_emb,
+        "pos_emb.weight": _require(raw, "pos_emb.weight").astype(np.float32),
+        # v0.8's transformer_mlx.py ties these genuinely (references
+        # self.token_emb.weight directly at the point of use, no second
+        # attribute to diverge -- see that file's own doc comment for why
+        # v0.7's aliasing approach didn't actually stay tied under MLX's
+        # autograd). Only one real array exists in the checkpoint; exported
+        # twice here under both keys purely so the TS runtime's existing
+        # "lm_head_weight" key keeps working unchanged.
+        "lm_head_weight": token_emb.copy(),
+        "ln_f.weight": _require(raw, "ln_f.weight").astype(np.float32),
+        "ln_f.bias": _require(raw, "ln_f.bias").astype(np.float32),
     }
     for i in range(BASE_CONFIG.n_layers):
         for norm in ("ln1", "ln2"):
-            out[f"blocks.{i}.{norm}.weight"] = _require(raw, f"blocks.{i}.{norm}.weight")
-            out[f"blocks.{i}.{norm}.bias"] = _require(raw, f"blocks.{i}.{norm}.bias")
-        for proj in BITLINEAR_PROJECTIONS:
-            shadow_weight = _require(raw, f"blocks.{i}.{proj}.weight")
-            quantized, scale = weight_quant(shadow_weight)
-            out[f"blocks.{i}.{proj}.weight"] = (quantized / scale).astype(np.float32)
+            out[f"blocks.{i}.{norm}.weight"] = _require(raw, f"blocks.{i}.{norm}.weight").astype(np.float32)
+            out[f"blocks.{i}.{norm}.bias"] = _require(raw, f"blocks.{i}.{norm}.bias").astype(np.float32)
+        for proj in DENSE_PROJECTIONS:
+            out[f"blocks.{i}.{proj}.weight"] = _require(raw, f"blocks.{i}.{proj}.weight").astype(np.float32)
     return out
 
 

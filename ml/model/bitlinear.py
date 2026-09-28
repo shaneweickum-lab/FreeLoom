@@ -1,4 +1,14 @@
 """
+SUPERSEDED as of v0.8 -- kept in the repo as reference/history, not deleted,
+same "dormant not deleted" treatment used elsewhere in this project. v0.7
+and earlier trained a native BitNet b1.58 model (transformer_mlx.py's
+BitLinear); v0.8 replaced it with a plain dense bf16 transformer
+(transformer_mlx.py's DenseLinear) after RESULTS.md's real M5 runs showed
+this quantization math's own straight-through-estimator overhead was the
+actual training-speed bottleneck at every size tried, not model capacity.
+The math below is still correct and still tested (test_bitlinear.py) -- it's
+just not what the live model trains with anymore.
+
 Core BitNet b1.58 quantization math, in plain numpy.
 
 This is the piece of the architecture that's framework-agnostic and fully

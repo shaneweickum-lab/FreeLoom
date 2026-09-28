@@ -1,5 +1,5 @@
 """
-Pretrains the shared BitNetTransformer base on the packed sequences from
+Pretrains the shared DenseTransformer base on the packed sequences from
 prepare_dataset.py's base_train.npy/base_val.npy.
 
 MLX-only -- cannot run in this Linux container (confirmed: the mlx pip
@@ -8,16 +8,15 @@ wheel installs on Linux but its shared library, libmlx.so, is Apple/Metal
 docs/slm-strategy.md Section 5.
 
 Follows that section's plan directly: run --tiny first (a small model on
-the current small dataset) to confirm the tokenizer, data loading,
-BitLinear layer, and loss curve all behave sanely in minutes, before
-committing to a longer run at the full config.py sizing once the corpus
-has scaled into the thousands of examples.
+the current small dataset) to confirm the tokenizer, data loading, dense
+layers, and loss curve all behave sanely in minutes, before committing to
+a longer run at the full config.py sizing.
 
 Usage (on the Mac, after `pip install -r ../../requirements.txt` and
 running prepare_dataset.py):
     python3 train_base.py --tiny                 # pipeline sanity check
-    python3 train_base.py                        # full-config run (Sophia, v0.7 default)
-    python3 train_base.py --optimizer adamw      # fall back to v0.6's optimizer
+    python3 train_base.py                        # full-config run (AdamW, v0.8 default)
+    python3 train_base.py --optimizer sophia     # try v0.7's second-order optimizer instead
     python3 train_base.py --resume base_ckpt.safetensors
 
 A full run saves 5 checkpoints evenly spaced across the whole run by default
@@ -26,12 +25,15 @@ with no intermediate save loses everything on a crash/interruption. Each
 mid-run save also overwrites the canonical base.safetensors, so --resume
 always has a recent checkpoint to load.
 
-v0.7 trains with Sophia (model/sophia.py) instead of AdamW by default --
-see that module's docstring for the paper citation and why it needs a
-second, periodic update path (update_hessian(), called every
---sophia-hessian-interval steps here) that AdamW/plain optimizers don't.
---optimizer adamw is kept as a one-flag fallback in case Sophia misbehaves
-on the first real run, since none of this has run on real MLX yet.
+v0.8 defaults to AdamW: dropping native BitNet ternary quantization for a
+plain dense bf16 transformer (transformer_mlx.py) already removes the
+per-step QAT overhead RESULTS.md measured as the real training-speed
+bottleneck at every size tried under v0.5-v0.7 -- Sophia's second-order
+convergence speedup (model/sophia.py; see that module's docstring for the
+paper citation) was one answer to that problem, but a standard optimizer
+on an architecture that no longer has the problem is the simpler choice.
+Sophia stays available via --optimizer sophia for anyone who wants to
+compare the two on real data.
 
 Every --diagnostic-every-steps batches (default 500), prints a val_loss
 reading (on a small FIXED held-out subsample, so readings are comparable
@@ -64,24 +66,24 @@ from tokenizers import Tokenizer
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 from config import BASE_CONFIG, ModelConfig, estimate_param_count, estimate_token_budget  # noqa: E402
 from sophia import SophiaG  # noqa: E402
-from transformer_mlx import BitNetTransformer  # noqa: E402
+from transformer_mlx import DenseTransformer  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "prepared"
 CKPT_DIR = Path(__file__).parent.parent / "checkpoints"
 TOKENIZER_PATH = Path(__file__).parent.parent / "tokenizer" / "tokenizer.json"
 
 # A deliberately small config for --tiny: fast enough to sanity-check the
-# whole pipeline (tokenizer, data loading, BitLinear, loss curve) in
+# whole pipeline (tokenizer, data loading, dense layers, loss curve) in
 # minutes rather than committing to the full BASE_CONFIG run untested.
 TINY_CONFIG = ModelConfig(d_model=128, n_layers=2, n_heads=4, max_seq_len=512)
 
 
-def loss_fn(model: BitNetTransformer, inputs: mx.array, targets: mx.array) -> mx.array:
+def loss_fn(model: DenseTransformer, inputs: mx.array, targets: mx.array) -> mx.array:
     logits = model(inputs)
     return nn.losses.cross_entropy(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1), reduction="mean")
 
 
-def resampled_loss_fn(model: BitNetTransformer, inputs: mx.array) -> mx.array:
+def resampled_loss_fn(model: DenseTransformer, inputs: mx.array) -> mx.array:
     """Sophia's Gauss-Newton-Bartlett Hessian estimator (model/sophia.py's
     docstring has the full reasoning): loss against a label RESAMPLED from
     the model's own predicted distribution at each position, not the real
@@ -94,7 +96,7 @@ def resampled_loss_fn(model: BitNetTransformer, inputs: mx.array) -> mx.array:
     return nn.losses.cross_entropy(flat_logits, resampled_labels, reduction="sum")
 
 
-def gnb_hessian_estimate(hessian_loss_and_grad, model: BitNetTransformer, inputs: mx.array):
+def gnb_hessian_estimate(hessian_loss_and_grad, model: DenseTransformer, inputs: mx.array):
     """One Gauss-Newton-Bartlett Hessian-diagonal estimate: an extra
     forward+backward pass on `inputs` (the same batch already used for
     this step's real update) against resampled_loss_fn's resampled labels,
@@ -145,7 +147,7 @@ def format_duration(seconds: float) -> str:
     return f"{secs}s"
 
 
-def evaluate(model: BitNetTransformer, sequences: np.ndarray, batch_size: int) -> float:
+def evaluate(model: DenseTransformer, sequences: np.ndarray, batch_size: int) -> float:
     if len(sequences) == 0:
         return float("nan")
     rng = np.random.default_rng(0)
@@ -155,7 +157,7 @@ def evaluate(model: BitNetTransformer, sequences: np.ndarray, batch_size: int) -
     return sum(losses) / max(len(losses), 1)
 
 
-def generate_sample(model: BitNetTransformer, tokenizer: Tokenizer, bos_id: int,
+def generate_sample(model: DenseTransformer, tokenizer: Tokenizer, bos_id: int,
                      eos_id: int | None, max_new_tokens: int) -> str:
     """Greedy-decodes a short completion from the CURRENT (mid-training)
     weights, seeded with just <bos> -- a base model, not yet adapter-tuned,
@@ -196,16 +198,22 @@ def main():
                               "batches don't reduce total FLOPs, and trade many small matmuls for "
                               "fewer, bigger ones -- normally a good trade for MLX/Metal throughput, "
                               "but only once the model's total activation/gradient memory at that "
-                              "batch size actually fits without swapping. Raise this if you have "
+                              "batch size actually fits without swapping. v0.8 is a bigger architecture "
+                              "change than any prior resize (d_model 512->1024, ternary->dense bf16) -- "
+                              "16 is a starting point carried over, not a value re-tested here; expect "
+                              "to re-run the same halve-until-it-stops-helping bisection from scratch "
+                              "rather than assuming it still holds. Raise this if you have "
                               "memory headroom to spare (more unified memory, or a smaller model); "
                               "lower it further if you still hit a memory error.")
     parser.add_argument("--lr", type=float, default=3e-4)
-    parser.add_argument("--optimizer", type=str, choices=["sophia", "adamw"], default="sophia",
-                         help="Sophia (model/sophia.py) is v0.7's default -- a second-order optimizer "
-                              "the paper reports converging in roughly half the steps AdamW needs at "
-                              "comparable scale. Falls back to plain AdamW (v0.6's optimizer) with one "
-                              "flag if Sophia misbehaves on the first real run -- none of this has run "
-                              "on real MLX yet, see model/sophia.py's docstring.")
+    parser.add_argument("--optimizer", type=str, choices=["sophia", "adamw"], default="adamw",
+                         help="AdamW is v0.8's default -- the standard choice, and this version's "
+                              "architecture change (dropping native BitNet ternary quantization for a "
+                              "plain dense bf16 transformer, see transformer_mlx.py) already removes "
+                              "the main training-speed problem Sophia's second-order convergence "
+                              "advantage was meant to help offset. Sophia (model/sophia.py) is still "
+                              "available via --optimizer sophia for anyone who wants to compare -- see "
+                              "that module's docstring for the paper citation.")
     parser.add_argument("--weight-decay", type=float, default=0.1,
                          help="decoupled weight decay, same meaning for both --optimizer choices. 0.1 "
                               "matches Sophia's own paper defaults for LM pretraining-scale runs.")
@@ -327,7 +335,7 @@ def main():
         "update ModelConfig.vocab_size to match the current tokenizer.json"
     )
 
-    model = BitNetTransformer(cfg)
+    model = DenseTransformer(cfg)
     if args.resume:
         model.load_weights(args.resume)
     mx.eval(model.parameters())

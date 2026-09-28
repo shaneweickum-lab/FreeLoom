@@ -1,5 +1,5 @@
 """
-HTTP inference server for the trained BitNetTransformer base + LoRA
+HTTP inference server for the trained DenseTransformer base + LoRA
 adapters -- what src/lib/pipeline/slmDraft.ts (SLM_ENTRY_DRAFTING_URL) and
 src/lib/benny/chat.ts (SLM_CHAT_URL) call out to. MLX only runs on Apple
 Silicon and can't execute inside FreeLoom's own Vercel/Node runtime, so
@@ -53,7 +53,7 @@ from tokenizers import Tokenizer
 sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
 from config import BASE_CONFIG  # noqa: E402
 from lora import attach_lora_adapters, load_adapter  # noqa: E402
-from transformer_mlx import BitNetTransformer  # noqa: E402
+from transformer_mlx import DenseTransformer  # noqa: E402
 
 TOKENIZER_PATH = Path(__file__).parent.parent / "tokenizer" / "tokenizer.json"
 
@@ -119,8 +119,8 @@ class Models:
         self.platform_help = self._load(base_checkpoint, platform_help_adapter)
 
     @staticmethod
-    def _load(base_checkpoint: str, adapter_path: str) -> BitNetTransformer:
-        model = BitNetTransformer(BASE_CONFIG)
+    def _load(base_checkpoint: str, adapter_path: str) -> DenseTransformer:
+        model = DenseTransformer(BASE_CONFIG)
         model.load_weights(base_checkpoint)
         attach_lora_adapters(model)
         load_adapter(model, adapter_path)

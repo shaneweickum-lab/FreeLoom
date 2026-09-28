@@ -1,17 +1,26 @@
 """
-The shared ~75M-parameter base model: a standard decoder-only transformer
-(nanoGPT-style) with every nn.Linear replaced by BitLinear (native BitNet
-b1.58 ternary weights, trained from scratch -- not post-hoc quantization).
+The shared ~196.9M-parameter (v0.8) base model: a standard decoder-only
+transformer (nanoGPT-style), trained and run in bfloat16 -- no ternary
+quantization.
+
+v0.7 and earlier used native BitNet b1.58 (every nn.Linear replaced by
+BitLinear, ternary {-1,0,+1} weights re-quantized on every forward pass via
+a straight-through estimator -- see bitlinear.py, now superseded). Dropped
+for v0.8: RESULTS.md's real M5 runs consistently measured BitLinear's QAT
+training as compute-heavier per step than a plain dense layer of the same
+size (every forward re-quantizes full-precision shadow weights on top of an
+otherwise-ordinary matmul), which was the actual training-speed bottleneck
+at every size tried -- not model capacity, not batch size beyond the memory
+ceiling already diagnosed at v0.6. A plain dense transformer removes that
+overhead entirely; bf16 (not fp32) keeps memory/bandwidth costs down
+without the ternary quantization's own training-time tax.
 
 MLX-only. Cannot run in this Linux container (MLX depends on Apple's Metal
-runtime); write/review here, execute on the M5 MacBook. The quantization
-math this file wires into MLX's autograd is the same math validated in
-ml/model/bitlinear.py's numpy tests -- port bugs should show up as a
-divergence from that reference, not as a fresh derivation.
+runtime); write/review here, execute on the M5 MacBook.
 
-Reference implementations this follows: exo-explore/mlx-bitnet for the
-BitLinear + straight-through estimator wiring, nanoGPT for the overall
-decoder-block/attention structure.
+Reference: nanoGPT (Karpathy) for the overall decoder-block/attention
+structure -- the same pedagogical foundation v0.7 built from, minus the
+BitNet-specific layer this version no longer needs.
 """
 
 import math
@@ -21,57 +30,24 @@ import mlx.nn as nn
 
 from config import ModelConfig
 
-_EPS = 1e-5
 
-
-def _ste_round(x: mx.array) -> mx.array:
-    """Straight-through estimator: forward pass rounds, backward pass acts
-    like identity (gradient passes through unrounded), via the standard
-    stop_gradient trick: x + stop_gradient(round(x) - x) == round(x) in the
-    forward pass, but its gradient w.r.t. x is 1 everywhere."""
-    rounded = mx.round(x)
-    return x + mx.stop_gradient(rounded - x)
-
-
-def _ste_clip(x: mx.array, lo: float, hi: float) -> mx.array:
-    clipped = mx.clip(x, lo, hi)
-    return x + mx.stop_gradient(clipped - x)
-
-
-class BitLinear(nn.Module):
-    """A Linear layer whose weights are ternary-quantized {-1, 0, +1} on
-    every forward pass (native BitNet b1.58 training, not post-training
-    quantization of a full-precision checkpoint).
-
-    Full-precision "shadow" weights are the actual learnable parameter
-    (matching every published BitNet training recipe); quantization is
-    applied fresh each forward pass via the straight-through estimator so
-    gradients still flow into the shadow weights.
+class DenseLinear(nn.Module):
+    """A plain Linear layer whose weights and activations are cast to
+    bfloat16 for the forward pass -- standard dense compute, no
+    quantization, no straight-through estimator. Shape/call contract
+    matches the old BitLinear exactly (out_features, in_features weight,
+    optional bias) so lora.py's LoRALinear wrapper works unchanged.
     """
 
     def __init__(self, in_features: int, out_features: int, bias: bool = False):
         super().__init__()
         scale = 1.0 / math.sqrt(in_features)
-        self.weight = mx.random.uniform(-scale, scale, (out_features, in_features))
-        self.bias = mx.zeros((out_features,)) if bias else None
-
-    def _quantized_weight(self) -> mx.array:
-        w = self.weight
-        w_scale = 1.0 / mx.maximum(mx.abs(w).mean(), _EPS)
-        w_ternary = _ste_clip(_ste_round(w * w_scale), -1, 1)
-        return w_ternary / w_scale
-
-    def _quantized_activation(self, x: mx.array) -> mx.array:
-        q_max = 127.0
-        row_max = mx.maximum(mx.abs(x).max(axis=-1, keepdims=True), _EPS)
-        x_scale = q_max / row_max
-        x_quant = _ste_clip(_ste_round(x * x_scale), -q_max - 1, q_max)
-        return x_quant / x_scale
+        self.weight = mx.random.uniform(-scale, scale, (out_features, in_features)).astype(mx.bfloat16)
+        self.bias = mx.zeros((out_features,), dtype=mx.bfloat16) if bias else None
 
     def __call__(self, x: mx.array) -> mx.array:
-        w_q = self._quantized_weight()
-        x_q = self._quantized_activation(x)
-        out = x_q @ w_q.T
+        x = x.astype(mx.bfloat16)
+        out = x @ self.weight.T
         if self.bias is not None:
             out = out + self.bias
         return out
@@ -82,8 +58,8 @@ class CausalSelfAttention(nn.Module):
         super().__init__()
         self.n_heads = cfg.n_heads
         self.head_dim = cfg.head_dim
-        self.qkv = BitLinear(cfg.d_model, 3 * cfg.d_model)
-        self.out_proj = BitLinear(cfg.d_model, cfg.d_model)
+        self.qkv = DenseLinear(cfg.d_model, 3 * cfg.d_model)
+        self.out_proj = DenseLinear(cfg.d_model, cfg.d_model)
         self.dropout = cfg.dropout
 
     def __call__(self, x: mx.array, mask: mx.array) -> mx.array:
@@ -106,8 +82,8 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, cfg: ModelConfig):
         super().__init__()
-        self.fc_in = BitLinear(cfg.d_model, cfg.mlp_dim)
-        self.fc_out = BitLinear(cfg.mlp_dim, cfg.d_model)
+        self.fc_in = DenseLinear(cfg.d_model, cfg.mlp_dim)
+        self.fc_out = DenseLinear(cfg.mlp_dim, cfg.d_model)
 
     def __call__(self, x: mx.array) -> mx.array:
         return self.fc_out(nn.gelu(self.fc_in(x)))
@@ -127,9 +103,9 @@ class Block(nn.Module):
         return x
 
 
-class BitNetTransformer(nn.Module):
+class DenseTransformer(nn.Module):
     """The shared base model. LoRA adapters (lora.py) wrap this module's
-    BitLinear projections without modifying this file -- the base stays
+    DenseLinear projections without modifying this file -- the base stays
     frozen once pretrained; only adapter-owned low-rank matrices train
     during each task's fine-tuning pass."""
 
@@ -142,7 +118,17 @@ class BitNetTransformer(nn.Module):
         self.ln_f = nn.LayerNorm(cfg.d_model)
         # Tied embedding/output head -- halves the vocab-side parameter cost,
         # standard practice at this scale (see config.py's param estimate).
-        self.lm_head_weight = self.token_emb.weight
+        #
+        # v0.7 tried this via `self.lm_head_weight = self.token_emb.weight`,
+        # a second attribute aliasing the same array at construction time --
+        # ml/RESULTS.md's 2026-07-23 "real bug" entry found MLX's parameter
+        # tree treats attributes as independent leaves by *path*, not by
+        # object identity, so each accumulated its own gradient and they
+        # silently drifted apart during training (confirmed differing by up
+        # to 0.56 on a real checkpoint). Fixed here the way that entry's own
+        # lesson implies: don't create a second attribute at all -- reference
+        # self.token_emb.weight directly at the point of use below, so
+        # there's genuinely one leaf, not two that happen to start equal.
 
     def __call__(self, idx: mx.array) -> mx.array:
         b, t = idx.shape
@@ -154,4 +140,4 @@ class BitNetTransformer(nn.Module):
         for block in self.blocks:
             x = block(x, mask)
         x = self.ln_f(x)
-        return x @ self.lm_head_weight.T
+        return x @ self.token_emb.weight.T

@@ -9,9 +9,13 @@ a LinkedIn post or Substack article without much rewriting.
 
 **Premise**: FreeLoom doesn't want to depend on a third-party API for Benny, its
 in-app assistant. So the project is to train a genuinely custom small language model
-(SLM) in-house — natively 1.58-bit (ternary weight) BitNet architecture, not a
-distilled or post-hoc-quantized copy of someone else's model — and to document the
-entire process publicly as a personal case study in becoming an SLM practitioner.
+(SLM) in-house — not a distilled or post-hoc-quantized copy of someone else's model —
+and to document the entire process publicly as a personal case study in becoming an
+SLM practitioner. Originally built natively 1.58-bit (ternary weight) BitNet, with
+100B+-parameter ternary inference as the long-term bet (see "The long-term vision"
+below); **2026-09-28's entry** is the honest account of why that bet changed to a
+plain dense bf16 architecture instead, without giving up the core premise (in-house,
+not a third-party API).
 
 ---
 
@@ -292,6 +296,55 @@ neither keyword there is more specific than the other. The lesson: the fanciest
 component in a pipeline isn't automatically where a wrong answer came from — the plain
 rule-based first pass, exactly the kind of code with no model and no randomness to hide
 behind, produced this one.
+
+**2026-09-28 — A detour to a third-party model, a reversal back, and the real reason
+BitNet ternary got dropped.** Two real pivots landed close together, both worth telling
+straight rather than smoothing over.
+
+First: Benny briefly stopped being FreeLoom's own model at all. Excited by Llama 3.2
+1B's output quality on another project, the plan became running Llama 3.2 1B (desktop)
+and Qwen2.5 0.5B (mobile) client-side in the browser via WebLLM/WebGPU — genuinely
+shipped: model downloads, a cookie-consent category disclosing them, RAG-grounded chat
+answers pulled from a small platform-documentation corpus, Settings > About naming the
+real model. It worked. It also meant Benny wasn't FreeLoom's own model anymore, just a
+well-integrated wrapper around someone else's — a real trade-off, not a mistake, but
+not the premise this project actually committed to. The reversal: rip the third-party
+model back out, restore the in-house server-side path, and keep only what didn't
+depend on which model was underneath (the platform-doc RAG retrieval moved over
+directly, now feeding the in-house model's prompt instead of Llama's).
+
+Second, and the bigger one: restoring the in-house path was the moment to also
+confront something the numbers had been saying since 2026-07-22's first real
+base-pretraining run and every sizing attempt since (the whole "First real hardware
+run, and the first real reversal" entry above, and every v0.6 bisection logged in
+`ml/RESULTS.md`) — native BitNet's ternary quantization was never actually the
+free lunch the long-term vision below counted on *during training*. Every throughput
+ceiling this project hit, at every size from ~81M down to ~26.1M params, traced back
+to the same mechanism: `BitLinear`'s straight-through estimator re-quantizes full-
+precision shadow weights on every single forward pass, so training a ternary model is
+*more* compute per step than training an equivalent dense one, not less — the
+famous BitNet speed/memory win is real, but it only exists at *inference* time with
+weights already packed into 1.58 bits, never during quantization-aware training. That
+was always true; it just took a resize-triggered architecture review to actually act
+on it instead of working around it with a bigger optimizer (Sophia) or another round
+of hardware bisection.
+
+The honest call: drop native BitNet ternary training entirely. v0.8 is a plain dense
+transformer trained in bf16 — simpler code (no straight-through estimator, no
+activation quantization to port to the TS serving side), and it removes the actual
+measured bottleneck instead of continuing to compensate for it. It's also a bigger
+model now that the per-step tax is gone: ~196.9M params (up from v0.7's ~51.3M),
+same 40 tokens/parameter ratio this project already settled on, AdamW back as the
+default optimizer (Sophia was adopted specifically to offset BitNet's training cost;
+with that cost gone, the standard optimizer is the simpler choice). The "20GB
+100B-parameter ternary Benny on a deskside supercomputer" dream in the long-term
+vision below was never wrong as an inference-time destination — ternary's memory win
+at serving time is real and unaffected by any of this — but getting there by
+*training* natively in ternary the whole way turned out to be the wrong path up the
+staircase. Full technical reasoning in `docs/slm-strategy.md` Section 3; the numpy-only
+ternary quantization math (`ml/model/bitlinear.py`) stays in the repo, tested and
+correct, in case a post-hoc quantization step onto a dense-trained checkpoint is worth
+revisiting once there's a real model to quantize.
 
 ---
 
