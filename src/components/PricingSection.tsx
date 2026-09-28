@@ -92,16 +92,19 @@ export default function PricingSection({ prices }: { prices: PriceTable }) {
                   <li key={f}>{f}</li>
                 ))}
               </ul>
-              <Link
-                href="/login"
+              {/* Sign-up is disconnected, not removed, during the redesign --
+                  see ParallaxHero's maintenance banner. */}
+              <span
+                aria-disabled="true"
+                title="Sign-ups are paused during our redesign"
                 className={
                   highlighted
-                    ? "rounded-md bg-gold px-4 py-2 text-center text-sm font-medium text-ink shadow-sm hover:bg-gold-hover transition-colors"
-                    : "rounded-md border border-navy-line px-4 py-2 text-center text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
+                    ? "rounded-md bg-gold/50 px-4 py-2 text-center text-sm font-medium text-ink/70 shadow-sm cursor-not-allowed"
+                    : "rounded-md border border-navy-line px-4 py-2 text-center text-sm font-medium text-muted cursor-not-allowed"
                 }
               >
                 Get started
-              </Link>
+              </span>
             </div>
           );
         })}
